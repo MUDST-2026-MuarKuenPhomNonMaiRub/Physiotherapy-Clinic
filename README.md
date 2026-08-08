@@ -6,7 +6,7 @@
 
 ## 📚 เอกสารประกอบโปรเจกต์ (Requirements & Documentation)
 
-- 📄 **Requirements & Complete Workflow (PDF):** [คลิกเพื่อเปิดดูเอกสาร](./docs/requirments/Project_Clinic_ERP_Complete_Workflow_Brief_V1_TH_Rev2.pdf)
+- 📄 **Requirements & Complete Workflow (PDF):** [คลิกเพื่อเปิดดูเอกสาร](docs/requirments)
 - 🎨 **Figma UI/UX Design:** [ดูลิงก์ Figma Design](./docs/figma-links.md)
 - 📖 **User Stories:** [ดูรายการ User Stories](./docs/user-stories.md)
 
