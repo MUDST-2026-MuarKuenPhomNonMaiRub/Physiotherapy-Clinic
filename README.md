@@ -8,7 +8,7 @@
 
 - 📄 **Requirements & Complete Workflow (PDF):** [คลิกเพื่อเปิดดูเอกสาร](./docs/requirments/Project%20Clinic_ERP_Complete_Workflow_Brief_V1_TH_Rev2.pdf)
 - 🎨 **Figma UI/UX Design:** [ดูลิงก์ Figma Design](./docs/figma-links.md)
-- 📖 **User Stories:** [ดูรายการ User Stories](./docs/user-stories.md)
+- 📖 **User Stories:** [ดูรายการ User Stories](.[/docs/user-stories.md](https://id.atlassian.com/invite/p/confluence?id=EpKKh6BIQza_lsVr6cnI0w))
 
 ---
 
