@@ -1,21 +1,20 @@
-# 🏥 Physiotherapy Clinic ERP
+# PhysioCare Clinic
 
-ระบบบริหารจัดการคลินิกกายภาพบำบัดแบบ End-to-End (MUDST 2026 Project)
+Starter monorepo based on the Clinic Figma design.
 
----
+## Run locally
 
-## 📚 เอกสารประกอบโปรเจกต์ (Requirements & Documentation)
+```bash
+cd backend && ./mvnw spring-boot:run
+```
 
-- 📄 **Requirements & Complete Workflow (PDF):** [คลิกเพื่อเปิดดูเอกสาร](./docs/requirments/Project%20Clinic_ERP_Complete_Workflow_Brief_V1_TH_Rev2.pdf)
-- 🎨 **Figma UI/UX Design:** [ดูลิงก์ Figma Design](./docs/figma-links.md)
-- 📖 **User Stories:** [ดูรายการ User Stories](.[/docs/user-stories.md](https://id.atlassian.com/invite/p/confluence?id=EpKKh6BIQza_lsVr6cnI0w))
-https://id.atlassian.com/invite/p/confluence?id=EpKKh6BIQza_lsVr6cnI0w
----
+```bash
+cd frontend && npm install && npm run dev
+```
 
-## 📁 โครงสร้างโปรเจกต์ (Project Structure)
+Frontend: http://localhost:5173 · API: http://localhost:8080/api/branches
 
-```text
-Physiotherapy-Clinic/
-├── docs/            # เอกสารประกอบโปรเจกต์, Requirements, Flowcharts
-├── frontend/        # โค้ดฝั่งระบบหน้าบ้าน (UX/UI)
-└── backend/         # โค้ดฝั่งระบบหลังบ้าน (API, Database, Logic)
+## Structure
+
+- `frontend/`: React + TypeScript + Vite, responsive Figma-based UI, typed API service.
+- `backend/`: Spring Boot 3 REST API with validation and CORS. In-memory data is intentional scaffolding; replace the controller store with a service/repository and JPA when the database is selected.
