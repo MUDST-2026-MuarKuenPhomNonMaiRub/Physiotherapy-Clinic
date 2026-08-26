@@ -1,5 +1,5 @@
 import { useEffect,useState } from 'react'; import { AppShell,roleNames,type Role } from './components/AppShell'; import { PageRouter } from './pages';
-const defaults:Record<Role,string>={admin:'branches',manager:'dashboard',frontdesk:'patients',physio:'my-appointments'};
+const defaults:Record<Role,string>={admin:'dashboard',manager:'dashboard',frontdesk:'patients',physio:'my-appointments'};
 const accounts:{role:Role;title:string;user:string;description:string}[]=[
  {role:'admin',title:'System Admin',user:'admin',description:'Configure branches, staff, services & rules'},
  {role:'frontdesk',title:'Front Desk',user:'frontdesk',description:'Patients, appointments, checkout & courses'},
