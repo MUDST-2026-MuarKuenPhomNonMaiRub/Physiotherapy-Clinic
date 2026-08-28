@@ -6,6 +6,11 @@ import building from '../assets/icons/building.svg';
 import users from '../assets/icons/users.svg';
 import clipboard from '../assets/icons/clipboard.svg';
 import wallet from '../assets/icons/wallet.svg';
+import branch from '../assets/icons/branch.svg';
+import door from '../assets/icons/door.svg';
+import stethoscope from '../assets/icons/stethoscope.svg';
+import percent from '../assets/icons/percent.svg';
+import database from '../assets/icons/database.svg';
 export type Role = 'admin' | 'manager' | 'frontdesk' | 'physio';
 export type NavItem = { path: string; label: string; group?: string };
 export const roleNames: Record<Role, string> = {
@@ -57,7 +62,19 @@ export const menus: Record<Role, NavItem[]> = {
     { path: 'my-commission', label: 'My Commission' },
   ],
 };
-const icons = [building, users, clipboard, wallet];
+const navIcons: Record<string, string> = {
+  dashboard: clipboard,
+  branches: branch,
+  rooms: door,
+  users,
+  staff: stethoscope,
+  services: clipboard,
+  payments: wallet,
+  'commission-rules': percent,
+  'customer-groups': database,
+  referrals: database,
+  insurers: database,
+};
 export function AppShell({
   role,
   path,
@@ -93,7 +110,7 @@ export function AppShell({
                 className={`nav-item ${path === item.path ? 'active' : ''}`}
                 onClick={() => onNavigate(item.path)}
               >
-                <img src={icons[i % icons.length]} alt="" />
+                <img src={navIcons[item.path] ?? clipboard} alt="" />
                 <span>{item.label}</span>
               </button>
             </span>
@@ -118,9 +135,6 @@ export function AppShell({
             <strong>{current}</strong>
           </div>
           <div className="header-tools">
-            <label className="global-search">
-              ⌕ <input placeholder="Search HN, name, phone..." />
-            </label>
             <button className="branch-select">
               <img src={building} alt="" />
               สาขาสุขุมวิท (Sukhumvit)<span>⌄</span>

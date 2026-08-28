@@ -311,6 +311,122 @@
   }
 }
 
+/* Admin dashboard reference layout */
+@media (min-width: 901px) {
+  .app-shell {
+    grid-template-columns: 262px minmax(0, 1fr);
+  }
+  .brand {
+    height: 122px;
+    padding: 27px 18px;
+  }
+  .workspace header {
+    height: 102px;
+    padding: 0 22px 0 34px;
+  }
+  .workspace main {
+    min-height: calc(100vh - 102px);
+    background: #fff;
+  }
+  .content {
+    padding: 37px 27px;
+  }
+  .sidebar nav {
+    padding-top: 17px;
+  }
+  .nav-group {
+    padding: 13px 0 6px;
+    font-size: 11px;
+  }
+  .nav-item {
+    height: 40px;
+    padding: 0 12px;
+  }
+  .side-profile {
+    height: 76px;
+  }
+  .crumb {
+    font-size: 16px;
+  }
+  .crumb span {
+    color: #60708b;
+  }
+  .crumb b {
+    color: #60708b;
+    font-size: 20px;
+  }
+  .branch-select {
+    height: 42px;
+    min-width: 272px;
+    justify-content: flex-start;
+  }
+  .profile {
+    height: 50px;
+  }
+  .profile em {
+    padding: 4px 10px;
+  }
+  .admin-stats {
+    gap: 14px;
+    margin-top: 57px;
+  }
+  .admin-stats .stat {
+    height: 157px;
+    padding: 21px;
+    border-color: #9ca3af;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+  .admin-stats .stat span {
+    font-size: 16px;
+    color: #627da9;
+  }
+  .admin-stats .stat b {
+    margin-top: 49px;
+    font-size: 34px;
+    line-height: 1;
+  }
+  .admin-stats .stat > i {
+    right: 14px;
+    top: 22px;
+    width: 39px;
+    height: 39px;
+    display: grid;
+    place-items: center;
+  }
+  .admin-stats .stat > i img,
+  .quick-icon img {
+    width: 19px;
+    height: 19px;
+  }
+  .section-label {
+    margin: 33px 0 15px 8px;
+    font-size: 13px;
+  }
+  .quick-links {
+    gap: 10px;
+  }
+  .quick-link {
+    min-height: 182px;
+    padding: 29px 20px 19px;
+    border-color: #9ca3af;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+  .quick-icon {
+    width: 45px;
+    height: 45px;
+    margin-bottom: 35px;
+  }
+  .quick-link strong {
+    font-size: 16px;
+  }
+  .quick-link small {
+    font-size: 16px;
+    margin-top: 5px;
+  }
+}
+
 /* Refactor polish: consistent surfaces, focus states and touch-friendly tables. */
 .table-wrap,
 .generic {
@@ -503,4 +619,125 @@
   .quick-link {
     min-height: 140px;
   }
+}
+
+@media (min-width: 901px) {
+  .admin-stats { gap: 14px; margin-top: 57px; }
+  .admin-stats .stat {
+    height: 157px;
+    padding: 21px;
+    border-color: #9ca3af;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+  .admin-stats .stat span { font-size: 16px; color: #627da9; }
+  .admin-stats .stat b { margin-top: 49px; font-size: 34px; line-height: 1; }
+  .admin-stats .stat > i {
+    right: 14px;
+    top: 22px;
+    width: 39px;
+    height: 39px;
+    display: grid;
+    place-items: center;
+  }
+  .section-label { margin: 33px 0 15px 8px; font-size: 13px; }
+  .quick-links { gap: 10px; }
+  .quick-link {
+    min-height: 182px;
+    padding: 29px 20px 19px;
+    border-color: #9ca3af;
+    border-radius: 16px;
+    box-shadow: none;
+  }
+  .quick-icon { width: 45px; height: 45px; margin-bottom: 35px; }
+  .quick-link strong { font-size: 16px; }
+  .quick-link small { font-size: 16px; margin-top: 5px; }
+  .quick-link:last-child {
+    border: 4px solid #168ce2;
+    padding: 26px 17px 16px;
+  }
+
+  /* Dashboard typography and icon colours from the reference.  Most source
+     SVGs are white, so tint the rendered asset rather than its pale tile. */
+  .page .title-row h1,
+  .quick-link strong {
+    color: #101b31;
+  }
+  .page .title-row p,
+  .section-label,
+  .admin-stats .stat span,
+  .quick-link small {
+    color: #607baa;
+  }
+  .admin-stats .stat > i img,
+  .quick-icon img {
+    filter: brightness(0) saturate(100%) invert(36%) sepia(98%) saturate(3250%) hue-rotate(217deg) brightness(99%) contrast(103%);
+    opacity: 1;
+  }
+  .admin-stats .stat > i.green img {
+    filter: brightness(0) saturate(100%) invert(55%) sepia(89%) saturate(2200%) hue-rotate(164deg) brightness(96%) contrast(101%);
+  }
+  .admin-stats .stat > i.orange img {
+    filter: brightness(0) saturate(100%) invert(58%) sepia(94%) saturate(1820%) hue-rotate(354deg) brightness(101%) contrast(99%);
+  }
+}
+
+/* Responsive dashboard */
+@media (max-width: 1250px) and (min-width: 901px) {
+  .content { padding: 32px 24px; }
+  .admin-stats,
+  .quick-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-stats { margin-top: 40px; }
+}
+
+@media (max-width: 900px) {
+  .workspace header { gap: 8px; }
+  .header-tools { gap: 6px; }
+  .branch-select {
+    min-width: 0;
+    max-width: 250px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .content { padding: 28px 24px; }
+  .admin-stats,
+  .quick-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-stats { margin-top: 30px; }
+  .admin-stats .stat { height: 132px; }
+  .quick-link { min-height: 156px; }
+  .quick-icon { margin-bottom: 22px; }
+  .page .title-row h1,
+  .quick-link strong { color: #101b31; }
+  .page .title-row p,
+  .section-label,
+  .admin-stats .stat span,
+  .quick-link small { color: #607baa; }
+  .admin-stats .stat > i img,
+  .quick-icon img {
+    filter: brightness(0) saturate(100%) invert(36%) sepia(98%) saturate(3250%) hue-rotate(217deg) brightness(99%) contrast(103%);
+  }
+  .admin-stats .stat > i.green img {
+    filter: brightness(0) saturate(100%) invert(55%) sepia(89%) saturate(2200%) hue-rotate(164deg) brightness(96%) contrast(101%);
+  }
+  .admin-stats .stat > i.orange img {
+    filter: brightness(0) saturate(100%) invert(58%) sepia(94%) saturate(1820%) hue-rotate(354deg) brightness(101%) contrast(99%);
+  }
+}
+
+@media (max-width: 560px) {
+  .content { padding: 24px 16px 32px; }
+  .title-row h1 { font-size: 26px; }
+  .title-row p { font-size: 15px; line-height: 1.45; }
+  .admin-stats,
+  .quick-links { grid-template-columns: 1fr; }
+  .admin-stats { gap: 12px; margin-top: 26px; }
+  .admin-stats .stat { height: 116px; padding: 18px; }
+  .admin-stats .stat b { margin-top: 28px; font-size: 29px; }
+  .admin-stats .stat > i { right: 18px; top: 18px; }
+  .section-label { margin: 28px 0 12px; }
+  .quick-links { gap: 12px; }
+  .quick-link { min-height: 142px; padding: 20px; }
+  .quick-icon { width: 42px; height: 42px; margin-bottom: 18px; }
+  .quick-link small { font-size: 14px; }
 }

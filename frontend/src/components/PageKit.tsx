@@ -77,16 +77,18 @@ export function Stat({
   label,
   value,
   tone = 'blue',
+  icon,
 }: {
   label: string;
   value: string;
   tone?: string;
+  icon?: string;
 }) {
   return (
     <article className="stat">
       <span>{label}</span>
       <b>{value}</b>
-      <i className={tone} />
+      <i className={tone}>{icon && <img src={icon} alt="" />}</i>
     </article>
   );
 }

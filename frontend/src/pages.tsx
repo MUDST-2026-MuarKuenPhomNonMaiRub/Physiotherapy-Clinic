@@ -1,6 +1,14 @@
 import { BranchesPage } from './features/branches/BranchesPage';
 import { rows } from './data';
 import { DataTable, Filters, FormCard, Page, Stat } from './components/PageKit';
+import branch from './assets/icons/branch.svg';
+import users from './assets/icons/users.svg';
+import stethoscope from './assets/icons/stethoscope.svg';
+import door from './assets/icons/door.svg';
+import clipboard from './assets/icons/clipboard.svg';
+import wallet from './assets/icons/wallet.svg';
+import percent from './assets/icons/percent.svg';
+import database from './assets/icons/database.svg';
 const configs: Record<string, [string, string, string[], string[][], string?]> = {
   users: [
     'Users & Roles',
@@ -126,33 +134,33 @@ const configs: Record<string, [string, string, string[], string[][], string?]> =
   ],
 };
 const quickLinks = [
-  ['branches', 'Branches', 'Manage clinic locations'],
-  ['users', 'Users & Roles', 'Manage logins and access'],
-  ['staff', 'Staff / Physiotherapists', 'Manage clinical staff'],
-  ['rooms', 'Rooms / Resources', 'Manage treatment rooms'],
-  ['services', 'Services / Courses', 'Manage pricing & packages'],
-  ['payments', 'Payment Methods', 'Configure accepted payments'],
-  ['commission-rules', 'Commission Rules', 'Configure staff commission'],
-  ['customer-groups', 'Master Data', 'Customer groups, referral sources'],
+  ['branches', 'Branches', 'Manage clinic locations', branch],
+  ['users', 'Users & Roles', 'Manage logins and access', users],
+  ['staff', 'Staff / Physiotherapists', 'Manage clinical staff', stethoscope],
+  ['rooms', 'Rooms / Resources', 'Manage treatment rooms', door],
+  ['services', 'Services / Courses', 'Manage pricing & packages', clipboard],
+  ['payments', 'Payment Methods', 'Configure accepted payments', wallet],
+  ['commission-rules', 'Commission Rules', 'Configure staff commission', percent],
+  ['customer-groups', 'Master Data', 'Customer groups, referral sources', database],
 ];
 function Dashboard() {
   return (
     <Page title="Dashboard" subtitle="System overview and setup">
       <div className="admin-stats">
-        <Stat label="Active Branches" value="3/3" />
-        <Stat label="Active Staff" value="9/11" />
-        <Stat label="Active Users" value="8/8" tone="green" />
-        <Stat label="Active Services" value="7/8" tone="orange" />
+        <Stat label="Active Branches" value="3/3" icon={branch} />
+        <Stat label="Active Staff" value="9/11" icon={stethoscope} />
+        <Stat label="Active Users" value="8/8" tone="green" icon={users} />
+        <Stat label="Active Services" value="7/8" tone="orange" icon={clipboard} />
       </div>
       <h3 className="section-label">QUICK LINKS</h3>
       <div className="quick-links">
-        {quickLinks.map(([path, label, desc]) => (
+        {quickLinks.map(([path, label, desc, icon]) => (
           <button
             key={path}
             className="quick-link"
             onClick={() => (location.hash = `admin/${path}`)}
           >
-            <span className="quick-icon">▦</span>
+            <span className="quick-icon"><img src={icon} alt="" /></span>
             <strong>{label}</strong>
             <small>{desc}</small>
           </button>
