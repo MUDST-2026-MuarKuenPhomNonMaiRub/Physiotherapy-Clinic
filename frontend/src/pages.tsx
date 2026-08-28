@@ -14,21 +14,44 @@ const configs: Record<string, [string, string, string[], string[][], string?]> =
     'Users & Roles',
     'Manage system users, role assignment and branch access',
     ['User', 'Name', 'Role', 'Branch Access', 'Status', 'Last Login'],
-    rows.users,
+    [
+      ['admin', 'พิริยะ ทาระธรรม', 'System Admin', 'BKK, SAL, CNX', 'Active', '12 Aug 2026 23:28'],
+      ['frontdesk', 'นภัสสร ต้อนรับดี', 'Front Desk', 'BKK, SAL', 'Active', '12 Aug 2026 08:45'],
+      ['physio', 'สุพจน์ กายภาพเก่ง', 'Physiotherapist', 'BKK', 'Active', '12 Aug 2026 23:17'],
+      ['manager', 'ธนกร บริหารงาน', 'Manager', 'BKK, SAL, CNX', 'Active', '12 Aug 2026 07:50'],
+      ['frontdesk2', 'ปิยะดา เอื้อเฟื้อ', 'Front Desk', 'CNX', 'Active', '11 Aug 2026 18:00'],
+      ['physio2', 'วรรณิศา ฟื้นฟูชีพ', 'Physiotherapist', 'SAL', 'Active', '11 Aug 2026 17:20'],
+    ],
     'Add User',
   ],
   staff: [
     'Staff / Physiotherapists',
     'Manage clinic staff, specialties and branch assignment',
-    ['Staff ID', 'Name', 'Branch', 'Specialty', 'Status'],
-    rows.staff,
+    ['Staff ID', 'Name', 'Position', 'Branch', 'Status'],
+    [
+      ['stf-admin1', 'กิตติ์ ระบบดี / Kittit Raboddee', 'System Admin', 'BKK, SAL, CNX', 'Active'],
+      ['stf-fd1', 'นภัสสร ต้อนรับดี / Napassorn Tonpradee', 'Front Desk', 'BKK, SAL', 'Active'],
+      ['stf-fd2', 'ปิยะดา เอื้อเฟื้อ / Piyada Ueafuea', 'Front Desk', 'CNX', 'Active'],
+      ['stf-mgr1', 'ธนกร บริหารงาน / Thanakorn Borihangam', 'Clinic Manager', 'BKK, SAL, CNX', 'Active'],
+      ['stf-phy1', 'สุพจน์ กายภาพเก่ง / Supoj Kaiyaphapkeng', 'Physiotherapist', 'BKK', 'Active'],
+      ['stf-phy2', 'วรรณิศา ฟื้นฟูชีพ / Wanwisa Kluenwaidee', 'Physiotherapist', 'BKK, SAL', 'Active'],
+      ['stf-phy3', 'อรรถพล ฟื้นฟูชีพ / Atthapon Fuenfuchiep', 'Physiotherapist', 'SAL', 'Active'],
+    ],
     'Add Staff',
   ],
   services: [
     'Services',
     'Manage single-visit treatments, duration and pricing',
-    ['Code', 'Service Name', 'Duration', 'Price', 'Status'],
-    rows.services,
+    ['Service Name', 'Type', 'Price', 'Duration', 'Status'],
+    [
+      ['Physical Assessment', 'Assessment', '฿500', '30 min', 'Active'],
+      ['Office Syndrome Treatment', 'Single Visit', '฿900', '45 min', 'Active'],
+      ['Sports Injury Rehabilitation', 'Single Visit', '฿1,200', '60 min', 'Active'],
+      ['Lower Back Pain Therapy', 'Single Visit', '฿1,000', '45 min', 'Active'],
+      ['Post-Operative Rehabilitation', 'Single Visit', '฿1,400', '60 min', 'Active'],
+      ['Shockwave Therapy', 'Single Visit', '฿1,600', '30 min', 'Active'],
+      ['Dry Needling', 'Single Visit', '฿800', '30 min', 'Active'],
+    ],
     'Create Service',
   ],
   courses: [
@@ -43,43 +66,35 @@ const configs: Record<string, [string, string, string[], string[][], string?]> =
     'Configure accepted payment methods',
     ['Code', 'Method', 'Description', 'Status'],
     rows.payments,
-    'Add Method',
   ],
   rooms: [
     'Rooms / Resources',
     'Manage rooms and shared clinic resources',
-    ['Code', 'Name', 'Branch', 'Type', 'Status'],
-    rows.rooms,
+    ['Resource Name', 'Type', 'Branch', 'Status'],
+    [
+      ['Treatment Room 1', 'Treatment Room', 'สาขาสุขุมวิท (Sukhumvit)', 'Active'],
+      ['Treatment Room 2', 'Treatment Room', 'สาขาสุขุมวิท (Sukhumvit)', 'Active'],
+      ['Exercise Area', 'Open Area', 'สาขาสุขุมวิท (Sukhumvit)', 'Active'],
+      ['Running Lab', 'Specialty Room', 'สาขาสุขุมวิท (Sukhumvit)', 'Active'],
+      ['Treatment Room 1', 'Treatment Room', 'สาขาศาลายา (Salaya)', 'Active'],
+      ['Exercise Area', 'Open Area', 'สาขาเชียงใหม่ (Chiang Mai)', 'Active'],
+    ],
     'Add Resource',
   ],
   'commission-rules': [
     'Commission Rules',
     'Define staff commission calculation rules',
-    ['Rule', 'Role', 'Applied To', 'Rate', 'Status'],
-    rows.rules,
+    ['Rule Name', 'Applies To', 'Target', 'Commission', 'Effective Date', 'Status'],
+    [
+      ['Standard Treatment Commission', 'Treatment', 'All Services / Courses', '5%', '01 Jan 2026', 'Active'],
+      ['Office Syndrome Treatment Commission', 'Treatment', 'Office Syndrome Treatment', '6%', '01 Jan 2026', 'Active'],
+      ['Course Sales Commission', 'Sales', 'All Courses', '8%', '01 Jan 2026', 'Active'],
+      ['Single Visit Sales Commission', 'Sales', 'All Services', '฿50', '01 Jan 2026', 'Active'],
+      ['Post-Op Rehab Combined Commission', 'Treatment + Sales', 'Post-Operative Rehabilitation', '7%', '01 Feb 2026', 'Active'],
+    ],
     'Create Rule',
   ],
-  'customer-groups': [
-    'Master Data — Customer Groups',
-    'Maintain customer segmentation and default discounts',
-    ['Code', 'Customer Group', 'Discount', 'Status'],
-    rows.groups,
-    'Add Group',
-  ],
-  referrals: [
-    'Master Data — Referral Channels',
-    'Maintain channels used for acquisition reporting',
-    ['Code', 'Referral Channel', 'Status'],
-    rows.referrals,
-    'Add Channel',
-  ],
-  insurers: [
-    'Master Data — Insurance Companies',
-    'Maintain insurer information for patient billing',
-    ['Code', 'Insurance Company', 'Phone', 'Status'],
-    rows.insurers,
-    'Add Insurance',
-  ],
+  'customer-groups': ['Master Data', 'Manage shared dropdown values used across patient registration and checkout', ['Value', 'Status'], [['Walk-in', 'Active'], ['Member', 'Active'], ['VIP', 'Active'], ['Corporate', 'Active'], ['Staff / Family', 'Inactive']], 'Add Customer Group'],
   transactions: [
     'Transactions',
     'Review clinic sales and payment transactions',
@@ -166,6 +181,40 @@ function Dashboard() {
           </button>
         ))}
       </div>
+    </Page>
+  );
+}
+function Tabs({ items }: { items: string[] }) {
+  return (
+    <div className="settings-tabs">
+      {items.map((item, index) => <button className={index === 0 ? 'active' : ''} key={item}>{item}</button>)}
+    </div>
+  );
+}
+function PaymentMethods() {
+  const methods = [['Cash', true], ['Transfer', true], ['QR Payment', true], ['Credit Card', false]];
+  return (
+    <Page title="Payment Methods" subtitle="Disabled payment methods will not appear as an option during checkout">
+      <div className="payment-grid">
+        {methods.map(([name, enabled]) => (
+          <article className="payment-method" key={String(name)}>
+            <i />
+            <span><b>{name}</b><small className={enabled ? 'visible' : ''}>{enabled ? 'Visible at Checkout' : 'Hidden at Checkout'}</small></span>
+            <button className={`mini-switch ${enabled ? 'on' : ''}`} aria-label={`Toggle ${name}`}><i /></button>
+          </article>
+        ))}
+      </div>
+    </Page>
+  );
+}
+function SettingsPage({ path }: { path: string }) {
+  if (path === 'payments') return <PaymentMethods />;
+  const c = configs[path] ?? configs.users;
+  const tabs = path === 'users' ? ['Users', 'Roles & Permissions'] : path === 'services' ? ['Services', 'Courses'] : path === 'customer-groups' ? ['Customer Group'] : null;
+  return (
+    <Page title={c[0]} subtitle={c[1]} action={c[4]}>
+      {tabs && <Tabs items={tabs} />}
+      <DataTable headers={c[2]} rows={c[3]} />
     </Page>
   );
 }
@@ -356,10 +405,5 @@ export function PageRouter({ path }: { path: string }) {
         />
       </Page>
     );
-  const c = configs[path] ?? configs.users;
-  return (
-    <Page title={c[0]} subtitle={c[1]} action={c[4]}>
-      <DataTable headers={c[2]} rows={c[3]} />
-    </Page>
-  );
+  return <SettingsPage path={path} />;
 }

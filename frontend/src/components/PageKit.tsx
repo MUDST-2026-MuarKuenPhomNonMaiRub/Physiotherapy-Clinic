@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import edit from '../assets/icons/edit.svg';
 export function Page({
   title,
   subtitle,
@@ -39,19 +40,26 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: string[]
           {rows.map((row, i) => (
             <tr key={i}>
               {row.map((v, j) => (
-                <td key={j}>
-                  {['Active', 'Paid', 'Confirmed', 'Available'].includes(v) ? (
-                    <span className="status on">
+                <td key={j} className={headers[j] === 'Branch Access' ? 'branch-access' : ''}>
+                  {['Active', 'Paid', 'Confirmed', 'Available', 'Inactive'].includes(v) ? (
+                    <span className={`status ${v === 'Inactive' ? 'off' : 'on'}`}>
                       <i />
                       {v}
                     </span>
+                  ) : headers[j] === 'Role' || headers[j] === 'Position' ? (
+                    <span className="role-pill">{v}</span>
+                  ) : headers[j] === 'Branch Access' ? (
+                    v.split(', ').map((branch) => <span className="branch-pill" key={branch}>{branch}</span>)
                   ) : (
                     v
                   )}
                 </td>
               ))}
               <td>
-                <button className="text-action">Edit</button>
+                <div className="row-actions">
+                  <button className="edit-action" aria-label="Edit"><img src={edit} alt="" /></button>
+                  <button className="mini-switch on" aria-label="Toggle active"><i /></button>
+                </div>
               </td>
             </tr>
           ))}

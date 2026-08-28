@@ -36,8 +36,6 @@ export const menus: Record<Role, NavItem[]> = {
     { path: 'payments', label: 'Payment Methods' },
     { path: 'commission-rules', label: 'Commission Rules' },
     { path: 'customer-groups', label: 'Master Data', group: 'DATA' },
-    { path: 'referrals', label: 'Referral Channels' },
-    { path: 'insurers', label: 'Insurance Companies' },
   ],
   manager: [
     { path: 'dashboard', label: 'Dashboard' },
@@ -72,8 +70,6 @@ const navIcons: Record<string, string> = {
   payments: wallet,
   'commission-rules': percent,
   'customer-groups': database,
-  referrals: database,
-  insurers: database,
 };
 export function AppShell({
   role,
@@ -89,7 +85,8 @@ export function AppShell({
   children: ReactNode;
 }) {
   const menu = menus[role],
-    current = menu.find((x) => x.path === path)?.label ?? 'Dashboard';
+    current = menu.find((x) => x.path === path)?.label ?? 'Dashboard',
+    isSettings = role === 'admin' && path !== 'dashboard';
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -132,6 +129,7 @@ export function AppShell({
           <div className="crumb">
             <span>PhysioCare</span>
             <b>›</b>
+            {isSettings && <><span>Settings</span><b>›</b></>}
             <strong>{current}</strong>
           </div>
           <div className="header-tools">

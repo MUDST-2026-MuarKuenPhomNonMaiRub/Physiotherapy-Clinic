@@ -33,15 +33,6 @@ export const rows = {
     ['CG01', 'General Patient', '0%', 'Active'],
     ['CG02', 'Corporate', '10%', 'Active'],
   ],
-  referrals: [
-    ['RF01', 'Walk-in', 'Active'],
-    ['RF02', 'Google / Website', 'Active'],
-    ['RF03', 'Doctor Referral', 'Active'],
-  ],
-  insurers: [
-    ['INS01', 'AIA Thailand', '02-123-4567', 'Active'],
-    ['INS02', 'Muang Thai Life', '02-456-7890', 'Active'],
-  ],
   transactions: [
     ['TX-20260812-001', '12 Aug 2026', 'HN000145', 'Office Syndrome', '฿1,200', 'Paid'],
     ['TX-20260812-002', '12 Aug 2026', 'HN000203', 'Course Package', '฿5,500', 'Paid'],
