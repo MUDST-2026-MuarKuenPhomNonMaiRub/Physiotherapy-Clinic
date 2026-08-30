@@ -17,12 +17,17 @@
 body {
   margin: 0;
   min-width: 320px;
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
 }
+#root { width: 100%; min-height: 100vh; }
 button {
   font: inherit;
 }
 .app-shell {
   min-height: 100vh;
+  width: 100%;
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
 }
@@ -98,8 +103,8 @@ button {
   height: 20px;
 }
 .nav-item.active {
-  background: #fff;
-  color: var(--primary);
+  background: #edf7e9;
+  color: #145c3b;
   font-weight: 600;
 }
 .side-profile {

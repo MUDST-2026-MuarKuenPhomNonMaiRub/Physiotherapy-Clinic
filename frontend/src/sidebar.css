@@ -1,5 +1,5 @@
 .sidebar {
-  background: #071225;
+  background: #1A4A2E;
   padding: 0 14px;
   color: #fff;
 }
@@ -10,11 +10,19 @@
   border-bottom: 1px solid #1f2a3b;
   align-items: flex-start;
 }
+.brand-logo {
+  width: 190px;
+  height: auto;
+  max-height: 50px;
+  object-fit: contain;
+  object-position: left center;
+  filter: brightness(0) invert(1);
+}
 .brand-mark {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #2563eb;
+  background: #2d7a50;
 }
 .brand-mark img {
   width: 21px;
@@ -53,15 +61,19 @@
   filter: grayscale(1) brightness(1.7);
 }
 .nav-item.active {
-  background: #2b68ea;
-  color: #fff;
+  background: #edf7e9;
+  color: #145c3b;
   font-weight: 500;
 }
 .nav-item.active img {
   filter: brightness(0) invert(1);
 }
 .nav-group {
-  color: #758196;
+  display: block;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  margin-top: 8px;
+  padding-top: 13px;
+  color: #00b5e2;
 }
 .side-profile {
   height: 88px;
@@ -82,7 +94,7 @@
 .avatar.pale {
   width: 36px;
   height: 36px;
-  background: #2b68ea;
+  background: #2d7a50;
   color: #fff;
 }
 .side-profile button img {

@@ -2,10 +2,8 @@ import { useEffect, useState } from 'react';
 import { AppShell, roleNames, type Role } from './components/AppShell';
 import { PageRouter } from './pages';
 const defaults: Record<Role, string> = {
-  admin: 'dashboard',
-  manager: 'dashboard',
-  frontdesk: 'patients',
-  physio: 'my-appointments',
+  admin: 'calendar',
+  physio: 'calendar',
 };
 const accounts: { role: Role; title: string; user: string; description: string }[] = [
   {
@@ -15,22 +13,10 @@ const accounts: { role: Role; title: string; user: string; description: string }
     description: 'Configure branches, staff, services & rules',
   },
   {
-    role: 'frontdesk',
-    title: 'Front Desk',
-    user: 'frontdesk',
-    description: 'Patients, appointments, checkout & courses',
-  },
-  {
     role: 'physio',
-    title: 'Physiotherapist',
+    title: 'PHYSIO',
     user: 'physio',
-    description: 'Treat assigned patients & track commission',
-  },
-  {
-    role: 'manager',
-    title: 'Manager',
-    user: 'manager',
-    description: 'Dashboard, reports & transaction audit',
+    description: 'Clinician / Daily Operations',
   },
 ];
 function read() {
@@ -71,7 +57,7 @@ export default function App() {
         location.hash = '';
       }}
     >
-      <PageRouter path={path} />
+      <PageRouter path={path} role={role} />
     </AppShell>
   );
 }
@@ -116,7 +102,7 @@ function Login({ onEnter }: { onEnter: (r: Role) => void }) {
           </label>
           <button
             className="primary sign-in"
-            onClick={() => onEnter(accounts.find((a) => a.user === username)?.role ?? 'frontdesk')}
+            onClick={() => onEnter(accounts.find((a) => a.user === username)?.role ?? 'physio')}
           >
             Sign In
           </button>

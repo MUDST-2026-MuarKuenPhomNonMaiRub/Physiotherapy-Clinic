@@ -58,3 +58,32 @@ export const rows = {
     ['HN000203', 'วิภา สุขใจ', '089-555-0142', 'Corporate', '11 Aug 2026'],
   ],
 };
+
+export type PatientDirectoryRecord = {
+  hn: string;
+  name: string;
+  nameEn: string;
+  gender: string;
+  phone: string;
+  customerGroup: string;
+  branch: string;
+  activeCourses: number;
+  latestVisit: string;
+};
+
+const patientDirectorySeed: [string, string, string, string, string, string, string, number, string][] = [
+  ['2602070007', 'นางอรุณี กำหนดหัน', 'Arunee Kaona', 'Female', '086-372-1496', 'Walk-in', 'SAL', 0, '—'],
+  ['2601070005', 'นายสุรชัย ธรรมชาติ', 'Surachai Thammachat', 'Male', '089-253-1279', 'Member', 'BKK', 0, '—'],
+  ['2601060007', 'นายศักดิ์ชัย ทวีสิน', 'Sakchai Thaweesin', 'Male', '085-355-1465', 'Corporate', 'BKK', 0, '—'],
+  ['2602060009', 'นางปิยมณฑ์ สุขเจริญ', 'Piyamun Sukkhaoren', 'Female', '082-474-1682', 'VIP', 'SAL', 0, '—'],
+  ['2602050011', 'นางวรรณภา เจริญสุข', 'Waraporn Charoensuk', 'Female', '088-576-1868', 'Walk-in', 'SAL', 0, '—'],
+  ['2602050004', 'นายประเสริฐ รุ่งเรือง', 'Prasert Rungruang', 'Male', '087-219-1217', 'Corporate', 'SAL', 1, '—'],
+  ['2601050009', 'นายกิตติศักดิ์ ไพบูลย์', 'Kittisak Paiboon', 'Male', '081-457-1651', 'Member', 'BKK', 0, '—'],
+  ['2602040006', 'นายชูเกียรติ อยู่ดี', 'Chukiat Yoodee', 'Male', '083-321-1403', 'Member', 'SAL', 0, '—'],
+  ['2601040011', 'นายชัยวัฒน์ รักษ์สุขภาพ', 'Chaiwat Raksukkhaphap', 'Male', '087-559-1837', 'Corporate', 'BKK', 0, '—'],
+  ['2601040004', 'นางกัลยา ทองสุข', 'Kanlaya Thongsuk', 'Female', '086-202-1186', 'VIP', 'BKK', 1, '12 Aug 2026'],
+];
+
+export const patientDirectory: PatientDirectoryRecord[] = patientDirectorySeed.map(([hn, name, nameEn, gender, phone, customerGroup, branch, activeCourses, latestVisit]) => ({
+  hn, name, nameEn, gender, phone, customerGroup, branch, activeCourses, latestVisit,
+}));

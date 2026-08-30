@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import edit from '../assets/icons/edit.svg';
+
+const actionPaths: Record<string, string> = {
+  'New Patient': 'new-patient',
+  'Register Patient': 'new-patient',
+  'New Appointment': 'new-appointment',
+};
 export function Page({
   title,
   subtitle,
@@ -18,13 +25,25 @@ export function Page({
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
-        {action && <button className="primary">＋ {action}</button>}
+        {action && (
+          <button
+            className="primary"
+            onClick={() => {
+              const path = actionPaths[action];
+              if (path) location.hash = `${location.hash.slice(1).split('/')[0] || 'admin'}/${path}`;
+              else window.alert(`${action} is ready to be configured.`);
+            }}
+          >
+            ＋ {action}
+          </button>
+        )}
       </div>
       {children}
     </section>
   );
 }
 export function DataTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  const [activeRows, setActiveRows] = useState(() => rows.map(() => true));
   return (
     <div className="table-wrap generic">
       <table>
@@ -57,8 +76,8 @@ export function DataTable({ headers, rows }: { headers: string[]; rows: string[]
               ))}
               <td>
                 <div className="row-actions">
-                  <button className="edit-action" aria-label="Edit"><img src={edit} alt="" /></button>
-                  <button className="mini-switch on" aria-label="Toggle active"><i /></button>
+                  <button className="edit-action" aria-label={`Edit ${row[0] ?? 'row'}`} onClick={() => window.alert(`Edit: ${row[0] ?? 'item'}`)}><img src={edit} alt="" /></button>
+                  <button className={`mini-switch ${activeRows[i] ? 'on' : ''}`} aria-label="Toggle active" onClick={() => setActiveRows((current) => current.map((value, index) => index === i ? !value : value))}><i /></button>
                 </div>
               </td>
             </tr>

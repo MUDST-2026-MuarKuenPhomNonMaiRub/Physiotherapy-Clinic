@@ -11,57 +11,61 @@ import door from '../assets/icons/door.svg';
 import stethoscope from '../assets/icons/stethoscope.svg';
 import percent from '../assets/icons/percent.svg';
 import database from '../assets/icons/database.svg';
-export type Role = 'admin' | 'manager' | 'frontdesk' | 'physio';
+export type Role = 'admin' | 'physio';
 export type NavItem = { path: string; label: string; group?: string };
 export const roleNames: Record<Role, string> = {
-  admin: 'System Admin',
-  manager: 'Manager',
-  frontdesk: 'Front Desk',
-  physio: 'Physiotherapist',
+  admin: 'ADMIN (Owner)',
+  physio: 'PHYSIO',
 };
 const names: Record<Role, string> = {
   admin: 'พิริยะ ทาระธรรม',
-  manager: 'ธนกร บริหารงาน',
-  frontdesk: 'นภัสสร ต้อนรับดี',
   physio: 'สุพจน์ กายภาพเก่ง',
 };
 export const menus: Record<Role, NavItem[]> = {
   admin: [
-    { path: 'dashboard', label: 'Dashboard' },
-    { path: 'branches', label: 'Branches', group: 'ORGANIZATION' },
-    { path: 'rooms', label: 'Rooms / Resources' },
-    { path: 'users', label: 'Users & Roles', group: 'PEOPLE & ACCESS' },
-    { path: 'staff', label: 'Staff / Physiotherapists' },
-    { path: 'services', label: 'Services / Courses', group: 'BUSINESS CONFIGURATION' },
-    { path: 'payments', label: 'Payment Methods' },
-    { path: 'commission-rules', label: 'Commission Rules' },
-    { path: 'customer-groups', label: 'Master Data', group: 'DATA' },
-  ],
-  manager: [
-    { path: 'dashboard', label: 'Dashboard' },
-    { path: 'appointments', label: 'Calendar' },
+    { path: 'calendar', label: 'Calendar' },
+    { path: 'patients', label: 'Patients', group: 'PATIENTS' },
+    { path: 'appointments', label: 'Appointment & Visits' },
+    { path: 'patient-courses', label: 'Patient Courses' },
+    { path: 'course-transfer', label: 'Course Transfer' },
+    { path: 'checkout', label: 'Checkout', group: 'FINANCE' },
     { path: 'transactions', label: 'Transactions' },
     { path: 'revenue', label: 'Revenue', group: 'REPORTS' },
     { path: 'course-balance', label: 'Course Balance' },
-    { path: 'course-transfer', label: 'Course Transfer' },
     { path: 'staff-sales', label: 'Staff Sales' },
     { path: 'commission', label: 'Commission' },
-  ],
-  frontdesk: [
-    { path: 'patients', label: 'Patients' },
-    { path: 'appointments', label: 'Appointments & Visits' },
-    { path: 'checkout', label: 'Checkout' },
-    { path: 'patient-courses-front', label: 'Patient Courses' },
-    { path: 'front-transactions', label: 'Transactions' },
+    { path: 'branches', label: 'Branches', group: 'ADMINISTRATION' },
+    { path: 'rooms', label: 'Rooms & Resources' },
+    { path: 'staff', label: 'Staff & Access' },
+    { path: 'services', label: 'Treatments & Course' },
+    { path: 'payments', label: 'Payment Methods' },
+    { path: 'commission-rules', label: 'Commission Rules' },
+    { path: 'customer-groups', label: 'Master Data' },
   ],
   physio: [
-    { path: 'my-appointments', label: 'My Appointments' },
-    { path: 'physio-patients', label: 'Patients' },
-    { path: 'my-commission', label: 'My Commission' },
+    { path: 'calendar', label: 'Calendar' },
+    { path: 'patients', label: 'Patient', group: 'PATIENTS' },
+    { path: 'appointments', label: 'Appointment & Visits' },
+    { path: 'patient-courses', label: 'Patient Courses' },
+    { path: 'course-transfer', label: 'Course Transfer' },
+    { path: 'checkout', label: 'Checkout', group: 'FINANCE' },
+    { path: 'transactions', label: 'Transactions' },
+    { path: 'commission', label: 'Commission', group: 'REPORTS' },
   ],
 };
 const navIcons: Record<string, string> = {
   dashboard: clipboard,
+  calendar: activity,
+  appointments: clipboard,
+  patients: users,
+  'patient-courses': clipboard,
+  'course-transfer': branch,
+  checkout: wallet,
+  transactions: wallet,
+  revenue: activity,
+  'course-balance': database,
+  'staff-sales': users,
+  commission: percent,
   branches: branch,
   rooms: door,
   users,
@@ -86,22 +90,16 @@ export function AppShell({
 }) {
   const menu = menus[role],
     current = menu.find((x) => x.path === path)?.label ?? 'Dashboard',
-    isSettings = role === 'admin' && path !== 'dashboard';
+    isSettings = role === 'admin' && ['branches', 'rooms', 'users', 'staff', 'services', 'payments', 'commission-rules', 'customer-groups'].includes(path);
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">
-            <img src={activity} alt="" />
-          </span>
-          <span>
-            <strong>PhysioCare Clinic</strong>
-            <small>Clinic Management System</small>
-          </span>
+          <img className="brand-logo" src="/la-balance-logo.png" alt="LA BALANCE Physical Therapy Clinic" />
         </div>
         <nav>
           {menu.map((item, i) => (
-            <span key={item.path}>
+            <span key={`${item.path}-${item.label}-${i}`}>
               {item.group && <small className="nav-group">{item.group}</small>}
               <button
                 className={`nav-item ${path === item.path ? 'active' : ''}`}
