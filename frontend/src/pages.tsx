@@ -179,6 +179,8 @@ type TransactionRecord = { id: string; date: string; patient: string; item: stri
 const appointmentStorageKey = 'physiocare-appointments';
 const transactionStorageKey = 'physiocare-transactions';
 const transferStorageKey = 'physiocare-course-transfers';
+const pendingPatientKey = 'physiocare-pending-patient';
+const pendingCoursePurchaseKey = 'physiocare-pending-course-purchase';
 
 function readPatients(): PatientRow[] {
   try {
@@ -253,8 +255,9 @@ function PatientCoursesPage() {
   const [branch, setBranch] = useState('all');
   const [courseName, setCourseName] = useState('all');
   const [status, setStatus] = useState('all');
-  const [purchaseOpen, setPurchaseOpen] = useState(false);
-  const [purchase, setPurchase] = useState({ patientHn: rows.patients[0][0], course: rows.courses[0][1], branch: 'BKK', purchased: 5, bonus: 0 });
+  const pendingPatient = localStorage.getItem(pendingPatientKey) ?? rows.patients[0][0];
+  const [purchaseOpen, setPurchaseOpen] = useState(() => localStorage.getItem(pendingCoursePurchaseKey) === 'true');
+  const [purchase, setPurchase] = useState({ patientHn: pendingPatient, course: rows.courses[0][1], branch: 'BKK', purchased: 5, bonus: 0 });
   const today = new Date();
   const getStatus = (item: PatientCourse) => {
     if (new Date(`${item.expiry}T23:59:59`) < today) return 'Expired';
@@ -267,7 +270,7 @@ function PatientCoursesPage() {
   });
   const formatDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const useVisit = (id: string) => setCourses((current) => { const next = current.map((item) => item.id === id && item.used < item.purchased + item.bonus ? { ...item, used: item.used + 1 } : item); writePatientCourses(next); return next; });
-  const addPurchase = () => { const patient = readPatients().find((item) => item[0] === purchase.patientHn) ?? rows.patients[0]; const next = [{ id: `PC-${Date.now()}`, patientHn: patient[0], patientName: patient[1], branch: purchase.branch, course: purchase.course, purchased: purchase.purchased, bonus: purchase.bonus, used: 0, expiry: new Date(new Date().getFullYear(), new Date().getMonth() + 12, 28).toISOString().slice(0, 10) }, ...courses]; setCourses(next); writePatientCourses(next); setPurchaseOpen(false); };
+  const addPurchase = () => { const patient = readPatients().find((item) => item[0] === purchase.patientHn) ?? rows.patients[0]; const next = [{ id: `PC-${Date.now()}`, patientHn: patient[0], patientName: patient[1], branch: purchase.branch, course: purchase.course, purchased: purchase.purchased, bonus: purchase.bonus, used: 0, expiry: new Date(new Date().getFullYear(), new Date().getMonth() + 12, 28).toISOString().slice(0, 10) }, ...courses]; setCourses(next); writePatientCourses(next); localStorage.removeItem(pendingPatientKey); localStorage.removeItem(pendingCoursePurchaseKey); setPurchaseOpen(false); };
   return (
     <Page title="Patient Courses" subtitle="Track course balances, usage and expiry across all patients">
       <div className="course-page-actions"><button className="primary" onClick={() => setPurchaseOpen((value) => !value)}>＋ Purchase Course</button></div>
@@ -313,7 +316,7 @@ function PatientListPage() {
         <select value={branch} onChange={(event) => { setBranch(event.target.value); setPage(1); }}><option value="all">All Branches</option><option value="BKK">สาขาสุขุมวิท (Sukhumvit)</option><option value="SAL">สาขาศาลายา (Salaya)</option><option value="CNX">สาขาเชียงใหม่ (Chiang Mai)</option></select>
         <span>{filtered.length} results</span>
       </div>
-      <div className="patient-table-wrap"><table className="patient-table"><thead><tr><th>HN</th><th>Patient</th><th>Gender</th><th>Phone</th><th>Customer Group</th><th>Registration Branch</th><th>Courses</th><th>Latest Visit</th><th>Actions</th></tr></thead><tbody>{pageRows.map((patient) => <tr key={patient.hn}><td><span className="hn-pill">{patient.hn}</span></td><td><div className="patient-name"><span>{patient.name.slice(0, 2)}</span><strong>{patient.name}<small>{patient.nameEn}</small></strong></div></td><td><span className="gender-pill">{patient.gender}</span></td><td>{patient.phone}</td><td>{patient.customerGroup}</td><td>{patient.branch}</td><td>{patient.activeCourses > 0 ? <span className="course-count">{patient.activeCourses} active</span> : <span className="no-courses">No courses</span>}</td><td>{patient.latestVisit}</td><td><div className="patient-actions"><button aria-label={`Create appointment for ${patient.name}`} onClick={() => window.alert('Appointment flow is not available yet')}>▣</button><button aria-label={`Sell course to ${patient.name}`} onClick={() => window.alert('Course sale flow is not available yet')}>🛒</button></div></td></tr>)}</tbody></table><div className="patient-table-footer"><span>Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div><button disabled={page === 1} onClick={() => setPage((value) => value - 1)}>‹</button>{Array.from({ length: pageCount }, (_, index) => index + 1).slice(0, 3).map((value) => <button className={value === page ? 'active' : ''} key={value} onClick={() => setPage(value)}>{value}</button>)}<button disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}>›</button></div></div></div>
+      <div className="patient-table-wrap"><table className="patient-table"><thead><tr><th>HN</th><th>Patient</th><th>Gender</th><th>Phone</th><th>Customer Group</th><th>Registration Branch</th><th>Courses</th><th>Latest Visit</th><th>Actions</th></tr></thead><tbody>{pageRows.map((patient) => <tr key={patient.hn}><td><span className="hn-pill">{patient.hn}</span></td><td><div className="patient-name"><span>{patient.name.slice(0, 2)}</span><strong>{patient.name}<small>{patient.nameEn}</small></strong></div></td><td><span className="gender-pill">{patient.gender}</span></td><td>{patient.phone}</td><td>{patient.customerGroup}</td><td>{patient.branch}</td><td>{patient.activeCourses > 0 ? <span className="course-count">{patient.activeCourses} active</span> : <span className="no-courses">No courses</span>}</td><td>{patient.latestVisit}</td><td><div className="patient-actions"><button aria-label={`Book appointment for ${patient.name}`} onClick={() => { localStorage.setItem(pendingPatientKey, patient.hn); location.hash = `${location.hash.slice(1).split('/')[0] || 'admin'}/new-appointment`; }}>▣</button><button aria-label={`Purchase course for ${patient.name}`} onClick={() => { localStorage.setItem(pendingPatientKey, patient.hn); localStorage.setItem(pendingCoursePurchaseKey, 'true'); location.hash = `${location.hash.slice(1).split('/')[0] || 'admin'}/patient-courses`; }}>🛒</button></div></td></tr>)}</tbody></table><div className="patient-table-footer"><span>Showing {filtered.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div><button disabled={page === 1} onClick={() => setPage((value) => value - 1)}>‹</button>{Array.from({ length: pageCount }, (_, index) => index + 1).slice(0, 3).map((value) => <button className={value === page ? 'active' : ''} key={value} onClick={() => setPage(value)}>{value}</button>)}<button disabled={page === pageCount} onClick={() => setPage((value) => value + 1)}>›</button></div></div></div>
       <span className="data-note">Mock patient records are loaded from the data store. New registrations are saved in this browser until the patient API is connected.</span>
     </Page>
   );
@@ -559,9 +562,11 @@ function AppointmentPage() {
 }
 
 function NewAppointmentForm() {
-  const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), time: '09:00', patient: rows.patients[0][0] + ' ' + rows.patients[0][1], service: rows.services[0][1], physiotherapist: 'สุพจน์ กายภาพเก่ง', branch: 'BKK' });
+  const pendingHn = localStorage.getItem(pendingPatientKey) ?? rows.patients[0][0];
+  const pendingPatient = readPatients().find((item) => item[0] === pendingHn) ?? rows.patients[0];
+  const [form, setForm] = useState({ date: new Date().toISOString().slice(0, 10), time: '09:00', patient: pendingPatient[0] + ' ' + pendingPatient[1], service: rows.services[0][1], physiotherapist: 'สุพจน์ กายภาพเก่ง', branch: 'BKK' });
   const update = (field: keyof typeof form, value: string) => setForm((current) => ({ ...current, [field]: value }));
-  const submit = () => { const next = [...readAppointments(), { id: `APT-${Date.now()}`, ...form, status: 'Confirmed' }]; writeAppointments(next); location.hash = `${location.hash.slice(1).split('/')[0] || 'admin'}/appointments`; };
+  const submit = () => { const next = [...readAppointments(), { id: `APT-${Date.now()}`, ...form, status: 'Confirmed' }]; writeAppointments(next); localStorage.removeItem(pendingPatientKey); location.hash = `${location.hash.slice(1).split('/')[0] || 'admin'}/appointments`; };
   return <Page title="New Appointment" subtitle="Schedule a new patient visit"><div className="form-stack"><FormCard title="Appointment Details"><div className="field-grid"><label>Patient<select value={form.patient} onChange={(event) => update('patient', event.target.value)}>{readPatients().map((item) => <option key={item[0]}>{item[0]} {item[1]}</option>)}</select></label><label>Date<input type="date" value={form.date} onChange={(event) => update('date', event.target.value)} /></label><label>Time<input type="time" value={form.time} onChange={(event) => update('time', event.target.value)} /></label><label>Branch<select value={form.branch} onChange={(event) => update('branch', event.target.value)}><option value="BKK">BKK</option><option value="SAL">SAL</option><option value="CNX">CNX</option></select></label><label>Service<select value={form.service} onChange={(event) => update('service', event.target.value)}>{rows.services.map((item) => <option key={item[0]}>{item[1]}</option>)}</select></label><label>Physiotherapist<select value={form.physiotherapist} onChange={(event) => update('physiotherapist', event.target.value)}><option>สุพจน์ กายภาพเก่ง</option><option>วรรณิศา ฟื้นฟูชีพ</option><option>อรรถพล ฟื้นฟูชีพ</option></select></label></div></FormCard><div className="form-actions"><button onClick={() => (location.hash = `${location.hash.slice(1).split('/')[0] || 'admin'}/appointments`)}>Cancel</button><button className="primary" onClick={submit}>Create Appointment</button></div></div></Page>;
 }
 
