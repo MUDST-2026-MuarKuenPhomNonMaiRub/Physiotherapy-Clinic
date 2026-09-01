@@ -1,0 +1,170 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-heading);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-section: var(--sidebar-section);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Palette lifted from labalancephysio.com:
+   brand green #1A4A2E / #163D28 / #2D6B45 / #0F2D1E, primary cyan #24BEE2,
+   sage #EBF5E6 / #E5F0E0, olive #586050, gold #F3AB3B, text #373E44.
+   Cyan is the brand's accent but fails contrast as a button fill on white,
+   so deep green carries --primary and cyan carries --info / sidebar sections.
+   The sidebar itself is deep navy #0B1220. */
+:root {
+  --font-sans: var(--font-sarabun), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-inter), var(--font-sarabun), ui-sans-serif, system-ui, sans-serif;
+  --background: #F8FAFB;
+  --foreground: #373E44;
+  --card: #FFFFFF;
+  --card-foreground: #373E44;
+  --popover: #FFFFFF;
+  --popover-foreground: #373E44;
+  --primary: #1A4A2E;
+  --primary-foreground: #FFFFFF;
+  --secondary: #EBF5E6;
+  --secondary-foreground: #1A4A2E;
+  --muted: #F1F4F1;
+  --muted-foreground: #8E969E;
+  --accent: #EBF5E6;
+  --accent-foreground: #1A4A2E;
+  --destructive: #DC3545;
+  --destructive-foreground: #FFFFFF;
+  --border: #E9ECEF;
+  --input: #E9ECEF;
+  --ring: #2D6B45;
+  --success: #28A745;
+  --success-foreground: #FFFFFF;
+  --warning: #F3AB3B;
+  --warning-foreground: #3D2A00;
+  --info: #24BEE2;
+  --info-foreground: #FFFFFF;
+  --chart-1: #1A4A2E;
+  --chart-2: #24BEE2;
+  --chart-3: #F3AB3B;
+  --chart-4: #586050;
+  --chart-5: #5DD0EA;
+  --radius: 0.75rem;
+  /* Sidebar surface is deep navy; hover and the divider are lifts of the same
+     hue so the panel reads as one colour. The mint active pill and cyan section
+     labels are kept from the brand mock-up. */
+  --sidebar: #0B1220;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-section: #5DD0EA;
+  --sidebar-primary: #EBF5E6;
+  --sidebar-primary-foreground: #0B1220;
+  --sidebar-accent: #1A2540;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #1E293B;
+  --sidebar-ring: #5DD0EA;
+}
+
+.dark {
+  --background: #0F1A14;
+  --foreground: #E6EDE7;
+  --card: #16241B;
+  --card-foreground: #E6EDE7;
+  --popover: #16241B;
+  --popover-foreground: #E6EDE7;
+  --primary: #4E9E6E;
+  --primary-foreground: #08130C;
+  --secondary: #1E3226;
+  --secondary-foreground: #E6EDE7;
+  --muted: #1E3226;
+  --muted-foreground: #9BA9A0;
+  --accent: #1E3226;
+  --accent-foreground: #A7E3BE;
+  --destructive: #F0616F;
+  --destructive-foreground: #FFFFFF;
+  --border: #23392B;
+  --input: #23392B;
+  --ring: #4E9E6E;
+  --success: #4ADE80;
+  --success-foreground: #08130C;
+  --warning: #F8CF5B;
+  --warning-foreground: #2A1D00;
+  --info: #5DD0EA;
+  --info-foreground: #06222A;
+  --chart-1: #4E9E6E;
+  --chart-2: #5DD0EA;
+  --chart-3: #F8CF5B;
+  --chart-4: #7A8470;
+  --chart-5: #A7E3BE;
+  --sidebar: #070B14;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-section: #5DD0EA;
+  --sidebar-primary: #DCEFD8;
+  --sidebar-primary-foreground: #070B14;
+  --sidebar-accent: #16213A;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #1E293B;
+  --sidebar-ring: #5DD0EA;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-heading);
+  }
+}
