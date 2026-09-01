@@ -24,18 +24,18 @@ function FullScreenLoader() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const hasHydrated = useClinicStore((s) => s.hasHydrated);
-  const { user } = useSession();
+  const { user, isAuthenticated } = useSession();
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    if (hasHydrated && !user) {
+    if (hasHydrated && !isAuthenticated) {
       router.replace("/login");
     }
-  }, [hasHydrated, user, router]);
+  }, [hasHydrated, isAuthenticated, router]);
 
   if (!hasHydrated) return <FullScreenLoader />;
-  if (!user) return <FullScreenLoader />;
+  if (!user || !isAuthenticated) return <FullScreenLoader />;
 
   const allowed = canAccessRoute(user.role, pathname);
 

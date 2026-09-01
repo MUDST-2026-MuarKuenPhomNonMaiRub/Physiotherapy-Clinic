@@ -3,17 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight,
   CalendarCheck,
   Loader2,
   LockKeyhole,
   Percent,
-  ShieldCheck,
-  Stethoscope,
   Ticket,
   Building2,
 } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
+import { loginWithApi } from "@/lib/auth/auth-api";
 import { useSession } from "@/lib/auth/use-session";
 import { defaultRouteByRole } from "@/lib/permissions/navigation";
 import { ClinicLogo } from "@/components/layout/clinic-logo";
@@ -22,58 +20,34 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { LucideIcon } from "lucide-react";
 
-const demoAccounts: {
-  username: string;
-  role: string;
-  name: string;
-  icon: LucideIcon;
-  desc: string;
-}[] = [
-  {
-    username: "admin",
-    role: "Admin",
-    name: "ธนกร บริหารงาม",
-    icon: ShieldCheck,
-    desc: "Full clinic access — every branch, every report, all settings",
-  },
-  {
-    username: "physio",
-    role: "Physiotherapist",
-    name: "สุพจน์ กายภาพเก่ง",
-    icon: Stethoscope,
-    desc: "Day-to-day operations at their branch — own sales & commission only",
-  },
-];
-
 export default function LoginPage() {
   const router = useRouter();
-  const login = useClinicStore((s) => s.login);
+  const setAuthenticatedSession = useClinicStore((s) => s.setAuthenticatedSession);
   const hasHydrated = useClinicStore((s) => s.hasHydrated);
-  const { user } = useSession();
+  const { user, isAuthenticated } = useSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (hasHydrated && user) {
+    if (hasHydrated && isAuthenticated && user) {
       router.replace(defaultRouteByRole[user.role] ?? "/login");
     }
-  }, [hasHydrated, user, router]);
+  }, [hasHydrated, isAuthenticated, user, router]);
 
-  function submit(u: string, p: string) {
+  async function submit(u: string, p: string) {
     setError(null);
     setLoading(true);
-    setTimeout(() => {
-      const result = login(u, p);
+    try {
+      const result = await loginWithApi(u, p);
+      setAuthenticatedSession(result.user, result.accessToken);
       setLoading(false);
-      if (!result.ok) {
-        setError(result.error ?? "Login failed");
-        return;
-      }
-      const loggedInUser = useClinicStore.getState().session.user;
-      if (loggedInUser) router.replace(defaultRouteByRole[loggedInUser.role] ?? "/login");
-    }, 350);
+      router.replace(defaultRouteByRole[result.user.role] ?? "/login");
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Login failed");
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -138,18 +112,18 @@ export default function LoginPage() {
 
           <h2 className="font-heading text-xl font-semibold text-foreground">Sign in</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Enter your credentials, or pick a demo account below.
+            Sign in with your clinic account.
           </p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="username">Email</Label>
               <Input
                 id="username"
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. physio"
+                placeholder="e.g. admin@example.com"
                 className="h-10"
               />
             </div>
@@ -163,7 +137,7 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="demo"
+                placeholder="Your password"
                   className="h-10 pl-8"
                 />
               </div>
@@ -179,40 +153,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-8">
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" />
-              <p className="text-xs font-medium text-muted-foreground">Demo Accounts</p>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-            <div className="mt-4 space-y-2.5">
-              {demoAccounts.map((acc) => (
-                <button
-                  key={acc.username}
-                  type="button"
-                  disabled={loading}
-                  onClick={() => {
-                    setUsername(acc.username);
-                    setPassword("demo");
-                    submit(acc.username, "demo");
-                  }}
-                  className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 text-left transition-colors hover:border-primary/40 hover:bg-accent disabled:pointer-events-none disabled:opacity-60"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <acc.icon className="h-5 w-5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">{acc.role}</p>
-                    <p className="truncate text-xs text-muted-foreground">{acc.desc}</p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </button>
-              ))}
-            </div>
-            <p className="mt-3 text-center text-xs text-muted-foreground">
-              Password for every demo account is <span className="font-mono">demo</span>.
-            </p>
-          </div>
         </div>
       </div>
     </div>

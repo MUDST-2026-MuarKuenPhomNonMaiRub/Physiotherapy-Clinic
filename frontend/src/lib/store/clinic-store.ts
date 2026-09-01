@@ -59,6 +59,7 @@ function computeStatus(pc: PatientCourse): PatientCourse["status"] {
 export interface Session {
   user: AppUser | null;
   activeBranchId: string | null;
+  accessToken: string | null;
 }
 
 export interface CheckoutAdjustment {
@@ -124,6 +125,7 @@ interface ClinicState {
 
   // auth
   login: (username: string, password: string) => { ok: boolean; error?: string };
+  setAuthenticatedSession: (user: AppUser, accessToken: string) => void;
   logout: () => void;
   setActiveBranch: (branchId: string | null) => void;
 
@@ -136,11 +138,13 @@ interface ClinicState {
   addStaff: (data: Omit<Staff, "id">) => void;
   updateStaff: (id: string, data: Partial<Staff>) => void;
   toggleStaffStatus: (id: string) => void;
+  deleteStaff: (id: string) => void;
 
   // admin: users
   addUser: (data: Omit<AppUser, "id">) => void;
   updateUser: (id: string, data: Partial<AppUser>) => void;
   toggleUserStatus: (id: string) => void;
+  deleteUser: (id: string) => void;
 
   // admin: services / courses
   addService: (data: Omit<Service, "id">) => void;
@@ -232,7 +236,7 @@ function findCommissionRule(
 }
 
 const initialState = {
-  session: { user: null, activeBranchId: null } as Session,
+  session: { user: null, activeBranchId: null, accessToken: null } as Session,
   seq: 100000,
   branches: seedBranches,
   staff: seedStaff,
@@ -269,7 +273,16 @@ export const useClinicStore = create<ClinicState>()(
         });
         return { ok: true };
       },
-      logout: () => set((s) => { s.session.user = null; s.session.activeBranchId = null; }),
+      setAuthenticatedSession: (user, accessToken) => set((s) => {
+        s.session.user = user;
+        s.session.accessToken = accessToken;
+        s.session.activeBranchId = user.branchIds[0] ?? null;
+      }),
+      logout: () => set((s) => {
+        s.session.user = null;
+        s.session.activeBranchId = null;
+        s.session.accessToken = null;
+      }),
       setActiveBranch: (branchId) => set((s) => { s.session.activeBranchId = branchId; }),
 
       addBranch: (data) => set((s) => { s.branches.push({ ...data, id: `br-${s.seq++}` }); }),
@@ -291,6 +304,10 @@ export const useClinicStore = create<ClinicState>()(
         const st = s.staff.find((x) => x.id === id);
         if (st) st.status = st.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
       }),
+      deleteStaff: (id) => set((s) => {
+        const item = s.staff.find((x) => x.id === id);
+        if (item) item.deletedAt = nowIso();
+      }),
 
       addUser: (data) => set((s) => { s.users.push({ ...data, id: `usr-${s.seq++}` }); }),
       updateUser: (id, data) => set((s) => {
@@ -300,6 +317,10 @@ export const useClinicStore = create<ClinicState>()(
       toggleUserStatus: (id) => set((s) => {
         const u = s.users.find((x) => x.id === id);
         if (u) u.status = u.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+      }),
+      deleteUser: (id) => set((s) => {
+        const item = s.users.find((x) => x.id === id);
+        if (item) { item.deletedAt = nowIso(); item.status = "INACTIVE"; }
       }),
 
       addService: (data) => set((s) => { s.services.push({ ...data, id: `svc-${s.seq++}` }); }),
@@ -726,13 +747,13 @@ export const useClinicStore = create<ClinicState>()(
         if (version < 4) return {} as ClinicState;
         const state = persisted as ClinicState;
         if (state?.session?.user && !VALID_ROLES.includes(state.session.user.role)) {
-          state.session = { user: null, activeBranchId: null };
+          state.session = { user: null, activeBranchId: null, accessToken: null };
         }
         return state;
       },
       onRehydrateStorage: () => (state) => {
         if (state?.session.user && !VALID_ROLES.includes(state.session.user.role)) {
-          state.session = { user: null, activeBranchId: null };
+          state.session = { user: null, activeBranchId: null, accessToken: null };
         }
         state?.setHasHydrated(true);
       },

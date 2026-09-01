@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Check, KeyRound, Minus, Pencil, Plus, Search, ShieldCheck, UserPlus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Check, KeyRound, Minus, Pencil, Plus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { allRoles, roleDescriptions, roleLabels, roleStyles, rolePermissions } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/format";
@@ -33,6 +33,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AppUser, Permission, Role, Staff, StaffPosition } from "@/types";
 import { toast } from "sonner";
+import { createStaffWithApi, deleteStaffWithApi, getStaffWithApi, type DatabaseStaffRow } from "@/lib/auth/auth-api";
+import { useSession } from "@/lib/auth/use-session";
 
 const positions: StaffPosition[] = ["Physiotherapist", "Clinic Manager", "Assistant Therapist"];
 const avatarColors = ["bg-[#1A4A2E]", "bg-[#2D6B45]", "bg-[#24BEE2]", "bg-[#586050]", "bg-[#F3AB3B]"];
@@ -108,6 +110,7 @@ interface FormState {
   branchIds: string[];
   hasAccount: boolean;
   username: string;
+  password: string;
   role: Role;
 }
 
@@ -120,6 +123,7 @@ const emptyForm: FormState = {
   branchIds: [],
   hasAccount: true,
   username: "",
+  password: "",
   role: "PHYSIOTHERAPIST",
 };
 
@@ -130,9 +134,12 @@ export default function StaffAccessPage() {
   const addStaff = useClinicStore((s) => s.addStaff);
   const updateStaff = useClinicStore((s) => s.updateStaff);
   const toggleStaffStatus = useClinicStore((s) => s.toggleStaffStatus);
+  const deleteStaff = useClinicStore((s) => s.deleteStaff);
+  const deleteUser = useClinicStore((s) => s.deleteUser);
   const addUser = useClinicStore((s) => s.addUser);
   const updateUser = useClinicStore((s) => s.updateUser);
   const toggleUserStatus = useClinicStore((s) => s.toggleUserStatus);
+  const { accessToken } = useSession();
 
   const [tab, setTab] = useState("people");
   const [open, setOpen] = useState(false);
@@ -140,16 +147,39 @@ export default function StaffAccessPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "ALL" | "NO_ACCOUNT">("ALL");
+  const [databaseStaff, setDatabaseStaff] = useState<DatabaseStaffRow[] | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    void getStaffWithApi(accessToken).then(setDatabaseStaff).catch(() => setDatabaseStaff([]));
+  }, [accessToken]);
+
+  const visibleStaff = databaseStaff
+    ? databaseStaff.map((s) => ({
+        id: String(s.id), name: s.name, nameEn: s.nameEn, position: s.position as StaffPosition,
+        phone: s.phone, email: s.email, branchIds: JSON.parse(s.branchIds || "[]") as string[],
+        status: s.status as Staff["status"], avatarColor: s.avatarColor, deletedAt: undefined,
+      }))
+    : staff;
 
   const accountByStaffId = useMemo(() => {
     const map = new Map<string, AppUser>();
-    users.forEach((u) => { if (u.staffId) map.set(u.staffId, u); });
+    if (databaseStaff) {
+      databaseStaff.forEach((s) => map.set(String(s.id), {
+        id: String(s.userId), username: s.email, password: "", role: s.userRole === "ADMIN" ? "ADMIN" : "PHYSIOTHERAPIST",
+        staffId: String(s.id), displayName: s.name, branchIds: JSON.parse(s.branchIds || "[]") as string[],
+        status: s.userActive ? "ACTIVE" : "INACTIVE",
+      }));
+    } else {
+      users.forEach((u) => { if (u.staffId) map.set(u.staffId, u); });
+    }
     return map;
-  }, [users]);
+  }, [users, databaseStaff]);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return staff
+    return visibleStaff
+      .filter((s) => !s.deletedAt)
       .map((s) => ({ staff: s, account: accountByStaffId.get(s.id) ?? null }))
       .filter(({ staff: s, account }) => {
         if (!q) return true;
@@ -165,17 +195,17 @@ export default function StaffAccessPage() {
         if (roleFilter === "NO_ACCOUNT") return !account;
         return account?.role === roleFilter;
       });
-  }, [staff, accountByStaffId, query, roleFilter]);
+  }, [visibleStaff, accountByStaffId, query, roleFilter]);
 
   const counts = useMemo(() => {
-    const withAccount = staff.filter((s) => accountByStaffId.has(s.id));
+    const withAccount = visibleStaff.filter((s) => accountByStaffId.has(s.id));
     return {
-      total: staff.length,
-      admins: withAccount.filter((s) => accountByStaffId.get(s.id)!.role === "ADMIN").length,
-      physios: withAccount.filter((s) => accountByStaffId.get(s.id)!.role === "PHYSIOTHERAPIST").length,
-      noAccount: staff.length - withAccount.length,
+      total: visibleStaff.filter((s) => !s.deletedAt).length,
+      admins: withAccount.filter((s) => !s.deletedAt && accountByStaffId.get(s.id)!.role === "ADMIN").length,
+      physios: withAccount.filter((s) => !s.deletedAt && accountByStaffId.get(s.id)!.role === "PHYSIOTHERAPIST").length,
+      noAccount: visibleStaff.filter((s) => !s.deletedAt).length - withAccount.filter((s) => !s.deletedAt).length,
     };
-  }, [staff, accountByStaffId]);
+  }, [visibleStaff, accountByStaffId]);
 
   function openCreate() {
     setEditing(null);
@@ -195,6 +225,7 @@ export default function StaffAccessPage() {
       branchIds: s.branchIds,
       hasAccount: !!account,
       username: account?.username ?? "",
+      password: "",
       role: account?.role ?? suggestedRoleForPosition[s.position],
     });
     setOpen(true);
@@ -207,17 +238,19 @@ export default function StaffAccessPage() {
     }));
   }
 
-  const usernameTaken = users.some(
-    (u) =>
-      u.username.toLowerCase() === form.username.trim().toLowerCase() &&
-      u.staffId !== editing?.id
-  );
+  const existingAccount = editing ? accountByStaffId.get(editing.id) ?? null : null;
+  const passwordRequired = form.hasAccount && !existingAccount;
+  const passwordValid = !passwordRequired || form.password.trim().length > 0;
   const canSave =
     form.name.trim().length > 0 &&
     form.branchIds.length > 0 &&
-    (!form.hasAccount || (form.username.trim().length > 0 && !usernameTaken));
+    (!form.hasAccount || (
+      form.username.trim().length > 0 &&
+      form.email.trim().length > 0 &&
+      passwordValid
+    ));
 
-  function save() {
+  async function save() {
     if (!canSave) return;
     const profile = {
       name: form.name.trim(),
@@ -240,7 +273,7 @@ export default function StaffAccessPage() {
           branchIds: form.branchIds,
         };
         if (account) updateUser(account.id, accountData);
-        else addUser({ ...accountData, password: "demo", status: "ACTIVE" });
+        else addUser({ ...accountData, password: "", status: "ACTIVE" });
       } else if (account) {
         // Access is revoked by deactivating the login, never by dropping the
         // record — transactions and commission still point at this person.
@@ -249,6 +282,22 @@ export default function StaffAccessPage() {
       toast.success(`${profile.name} updated`);
     } else {
       const staffId = `stf-${useClinicStore.getState().seq}`;
+      if (!accessToken) {
+        toast.error("Your session has expired. Please log in again.");
+        return;
+      }
+      try {
+        await createStaffWithApi({
+          accessToken,
+          ...profile,
+          role: form.role,
+          password: form.hasAccount ? form.password : "",
+          avatarColor: avatarColors[staff.length % avatarColors.length],
+        });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to save staff to database");
+        return;
+      }
       addStaff({
         ...profile,
         status: "ACTIVE",
@@ -257,7 +306,8 @@ export default function StaffAccessPage() {
       if (form.hasAccount) {
         addUser({
           username: form.username.trim(),
-          password: "demo",
+          // The password is never stored in frontend state or localStorage.
+          password: "",
           role: form.role,
           staffId,
           displayName: profile.name,
@@ -265,9 +315,20 @@ export default function StaffAccessPage() {
           status: "ACTIVE",
         });
       }
+      if (accessToken) {
+        void getStaffWithApi(accessToken).then(setDatabaseStaff);
+      }
       toast.success(`${profile.name} added`);
     }
     setOpen(false);
+  }
+
+  async function removePerson(person: Staff, account: AppUser | null) {
+    if (!window.confirm(`Archive ${person.name}? It will be hidden but kept in the database.`)) return;
+    if (accessToken) await deleteStaffWithApi(accessToken, person.email);
+    deleteStaff(person.id);
+    if (account) deleteUser(account.id);
+    toast.success(`${person.name} archived`);
   }
 
   return (
@@ -318,7 +379,7 @@ export default function StaffAccessPage() {
                 <SelectItem value="NO_ACCOUNT">No login account</SelectItem>
               </SelectContent>
             </Select>
-            <p className="ml-auto text-sm text-muted-foreground">{rows.length} of {staff.length} people</p>
+            <p className="ml-auto text-sm text-muted-foreground">{rows.length} of {visibleStaff.length} people</p>
           </div>
 
           {rows.length === 0 ? (
@@ -395,6 +456,9 @@ export default function StaffAccessPage() {
                           <div className="flex items-center justify-end gap-2">
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)} aria-label={`Edit ${s.name}`}>
                               <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => void removePerson(s, account)} aria-label={`Archive ${s.name}`}>
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                             <Switch
                               checked={s.status === "ACTIVE"}
@@ -561,6 +625,7 @@ export default function StaffAccessPage() {
                 <Switch
                   checked={form.hasAccount}
                   aria-label="Give this person a login"
+                  disabled={!editing}
                   onCheckedChange={(v) => setForm((f) => ({ ...f, hasAccount: v }))}
                 />
               </div>
@@ -571,13 +636,20 @@ export default function StaffAccessPage() {
                     <Input
                       value={form.username}
                       autoComplete="off"
-                      aria-invalid={usernameTaken || undefined}
                       onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
                     />
-                    {usernameTaken && (
-                      <p className="mt-1 text-xs text-destructive">That username is already taken.</p>
-                    )}
                   </Field>
+                  {passwordRequired && (
+                    <Field label="Password">
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder="Physio@Name!Pin"
+                        value={form.password}
+                        onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                      />
+                    </Field>
+                  )}
                   <Field label="Access level">
                     <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
                       <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>

@@ -48,6 +48,7 @@ export interface Staff {
   email: string;
   status: "ACTIVE" | "INACTIVE";
   avatarColor: string;
+  deletedAt?: string;
 }
 
 export interface AppUser {
@@ -60,6 +61,7 @@ export interface AppUser {
   branchIds: string[]; // accessible branches (staff)
   status: "ACTIVE" | "INACTIVE";
   lastLogin?: string;
+  deletedAt?: string;
 }
 
 export type Gender = "MALE" | "FEMALE" | "OTHER";
@@ -277,4 +279,3 @@ export interface MasterDataItem {
   value: string;
   status: "ACTIVE" | "INACTIVE";
 }
-

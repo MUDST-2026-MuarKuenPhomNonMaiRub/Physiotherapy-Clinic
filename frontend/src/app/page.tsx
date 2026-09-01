@@ -10,11 +10,12 @@ export default function RootPage() {
   const router = useRouter();
   const hasHydrated = useClinicStore((s) => s.hasHydrated);
   const user = useClinicStore((s) => s.session.user);
+  const accessToken = useClinicStore((s) => s.session.accessToken);
 
   useEffect(() => {
     if (!hasHydrated) return;
-    router.replace(user ? (defaultRouteByRole[user.role] ?? "/login") : "/login");
-  }, [hasHydrated, user, router]);
+    router.replace(user && accessToken ? (defaultRouteByRole[user.role] ?? "/login") : "/login");
+  }, [hasHydrated, user, accessToken, router]);
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
