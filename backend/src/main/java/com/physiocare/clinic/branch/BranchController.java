@@ -1,11 +1,81 @@
 package com.physiocare.clinic.branch;
-import jakarta.validation.Valid; import org.springframework.http.HttpStatus; import org.springframework.web.bind.annotation.*; import org.springframework.web.server.ResponseStatusException;
-import java.util.List; import java.util.concurrent.ConcurrentHashMap; import java.util.concurrent.atomic.AtomicLong;
-@RestController @RequestMapping("/api/branches") public class BranchController {
- private final ConcurrentHashMap<Long,Branch> branches=new ConcurrentHashMap<>(); private final AtomicLong ids=new AtomicLong(3);
- public BranchController(){branches.put(1L,new Branch(1L,"BKK","สาขาสุขุมวิท (Sukhumvit)","02-105-4421","123 ถนนสุขุมวิท แขวงคลองตันเหนือ เขตวัฒนา กรุงเทพฯ 10110",true));branches.put(2L,new Branch(2L,"SAL","สาขาศาลายา (Salaya)","02-441-0987","99 ถนนศาลายา-นครชัยศรี อ.พุทธมณฑล จ.นครปฐม 73170",true));branches.put(3L,new Branch(3L,"CNX","สาขาเชียงใหม่ (Chiang Mai)","053-224-556","45 ถนนนิมมานเหมินท์ ต.สุเทพ อ.เมือง จ.เชียงใหม่ 50200",true));}
- @GetMapping public List<Branch> list(){return branches.values().stream().sorted((a,b)->Long.compare(a.id(),b.id())).toList();}
- @PostMapping @ResponseStatus(HttpStatus.CREATED) public Branch create(@Valid @RequestBody BranchRequest r){long id=ids.incrementAndGet();Branch b=new Branch(id,r.code(),r.name(),r.phone(),r.address(),r.active());branches.put(id,b);return b;}
- @PatchMapping("/{id}/status") public Branch updateStatus(@PathVariable long id,@RequestBody StatusRequest r){Branch updated=branches.computeIfPresent(id,(k,v)->v.withActive(r.active()));if(updated==null)throw new ResponseStatusException(HttpStatus.NOT_FOUND,"Branch not found");return updated;}
- public record StatusRequest(boolean active){}
+
+import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/branches")
+public class BranchController {
+  private final JdbcTemplate db;
+
+  public BranchController(JdbcTemplate db) {
+    this.db = db;
+  }
+
+  @GetMapping
+  public List<Branch> list() {
+    return db.query(
+        "SELECT id,code,name,phone,address,active FROM branches WHERE deleted_at IS NULL ORDER BY"
+            + " id",
+        (rs, row) ->
+            new Branch(
+                rs.getLong("id"),
+                rs.getString("code"),
+                rs.getString("name"),
+                rs.getString("phone"),
+                rs.getString("address"),
+                rs.getBoolean("active")));
+  }
+
+  @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasRole('ADMIN')")
+  public Branch create(@Valid @RequestBody BranchRequest r) {
+    long id =
+        db.queryForObject(
+            "INSERT INTO branches(code,name,phone,address,active) VALUES(?,?,?,?,?) RETURNING id",
+            Long.class,
+            r.code().trim().toUpperCase(),
+            r.name(),
+            r.phone(),
+            r.address(),
+            r.active());
+    return db.queryForObject(
+        "SELECT id,code,name,phone,address,active FROM branches WHERE id=?",
+        (rs, row) ->
+            new Branch(
+                rs.getLong(1),
+                rs.getString(2),
+                rs.getString(3),
+                rs.getString(4),
+                rs.getString(5),
+                rs.getBoolean(6)),
+        id);
+  }
+
+  @PatchMapping("/{id}/status")
+  @PreAuthorize("hasRole('ADMIN')")
+  public Branch updateStatus(@PathVariable long id, @RequestBody StatusRequest r) {
+    db.update(
+        "UPDATE branches SET active=?,updated_at=now() WHERE id=? AND deleted_at IS NULL",
+        r.active(),
+        id);
+    return db.queryForObject(
+        "SELECT id,code,name,phone,address,active FROM branches WHERE id=? AND deleted_at IS NULL",
+        (rs, row) ->
+            new Branch(
+                rs.getLong(1),
+                rs.getString(2),
+                rs.getString(3),
+                rs.getString(4),
+                rs.getString(5),
+                rs.getBoolean(6)),
+        id);
+  }
+
+  public record StatusRequest(boolean active) {}
 }
