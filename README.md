@@ -94,6 +94,14 @@ Port: 5432
 Username: physiocare
 ```
 
+ถ้าเครื่องมี PostgreSQL ใช้ port `5432` อยู่แล้ว ให้เปิดระบบด้วย port `5433`:
+
+```bash
+POSTGRES_PORT=5433 docker compose up --build -d
+```
+
+กรณีนี้ backend และ frontend ยังเปิดที่ port `8080` และ `3000` ตามเดิม เพราะ backend เชื่อม PostgreSQL ผ่าน network ภายใน Docker
+
 ตรวจสอบ container:
 
 ```bash
