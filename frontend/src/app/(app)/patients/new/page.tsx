@@ -70,7 +70,9 @@ export default function NewPatientPage() {
   const customerGroups = getMasterDataByCategory("CUSTOMER_GROUP").filter((m) => m.status === "ACTIVE");
   const referralChannels = getMasterDataByCategory("REFERRAL_CHANNEL").filter((m) => m.status === "ACTIVE");
   const insuranceCompanies = getMasterDataByCategory("INSURANCE_COMPANY").filter((m) => m.status === "ACTIVE");
-  const accessibleBranches = branches.filter((b) => user?.branchIds.includes(b.id) && b.status === "ACTIVE");
+  const accessibleBranches = branches.filter(
+    (b) => b.status === "ACTIVE" && (user?.role === "ADMIN" || user?.branchIds.includes(b.id))
+  );
 
   const [form, setForm] = useState<FormState>({
     customerType: "THAI",

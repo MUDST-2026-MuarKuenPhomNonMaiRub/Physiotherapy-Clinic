@@ -53,7 +53,9 @@ function NewAppointmentContent() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const accessibleBranches = branches.filter((b) => user?.branchIds.includes(b.id) && b.status === "ACTIVE");
+  const accessibleBranches = branches.filter(
+    (b) => b.status === "ACTIVE" && (user?.role === "ADMIN" || user?.branchIds.includes(b.id))
+  );
   const service = services.find((s) => s.id === serviceId);
   const endTime = service ? addMinutes(startTime, service.duration) : startTime;
   const branchPhysios = staff.filter((s) => s.position === "Physiotherapist" && s.status === "ACTIVE" && s.branchIds.includes(branchId));

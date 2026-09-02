@@ -14,9 +14,14 @@ export function useBranchScope() {
   const branches = useClinicStore((s) => s.branches);
 
   return useMemo(() => {
-    const options = user ? branches.filter((b) => user.branchIds.includes(b.id)) : [];
+    const options = user
+      ? user.role === "ADMIN"
+        ? branches.filter((b) => b.status === "ACTIVE")
+        : branches.filter((b) => user.branchIds.includes(b.id) && b.status === "ACTIVE")
+      : [];
     const canSeeAll = options.length > 1;
-    const isAccessible = (branchId: string) => !user || user.branchIds.includes(branchId);
+    const isAccessible = (branchId: string) =>
+      !user || user.role === "ADMIN" || user.branchIds.includes(branchId);
     return { options, canSeeAll, isAccessible };
   }, [user, branches]);
 }
