@@ -27,8 +27,26 @@ To stop the application without deleting data:
 docker compose down
 ```
 
-For local development without Docker, start PostgreSQL with `docker compose up -d postgres`,
-then run the backend and frontend in separate terminals.
+## Developing with hot reload
+
+Docker rebuilds the whole image on every change, so day-to-day work runs the
+two apps on the host against the containerised database. Three terminals:
+
+```bash
+docker compose up -d postgres
+```
+
+```bash
+bash backend/run-local.sh
+```
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+`run-local.sh` loads the project's `.env` before starting Spring. Maven does not
+read that file on its own — running `./mvnw spring-boot:run` directly fails with
+`Could not resolve placeholder 'APP_JWT_SECRET'`.
 
 ## Structure
 
