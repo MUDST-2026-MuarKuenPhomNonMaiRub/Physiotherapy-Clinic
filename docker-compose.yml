@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: physiocare-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-physiocare}
       POSTGRES_USER: ${POSTGRES_USER:-physiocare}
@@ -13,5 +12,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-physiocare}
+      DATABASE_USERNAME: ${POSTGRES_USER:-physiocare}
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-physiocare}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
 volumes:
   physiocare-postgres-data:

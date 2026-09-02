@@ -2,19 +2,29 @@
 
 Starter monorepo based on the Clinic Figma design.
 
-## Run locally
+## Run with Docker
 
 ```bash
-cd backend && ./mvnw spring-boot:run
+cp .env.example .env
+docker compose up --build
 ```
+
+The first run creates the PostgreSQL database and the bootstrap admin account
+from `.env`. Use `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` to log in.
+Do not commit `.env`.
+
+Frontend: http://localhost:3000 · API: http://localhost:8080
+
+To stop the application without deleting data:
 
 ```bash
-cd frontend && npm install && npm run dev
+docker compose down
 ```
 
-Frontend: http://localhost:5173 · API: http://localhost:8080/api/branches
+For local development without Docker, start PostgreSQL with `docker compose up -d postgres`,
+then run the backend and frontend in separate terminals.
 
 ## Structure
 
-- `frontend/`: React + TypeScript + Vite, responsive Figma-based UI, typed API service.
-- `backend/`: Spring Boot 3 REST API with validation and CORS. In-memory data is intentional scaffolding; replace the controller store with a service/repository and JPA when the database is selected.
+- `frontend/`: Next.js, React and TypeScript clinic ERP UI.
+- `backend/`: Spring Boot 3 REST API with PostgreSQL, Flyway, Spring Security and JWT authentication.
