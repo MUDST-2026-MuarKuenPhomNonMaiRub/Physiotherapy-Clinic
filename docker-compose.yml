@@ -22,8 +22,8 @@ services:
       # Use DATABASE_URL_DOCKER for a shared cloud database. The default keeps
       # the local PostgreSQL service working for offline development.
       DATABASE_URL: ${DATABASE_URL_DOCKER:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-physiocare}}
-      DATABASE_USERNAME: ${POSTGRES_USER:-physiocare}
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-physiocare}
+      DATABASE_USERNAME: ${DATABASE_USERNAME_DOCKER:-${POSTGRES_USER:-physiocare}}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD_DOCKER:-${POSTGRES_PASSWORD:-physiocare}}
     ports:
       - "8080:8080"
     depends_on:
