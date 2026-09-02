@@ -268,6 +268,9 @@ export const useClinicStore = create<ClinicState>()(
         s.branches = [];
         s.patients = [];
         s.appointments = [];
+        s.patientCourses = [];
+        s.courseLedger = [];
+        s.transactions = [];
         void get().hydrateFromApi(accessToken);
       }),
       hydrateFromApi: async (accessToken) => {
@@ -827,6 +830,9 @@ export const useClinicStore = create<ClinicState>()(
           state.branches = [];
           state.patients = [];
           state.appointments = [];
+          state.patientCourses = [];
+          state.courseLedger = [];
+          state.transactions = [];
           void state.hydrateFromApi(state.session.accessToken);
         }
         if (state?.session.user && !VALID_ROLES.includes(state.session.user.role)) {
