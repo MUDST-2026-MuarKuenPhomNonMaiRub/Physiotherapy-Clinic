@@ -68,6 +68,7 @@ export default function NewPatientPage() {
   const branches = useClinicStore((s) => s.branches);
   const patients = useClinicStore((s) => s.patients);
   const hydrateFromApi = useClinicStore((s) => s.hydrateFromApi);
+  const upsertPatientFromApi = useClinicStore((s) => s.upsertPatientFromApi);
   const customerGroups = getMasterDataByCategory("CUSTOMER_GROUP").filter((m) => m.status === "ACTIVE");
   const referralChannels = getMasterDataByCategory("REFERRAL_CHANNEL").filter((m) => m.status === "ACTIVE");
   const insuranceCompanies = getMasterDataByCategory("INSURANCE_COMPANY").filter((m) => m.status === "ACTIVE");
@@ -160,6 +161,9 @@ export default function NewPatientPage() {
         insuranceCompanyCode: form.insuranceCompany,
         registeredBranchId: Number(form.registrationBranchId),
       });
+      // The response is the committed database record. Show it immediately,
+      // then reconcile the complete list with PostgreSQL in the background.
+      upsertPatientFromApi(patient);
       await hydrateFromApi(accessToken);
       setCreated(patient);
     } catch (error) {

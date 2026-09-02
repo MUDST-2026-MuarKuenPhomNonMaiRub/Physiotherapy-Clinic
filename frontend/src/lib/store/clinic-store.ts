@@ -172,6 +172,7 @@ interface ClinicState {
 
   // patients
   addPatient: (data: Omit<Patient, "id" | "hn" | "createdAt">) => Patient;
+  upsertPatientFromApi: (patient: Patient) => void;
   updatePatient: (id: string, data: Partial<Patient>) => void;
 
   // appointments
@@ -420,6 +421,11 @@ export const useClinicStore = create<ClinicState>()(
         set((s) => { s.patients.push(newPatient); s.seq++; });
         return newPatient;
       },
+      upsertPatientFromApi: (patient) => set((s) => {
+        const index = s.patients.findIndex((existing) => existing.id === patient.id);
+        if (index >= 0) s.patients[index] = patient;
+        else s.patients.unshift(patient);
+      }),
       updatePatient: (id, data) => set((s) => {
         const p = s.patients.find((x) => x.id === id);
         if (p) Object.assign(p, data);
