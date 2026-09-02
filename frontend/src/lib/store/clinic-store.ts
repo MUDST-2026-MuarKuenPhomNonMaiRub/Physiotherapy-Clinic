@@ -22,7 +22,13 @@ import type {
 
 import { generateHN } from "@/lib/mock-data/patients";
 import { TODAY } from "@/lib/mock-data/course-data";
-import { getBranchesWithApi, getPatientsWithApi } from "@/lib/auth/clinic-api";
+import {
+  getAppointmentsWithApi,
+  getBranchesWithApi,
+  getCatalogWithApi,
+  getMasterDataWithApi,
+  getPatientsWithApi,
+} from "@/lib/auth/clinic-api";
 
 const VALID_ROLES: Role[] = ["ADMIN", "PHYSIOTHERAPIST"];
 
@@ -264,14 +270,35 @@ export const useClinicStore = create<ClinicState>()(
         void get().hydrateFromApi(accessToken);
       }),
       hydrateFromApi: async (accessToken) => {
-        const [branches, patients] = await Promise.all([
+        const results = await Promise.allSettled([
           getBranchesWithApi(accessToken),
           getPatientsWithApi(accessToken),
+          getCatalogWithApi(accessToken),
+          getAppointmentsWithApi(accessToken),
+          Promise.all([
+            getMasterDataWithApi(accessToken, "CUSTOMER_GROUP"),
+            getMasterDataWithApi(accessToken, "REFERRAL_CHANNEL"),
+            getMasterDataWithApi(accessToken, "INSURANCE_COMPANY"),
+          ]),
         ]);
         set((s) => {
-          s.branches = branches;
-          s.patients = patients;
-          if (!s.session.activeBranchId && branches[0]) s.session.activeBranchId = branches[0].id;
+          const branches = results[0].status === "fulfilled" ? results[0].value : undefined;
+          const patients = results[1].status === "fulfilled" ? results[1].value : undefined;
+          const catalog = results[2].status === "fulfilled" ? results[2].value : undefined;
+          const appointments = results[3].status === "fulfilled" ? results[3].value : undefined;
+          const masterData = results[4].status === "fulfilled" ? results[4].value.flat() : undefined;
+          if (branches) {
+            s.branches = branches;
+            if (!s.session.activeBranchId && branches[0]) s.session.activeBranchId = branches[0].id;
+          }
+          if (patients) s.patients = patients;
+          if (catalog) {
+            s.services = catalog.services;
+            s.courseTemplates = catalog.courseTemplates;
+            s.paymentMethods = catalog.paymentMethods;
+          }
+          if (appointments) s.appointments = appointments;
+          if (masterData) s.masterData = masterData;
         });
       },
       logout: () => set((s) => {

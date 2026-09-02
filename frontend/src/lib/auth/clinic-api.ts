@@ -1,4 +1,4 @@
-import type { Branch, Patient } from "@/types";
+import type { Appointment, Branch, CourseTemplate, MasterDataItem, Patient, PaymentMethod, Service, Staff } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -26,6 +26,10 @@ export interface DatabasePatient {
 
 function headers(accessToken: string) {
   return { Authorization: `Bearer ${accessToken}` };
+}
+
+function value(row: Record<string, unknown>, camel: string, snake: string) {
+  return row[camel] ?? row[snake];
 }
 
 function toBranch(row: DatabaseBranch): Branch {
@@ -102,4 +106,77 @@ export async function createPatientWithApi(accessToken: string, input: {
   });
   if (!response.ok) throw new Error("Unable to save patient to database");
   return toPatient(await response.json() as DatabasePatient);
+}
+
+async function getJson<T>(accessToken: string, path: string): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, { headers: headers(accessToken) });
+  if (!response.ok) throw new Error(`Unable to load ${path} from database`);
+  return response.json() as Promise<T>;
+}
+
+export async function getCatalogWithApi(accessToken: string) {
+  const [serviceRows, courseRows, paymentRows] = await Promise.all([
+    getJson<Record<string, unknown>[]>(accessToken, "/api/v1/services"),
+    getJson<Record<string, unknown>[]>(accessToken, "/api/v1/courses"),
+    getJson<Record<string, unknown>[]>(accessToken, "/api/v1/payment-methods"),
+  ]);
+
+  const services: Service[] = serviceRows.map((row) => ({
+    id: String(value(row, "id", "id")),
+    name: String(value(row, "nameTh", "name_th") ?? ""),
+    type: String(value(row, "serviceType", "service_type") ?? "SINGLE_VISIT") as Service["type"],
+    price: Number(value(row, "basePrice", "base_price") ?? 0),
+    duration: Number(value(row, "durationMinutes", "duration_minutes") ?? 0),
+    status: Boolean(value(row, "active", "active")) ? "ACTIVE" : "INACTIVE",
+  }));
+  const courseTemplates: CourseTemplate[] = courseRows.map((row) => ({
+    id: String(value(row, "id", "id")),
+    name: String(value(row, "nameTh", "name_th") ?? ""),
+    description: String(value(row, "nameEn", "name_en") ?? ""),
+    price: Number(value(row, "price", "price") ?? 0),
+    sessions: Number(value(row, "totalSessions", "total_sessions") ?? 0),
+    bonusSessions: 0,
+    expiryDays: Number(value(row, "validityDays", "validity_days") ?? 0),
+    status: Boolean(value(row, "active", "active")) ? "ACTIVE" : "INACTIVE",
+  }));
+  const paymentMethods: PaymentMethod[] = paymentRows.map((row) => ({
+    id: String(value(row, "id", "id")),
+    name: String(value(row, "name", "name") ?? ""),
+    icon: "credit-card",
+    enabled: Boolean(value(row, "active", "active")),
+  }));
+  return { services, courseTemplates, paymentMethods };
+}
+
+export async function getMasterDataWithApi(accessToken: string, category: MasterDataItem["category"]) {
+  const rows = await getJson<Record<string, unknown>[]>(accessToken, `/api/v1/master-data/${category}`);
+  return rows.map((row) => ({
+    id: String(value(row, "id", "id")),
+    category,
+    value: String(value(row, "nameTh", "name_th") ?? value(row, "code", "code") ?? ""),
+    status: Boolean(value(row, "active", "active")) ? "ACTIVE" : "INACTIVE",
+  } satisfies MasterDataItem));
+}
+
+export async function getAppointmentsWithApi(accessToken: string, branchId?: string) {
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
+  const rows = await getJson<Record<string, unknown>[]>(accessToken, `/api/v1/appointments${query}`);
+  return rows.map((row) => {
+    const startsAt = String(value(row, "startsAt", "starts_at") ?? "");
+    const endsAt = String(value(row, "endsAt", "ends_at") ?? "");
+    return {
+      id: String(value(row, "id", "id")),
+      patientId: String(value(row, "patientId", "patient_id")),
+      date: startsAt.slice(0, 10),
+      startTime: startsAt.slice(11, 16),
+      endTime: endsAt.slice(11, 16),
+      branchId: String(value(row, "branchId", "branch_id")),
+      physiotherapistId: String(value(row, "providerStaffId", "provider_staff_id")),
+      serviceId: String(value(row, "serviceId", "service_id")),
+      resourceId: String(value(row, "roomId", "room_id") ?? ""),
+      note: String(value(row, "patientNote", "patient_note") ?? ""),
+      status: String(value(row, "status", "status") ?? "CONFIRMED") as Appointment["status"],
+      createdAt: String(value(row, "createdAt", "created_at") ?? ""),
+    } satisfies Appointment;
+  });
 }
