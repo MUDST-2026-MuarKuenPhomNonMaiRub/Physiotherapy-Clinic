@@ -267,6 +267,7 @@ export const useClinicStore = create<ClinicState>()(
         // Never keep a previous browser snapshot visible while the database is loading.
         s.branches = [];
         s.patients = [];
+        s.appointments = [];
         void get().hydrateFromApi(accessToken);
       }),
       hydrateFromApi: async (accessToken) => {
@@ -825,6 +826,7 @@ export const useClinicStore = create<ClinicState>()(
           // Persisted data is only a session cache; the database is the source of truth.
           state.branches = [];
           state.patients = [];
+          state.appointments = [];
           void state.hydrateFromApi(state.session.accessToken);
         }
         if (state?.session.user && !VALID_ROLES.includes(state.session.user.role)) {
