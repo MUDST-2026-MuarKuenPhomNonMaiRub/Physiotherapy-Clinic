@@ -19,7 +19,9 @@ services:
     env_file:
       - ./.env
     environment:
-      DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-physiocare}
+      # Use DATABASE_URL_DOCKER for a shared cloud database. The default keeps
+      # the local PostgreSQL service working for offline development.
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-physiocare}}
       DATABASE_USERNAME: ${POSTGRES_USER:-physiocare}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-physiocare}
     ports:
