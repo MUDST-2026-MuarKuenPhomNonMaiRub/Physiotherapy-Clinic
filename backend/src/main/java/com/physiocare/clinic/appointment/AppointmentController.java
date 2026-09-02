@@ -44,7 +44,7 @@ public class AppointmentController {
     return db.queryForList(
         "SELECT"
             + " id,appointment_no,patient_id,branch_id,provider_staff_id,service_id,starts_at,ends_at,status,patient_note"
-            + " FROM appointments WHERE (? IS NULL OR branch_id=?) AND (? IS NULL OR"
+            + " FROM appointments WHERE (CAST(? AS BIGINT) IS NULL OR branch_id=?) AND (CAST(? AS DATE) IS NULL OR"
             + " starts_at::date=?) ORDER BY starts_at",
         branchId,
         branchId,

@@ -117,7 +117,7 @@ public class PatientController {
         "SELECT"
             + " id,hn,prefix,first_name_th,last_name_th,phone,gender_code,customer_group_code,registered_branch_id,active"
             + " FROM patients WHERE deleted_at IS NULL AND (?='' OR hn ILIKE ? OR first_name_th"
-            + " ILIKE ? OR last_name_th ILIKE ? OR phone ILIKE ?) AND (? IS NULL OR"
+            + " ILIKE ? OR last_name_th ILIKE ? OR phone ILIKE ?) AND (CAST(? AS BIGINT) IS NULL OR"
             + " registered_branch_id=?) ORDER BY id DESC",
         (rs, n) ->
             new PatientView(

@@ -31,7 +31,7 @@ public class ReportController {
         "uniquePatients",
         db.queryForObject(
             "SELECT count(DISTINCT patient_id) FROM visits WHERE completed_at::date BETWEEN ? AND ?"
-                + " AND (? IS NULL OR branch_id=?)",
+                + " AND (CAST(? AS BIGINT) IS NULL OR branch_id=?)",
             Long.class,
             from,
             to,
@@ -39,7 +39,7 @@ public class ReportController {
             branchId),
         "visits",
         db.queryForObject(
-            "SELECT count(*) FROM visits WHERE completed_at::date BETWEEN ? AND ? AND (? IS NULL OR"
+            "SELECT count(*) FROM visits WHERE completed_at::date BETWEEN ? AND ? AND (CAST(? AS BIGINT) IS NULL OR"
                 + " branch_id=?)",
             Long.class,
             from,
@@ -49,7 +49,7 @@ public class ReportController {
         "revenue",
         db.queryForObject(
             "SELECT COALESCE(sum(total_amount),0) FROM sales_transactions WHERE status IN"
-                + " ('CONFIRMED','PAID') AND sold_at::date BETWEEN ? AND ? AND (? IS NULL OR"
+                + " ('CONFIRMED','PAID') AND sold_at::date BETWEEN ? AND ? AND (CAST(? AS BIGINT) IS NULL OR"
                 + " branch_id=?)",
             java.math.BigDecimal.class,
             from,
@@ -60,7 +60,7 @@ public class ReportController {
         db.queryForObject(
             "SELECT COALESCE(sum(ca.gross_commission_allocation),0) FROM commission_allocations ca"
                 + " JOIN visits v ON v.id=ca.visit_id WHERE ca.visit_date BETWEEN ? AND ? AND"
-                + " (? IS NULL OR v.branch_id=?)",
+                + " (CAST(? AS BIGINT) IS NULL OR v.branch_id=?)",
             java.math.BigDecimal.class,
             from,
             to,

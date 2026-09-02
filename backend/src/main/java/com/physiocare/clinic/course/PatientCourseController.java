@@ -41,7 +41,7 @@ public class PatientCourseController {
         "SELECT pc.id,pc.patient_id,pc.package_id,pc.sale_date,pc.valid_until,pc.total_visits,"
             + " pc.visits_used,st.branch_id,pc.status FROM patient_courses pc"
             + " JOIN sales_transactions st ON st.id=pc.sales_transaction_id"
-            + " WHERE (? IS NULL OR st.branch_id=?) ORDER BY pc.sale_date DESC,pc.id DESC",
+            + " WHERE (CAST(? AS BIGINT) IS NULL OR st.branch_id=?) ORDER BY pc.sale_date DESC,pc.id DESC",
         (rs, row) ->
             new PatientCourseView(
                 rs.getLong("id"),
