@@ -5,7 +5,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-physiocare}
       POSTGRES_USER: ${POSTGRES_USER:-physiocare}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-physiocare}
-    ports: ["5432:5432"]
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
     volumes: ["physiocare-postgres-data:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-physiocare} -d ${POSTGRES_DB:-physiocare}"]
