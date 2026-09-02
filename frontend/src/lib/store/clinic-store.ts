@@ -27,6 +27,7 @@ import {
   getBranchesWithApi,
   getCatalogWithApi,
   getMasterDataWithApi,
+  getPatientCoursesWithApi,
   getPatientsWithApi,
 } from "@/lib/auth/clinic-api";
 
@@ -280,6 +281,7 @@ export const useClinicStore = create<ClinicState>()(
           getPatientsWithApi(accessToken),
           getCatalogWithApi(accessToken),
           getAppointmentsWithApi(accessToken),
+          getPatientCoursesWithApi(accessToken),
           Promise.all([
             getMasterDataWithApi(accessToken, "CUSTOMER_GROUP"),
             getMasterDataWithApi(accessToken, "REFERRAL_CHANNEL"),
@@ -291,7 +293,8 @@ export const useClinicStore = create<ClinicState>()(
           const patients = results[1].status === "fulfilled" ? results[1].value : undefined;
           const catalog = results[2].status === "fulfilled" ? results[2].value : undefined;
           const appointments = results[3].status === "fulfilled" ? results[3].value : undefined;
-          const masterData = results[4].status === "fulfilled" ? results[4].value.flat() : undefined;
+          const patientCourses = results[4].status === "fulfilled" ? results[4].value : undefined;
+          const masterData = results[5].status === "fulfilled" ? results[5].value.flat() : undefined;
           if (branches) {
             s.branches = branches;
             if (!s.session.activeBranchId && branches[0]) s.session.activeBranchId = branches[0].id;
@@ -303,6 +306,7 @@ export const useClinicStore = create<ClinicState>()(
             s.paymentMethods = catalog.paymentMethods;
           }
           if (appointments) s.appointments = appointments;
+          if (patientCourses) s.patientCourses = patientCourses;
           if (masterData) s.masterData = masterData;
         });
       },

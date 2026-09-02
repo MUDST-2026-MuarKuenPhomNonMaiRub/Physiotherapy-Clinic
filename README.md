@@ -292,3 +292,17 @@ cd backend
 cd ../frontend
 npm run lint
 ```
+
+## ข้อมูลทดสอบสำหรับเล่น Flow
+
+ข้อมูลทดสอบจะไม่ถูก seed อัตโนมัติและไม่อยู่ใน Frontend mock หากต้องการเล่น flow ให้รัน
+บน Database ที่ต้องการทดสอบเท่านั้น เช่น Local Docker หรือ Staging:
+
+```bash
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  < database/seed/test-data.sql
+```
+
+ชุดนี้สร้างข้อมูลจริงใน PostgreSQL สำหรับผู้ป่วย 2 สาขา, service, course, staff, payment,
+course balance, appointment ที่รอดำเนินการ และ appointment ที่เสร็จแล้ว การรันซ้ำปลอดภัย
+สำหรับรายการที่มีรหัสทดสอบเดิม โดยจะไม่ถูกนำไปใช้กับ Production อัตโนมัติ

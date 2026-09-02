@@ -1,4 +1,4 @@
-import type { Appointment, Branch, CourseTemplate, MasterDataItem, Patient, PaymentMethod, Service, Staff } from "@/types";
+import type { Appointment, Branch, CourseTemplate, MasterDataItem, Patient, PatientCourse, PaymentMethod, Service, Staff } from "@/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -179,4 +179,23 @@ export async function getAppointmentsWithApi(accessToken: string, branchId?: str
       createdAt: String(value(row, "createdAt", "created_at") ?? ""),
     } satisfies Appointment;
   });
+}
+
+export async function getPatientCoursesWithApi(accessToken: string, branchId?: string) {
+  const query = branchId ? `?branchId=${encodeURIComponent(branchId)}` : "";
+  const rows = await getJson<Record<string, unknown>[]>(accessToken, `/api/v1/patient-courses${query}`);
+  return rows.map((row) => ({
+    id: String(value(row, "id", "id")),
+    patientId: String(value(row, "patientId", "patient_id")),
+    courseId: String(value(row, "packageId", "package_id")),
+    purchaseDate: String(value(row, "purchaseDate", "purchase_date") ?? ""),
+    expiryDate: String(value(row, "expiryDate", "expiry_date") ?? ""),
+    purchased: Number(value(row, "purchased", "purchased") ?? 0),
+    bonus: Number(value(row, "bonus", "bonus") ?? 0),
+    used: Number(value(row, "used", "used") ?? 0),
+    transferIn: 0,
+    transferOut: 0,
+    branchId: String(value(row, "branchId", "branch_id")),
+    status: String(value(row, "status", "status") ?? "ACTIVE") as PatientCourse["status"],
+  } satisfies PatientCourse));
 }
