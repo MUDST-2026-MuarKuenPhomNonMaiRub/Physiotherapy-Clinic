@@ -12,12 +12,8 @@ The first run creates the PostgreSQL database and a local bootstrap admin accoun
 The setup script generates a random admin password and prints it once. Do not
 commit `.env`.
 
-For a shared team database, put the same cloud PostgreSQL JDBC connection URL
-in `DATABASE_URL_DOCKER`, username in `DATABASE_USERNAME_DOCKER`, and password
-in `DATABASE_PASSWORD_DOCKER` in every person's private `.env` file. Keep the
-username, password and URL private. The Flyway migrations run against that
-shared database when the backend starts, so all team members use the same users
-and staff accounts.
+For a shared team database, use the **Shared Database setup** below. Do not use
+`setup-local.sh` for that setup because it is intended to create a local `.env`.
 
 Frontend: http://localhost:3000 · API: http://localhost:8080
 
@@ -139,17 +135,63 @@ docker compose up -d
 
 ## Database กลางของทีม
 
-ค่าเริ่มต้นเป็น PostgreSQL local ใน Docker ดังนั้นแต่ละเครื่องจะมีข้อมูลของตัวเอง
+ค่าเริ่มต้นของโปรเจกต์เป็น PostgreSQL local ใน Docker ดังนั้นแต่ละเครื่องจะมีข้อมูลของตัวเอง
 
-ถ้าทีมต้องการใช้ database กลาง ให้ใส่ค่าต่อไปนี้ใน `.env` ส่วนตัวของแต่ละคน และห้าม commit ไฟล์ `.env`:
+ถ้าต้องการให้ทุกคนเห็นผู้ป่วย สาขา นัดหมาย คอร์ส และรายการการเงินชุดเดียวกัน ให้สร้าง
+PostgreSQL กลางไว้บน provider เดียวกัน เช่น Supabase, Neon, Railway หรือ server ของทีม
+แล้วให้ทุกคนใช้ค่าการเชื่อมต่อชุดเดียวกัน โดยห้าม commit credential ลง Git
+
+### ตั้งค่าฐานข้อมูลกลางครั้งแรก
+
+1. สร้าง PostgreSQL database กลางและจดค่า host, port, database name, username และ password
+2. ตรวจว่า provider อนุญาต connection จากเครื่องของสมาชิกทีม และตั้ง SSL ตามที่ provider กำหนด
+3. ที่เครื่องเจ้าของระบบ แก้ไฟล์ `.env` ส่วนตัวดังนี้:
 
 ```env
-DATABASE_URL_DOCKER=jdbc:postgresql://<database-host>:5432/<database-name>
-DATABASE_USERNAME_DOCKER=<database-username>
-DATABASE_PASSWORD_DOCKER=<database-password>
+DATABASE_URL_DOCKER=jdbc:postgresql://<host>:<port>/<database>?sslmode=require
+DATABASE_USERNAME_DOCKER=<username>
+DATABASE_PASSWORD_DOCKER=<password>
 ```
 
-ทุกคนต้องใช้ database เดียวกันและมีสิทธิ์เชื่อมต่อ PostgreSQL ได้
+ถ้า provider ไม่ต้องการ SSL ให้เอา `?sslmode=require` ออกตามเอกสารของ provider
+
+4. รัน Backend เพื่อให้ Flyway สร้างตารางและ migration ในฐานกลาง:
+
+```bash
+docker compose up --build -d backend
+docker compose logs -f backend
+```
+
+ใน log ต้องเห็น JDBC URL ของฐานกลางและข้อความ migration สำเร็จ จากนั้นเริ่ม frontend:
+
+```bash
+docker compose up --build -d frontend
+```
+
+5. ให้สมาชิกทุกคนสร้าง `.env` ส่วนตัวจาก `.env.example` แล้วใส่ `DATABASE_URL_DOCKER`,
+`DATABASE_USERNAME_DOCKER` และ `DATABASE_PASSWORD_DOCKER` ชุดเดียวกัน จากนั้นรัน:
+
+```bash
+git checkout dev3
+git pull origin dev3
+docker compose up --build -d
+```
+
+ทุกคนจะใช้ users, branches และข้อมูลธุรกรรมจาก PostgreSQL กลางเดียวกัน การเพิ่มหรือแก้ไข
+ข้อมูลจึงแสดงกับทุกคนหลัง refresh
+
+### ตรวจว่าใช้ฐานเดียวกันจริง
+
+```bash
+docker compose logs backend | grep -E "Database:|Successfully applied"
+curl http://localhost:8080/actuator/health
+```
+
+ห้ามใช้ `docker compose down -v` กับเครื่องที่ชี้ฐานกลาง และห้ามรัน `setup-local.sh` บนเครื่อง
+ที่ตั้งใจใช้ฐานกลาง เพราะสคริปต์นี้มีไว้สร้างค่า local เท่านั้น
+
+ถ้าต้องการกลับไปใช้ฐาน local ให้ล้างค่าตัวแปร `DATABASE_URL_DOCKER`,
+`DATABASE_USERNAME_DOCKER` และ `DATABASE_PASSWORD_DOCKER` ใน `.env` แล้วใช้คำสั่ง local ตามด้านบน
 
 ## รัน frontend/backend แยกจาก Docker
 
