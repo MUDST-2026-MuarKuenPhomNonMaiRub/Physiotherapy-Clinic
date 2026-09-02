@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useSession } from "@/lib/auth/use-session";
@@ -24,15 +24,23 @@ function FullScreenLoader() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const hasHydrated = useClinicStore((s) => s.hasHydrated);
-  const { user, isAuthenticated } = useSession();
+  const hydrateFromApi = useClinicStore((s) => s.hydrateFromApi);
+  const { user, accessToken, isAuthenticated } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+  const apiHydrationStarted = useRef(false);
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) {
       router.replace("/login");
     }
   }, [hasHydrated, isAuthenticated, router]);
+
+  useEffect(() => {
+    if (!hasHydrated || !isAuthenticated || !accessToken || apiHydrationStarted.current) return;
+    apiHydrationStarted.current = true;
+    void hydrateFromApi(accessToken);
+  }, [hasHydrated, isAuthenticated, accessToken, hydrateFromApi]);
 
   if (!hasHydrated) return <FullScreenLoader />;
   if (!user || !isAuthenticated) return <FullScreenLoader />;
