@@ -5,13 +5,12 @@ Starter monorepo based on the Clinic Figma design.
 ## Run with Docker
 
 ```bash
-cp .env.example .env
-docker compose up --build
+bash setup-local.sh
 ```
 
-The first run creates the PostgreSQL database and the bootstrap admin account
-from `.env`. Use `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` to log in.
-Do not commit `.env`.
+The first run creates the PostgreSQL database and a local bootstrap admin account.
+The setup script generates a random admin password and prints it once. Do not
+commit `.env`.
 
 For a shared team database, put the same cloud PostgreSQL JDBC connection URL
 in `DATABASE_URL_DOCKER`, username in `DATABASE_USERNAME_DOCKER`, and password
