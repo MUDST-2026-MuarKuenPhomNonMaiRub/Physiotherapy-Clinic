@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-physiocare}
+      POSTGRES_USER: ${POSTGRES_USER:-physiocare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-physiocare}
+    ports: ["5432:5432"]
+    volumes: ["physiocare-postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-physiocare} -d ${POSTGRES_DB:-physiocare}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./.env
+    environment:
+      # Use DATABASE_URL_DOCKER for a shared cloud database. The default keeps
+      # the local PostgreSQL service working for offline development.
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-jdbc:postgresql://postgres:5432/${POSTGRES_DB:-physiocare}}
+      DATABASE_USERNAME: ${DATABASE_USERNAME_DOCKER:-${POSTGRES_USER:-physiocare}}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD_DOCKER:-${POSTGRES_PASSWORD:-physiocare}}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  physiocare-postgres-data:
