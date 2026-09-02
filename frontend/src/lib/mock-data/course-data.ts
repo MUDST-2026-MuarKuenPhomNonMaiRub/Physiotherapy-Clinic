@@ -55,7 +55,7 @@ export const courseAssignments: CourseAssignment[] = [
   },
   {
     patientCourseId: "pc-006", patientId: "p-006", courseId: "crs-wellness8",
-    purchaseDate: "2026-07-01", branchId: "br-cnx", usedSessions: 2,
+    purchaseDate: "2026-07-01", branchId: "br-sal", usedSessions: 2,
     performedByStaffId: "stf-asst1",
   },
   {
@@ -70,7 +70,7 @@ export const courseAssignments: CourseAssignment[] = [
   },
   {
     patientCourseId: "pc-009", patientId: "p-009", courseId: "crs-back5",
-    purchaseDate: "2026-07-20", branchId: "br-cnx", usedSessions: 0,
+    purchaseDate: "2026-07-20", branchId: "br-sal", usedSessions: 0,
     performedByStaffId: "stf-asst1",
   },
   {

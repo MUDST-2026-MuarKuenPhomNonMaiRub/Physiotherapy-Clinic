@@ -24,12 +24,12 @@ export const appointments: Appointment[] = [
   },
   {
     id: "apt-105", patientId: "p-006", date: "2026-08-12", startTime: "14:30", endTime: "15:30",
-    branchId: "br-cnx", physiotherapistId: "stf-phy4", serviceId: "svc-postop", resourceId: "res-cnx-1",
+    branchId: "br-sal", physiotherapistId: "stf-phy4", serviceId: "svc-postop", resourceId: "res-sal-4",
     status: "IN_SERVICE", createdAt: "2026-08-07T13:00:00",
   },
   {
     id: "apt-106", patientId: "p-009", date: "2026-08-12", startTime: "15:30", endTime: "16:00",
-    branchId: "br-cnx", physiotherapistId: "stf-phy4", serviceId: "svc-dryneedle", resourceId: "res-cnx-1",
+    branchId: "br-sal", physiotherapistId: "stf-phy4", serviceId: "svc-dryneedle", resourceId: "res-sal-4",
     status: "CONFIRMED", createdAt: "2026-08-08T10:00:00",
   },
   {
@@ -71,7 +71,7 @@ export const appointments: Appointment[] = [
   },
   {
     id: "apt-207", patientId: "p-014", date: "2026-08-21", startTime: "09:00", endTime: "09:30",
-    branchId: "br-cnx", physiotherapistId: "stf-phy4", serviceId: "svc-dryneedle", resourceId: "res-cnx-1",
+    branchId: "br-sal", physiotherapistId: "stf-phy4", serviceId: "svc-dryneedle", resourceId: "res-sal-4",
     status: "CONFIRMED", createdAt: "2026-08-11T09:00:00",
   },
   {
@@ -108,7 +108,7 @@ export const appointments: Appointment[] = [
   },
   {
     id: "apt-306", patientId: "p-015", date: "2026-07-30", startTime: "11:00", endTime: "11:30",
-    branchId: "br-cnx", physiotherapistId: "stf-phy4", serviceId: "svc-dryneedle", resourceId: "res-cnx-1",
+    branchId: "br-sal", physiotherapistId: "stf-phy4", serviceId: "svc-dryneedle", resourceId: "res-sal-4",
     status: "RESCHEDULED", createdAt: "2026-07-20T09:00:00", note: "ย้ายไปสัปดาห์ถัดไป",
   },
   {
@@ -123,12 +123,12 @@ export const appointments: Appointment[] = [
   },
   {
     id: "apt-309", patientId: "p-006", date: "2026-07-15", startTime: "14:00", endTime: "15:00",
-    branchId: "br-cnx", physiotherapistId: "stf-phy4", serviceId: "svc-postop", resourceId: "res-cnx-1",
+    branchId: "br-sal", physiotherapistId: "stf-phy4", serviceId: "svc-postop", resourceId: "res-sal-4",
     status: "COMPLETED", createdAt: "2026-07-05T09:00:00", checkedOut: true,
   },
   {
     id: "apt-310", patientId: "p-009", date: "2026-08-02", startTime: "09:30", endTime: "10:00",
-    branchId: "br-cnx", physiotherapistId: "stf-phy4", serviceId: "svc-assess", resourceId: "res-cnx-1",
+    branchId: "br-sal", physiotherapistId: "stf-phy4", serviceId: "svc-assess", resourceId: "res-sal-4",
     status: "COMPLETED", createdAt: "2026-07-28T09:00:00", checkedOut: true,
   },
 ];

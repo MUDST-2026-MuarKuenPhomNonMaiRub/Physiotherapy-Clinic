@@ -8,9 +8,9 @@ export const resources: ResourceRoom[] = [
   { id: "res-sal-1", name: "Treatment Room 1", type: "Treatment Room", branchId: "br-sal", status: "ACTIVE" },
   { id: "res-sal-2", name: "Treatment Room 2", type: "Treatment Room", branchId: "br-sal", status: "ACTIVE" },
   { id: "res-sal-3", name: "Exercise Area", type: "Open Area", branchId: "br-sal", status: "ACTIVE" },
-  { id: "res-cnx-1", name: "Treatment Room 1", type: "Treatment Room", branchId: "br-cnx", status: "ACTIVE" },
-  { id: "res-cnx-2", name: "Treatment Room 2", type: "Treatment Room", branchId: "br-cnx", status: "INACTIVE" },
-  { id: "res-cnx-3", name: "Exercise Area", type: "Open Area", branchId: "br-cnx", status: "ACTIVE" },
+  { id: "res-sal-4", name: "Treatment Room 4", type: "Treatment Room", branchId: "br-sal", status: "ACTIVE" },
+  { id: "res-sal-5", name: "Treatment Room 5", type: "Treatment Room", branchId: "br-sal", status: "INACTIVE" },
+  { id: "res-sal-6", name: "Exercise Area", type: "Open Area", branchId: "br-sal", status: "ACTIVE" },
 ];
 
 export function getResourceById(id: string): ResourceRoom | undefined {

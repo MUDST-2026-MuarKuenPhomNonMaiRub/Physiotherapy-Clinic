@@ -17,7 +17,7 @@ export function generateHN(
 const branchSeqMap: Record<string, number> = {
   "br-bkk": 1,
   "br-sal": 2,
-  "br-cnx": 3,
+  "br-cnx": 2,
 };
 
 const thFirst = [
@@ -102,7 +102,7 @@ const named: PatientSeed[] = [
 
 const generated: PatientSeed[] = Array.from({ length: 27 }).map((_, i) => {
   const idx = i + 3; // continue name bank offset
-  const branchId = ["br-bkk", "br-sal", "br-cnx"][i % 3];
+  const branchId = ["br-bkk", "br-sal"][i % 2];
   const regMonth = (i % 7) + 1;
   const seq = Math.floor(i / 3) + 3;
   return {
