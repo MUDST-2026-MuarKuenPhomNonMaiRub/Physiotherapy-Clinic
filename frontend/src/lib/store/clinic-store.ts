@@ -20,18 +20,9 @@ import type {
   Transaction,
 } from "@/types";
 
-import { branches as seedBranches } from "@/lib/mock-data/branches";
-import { staff as seedStaff } from "@/lib/mock-data/staff";
-import { services as seedServices, courseTemplates as seedCourseTemplates } from "@/lib/mock-data/services";
-import { paymentMethods as seedPaymentMethods } from "@/lib/mock-data/payment-methods";
-import { resources as seedResources } from "@/lib/mock-data/resources";
-import { masterData as seedMasterData } from "@/lib/mock-data/master-data";
-import { commissionRules as seedCommissionRules } from "@/lib/mock-data/commission-rules";
-import { patients as seedPatients, generateHN } from "@/lib/mock-data/patients";
-import { patientCourses as seedPatientCourses, courseLedger as seedCourseLedger, TODAY } from "@/lib/mock-data/course-data";
-import { appointments as seedAppointments } from "@/lib/mock-data/appointments";
-import { transactions as seedTransactions } from "@/lib/mock-data/transactions";
-import { users as seedUsers, getUserByUsername } from "@/lib/mock-data/users";
+import { generateHN } from "@/lib/mock-data/patients";
+import { TODAY } from "@/lib/mock-data/course-data";
+import { getBranchesWithApi, getPatientsWithApi } from "@/lib/auth/clinic-api";
 
 const VALID_ROLES: Role[] = ["ADMIN", "PHYSIOTHERAPIST"];
 
@@ -126,6 +117,7 @@ interface ClinicState {
   // auth
   login: (username: string, password: string) => { ok: boolean; error?: string };
   setAuthenticatedSession: (user: AppUser, accessToken: string) => void;
+  hydrateFromApi: (accessToken: string) => Promise<void>;
   logout: () => void;
   setActiveBranch: (branchId: string | null) => void;
 
@@ -238,20 +230,20 @@ function findCommissionRule(
 const initialState = {
   session: { user: null, activeBranchId: null, accessToken: null } as Session,
   seq: 100000,
-  branches: seedBranches,
-  staff: seedStaff,
-  users: seedUsers,
-  services: seedServices,
-  courseTemplates: seedCourseTemplates,
-  paymentMethods: seedPaymentMethods,
-  resources: seedResources,
-  masterData: seedMasterData,
-  commissionRules: seedCommissionRules,
-  patients: seedPatients,
-  patientCourses: seedPatientCourses,
-  courseLedger: seedCourseLedger,
-  appointments: seedAppointments,
-  transactions: seedTransactions,
+  branches: [] as Branch[],
+  staff: [] as Staff[],
+  users: [] as AppUser[],
+  services: [] as Service[],
+  courseTemplates: [] as CourseTemplate[],
+  paymentMethods: [] as PaymentMethod[],
+  resources: [] as ResourceRoom[],
+  masterData: [] as MasterDataItem[],
+  commissionRules: [] as CommissionRule[],
+  patients: [] as Patient[],
+  patientCourses: [] as PatientCourse[],
+  courseLedger: [] as CourseLedgerEntry[],
+  appointments: [] as Appointment[],
+  transactions: [] as Transaction[],
 };
 
 export const useClinicStore = create<ClinicState>()(
@@ -261,23 +253,27 @@ export const useClinicStore = create<ClinicState>()(
       hasHydrated: false,
       setHasHydrated: (v) => set((s) => { s.hasHydrated = v; }),
 
-      login: (username, password) => {
-        const user = getUserByUsername(username);
-        if (!user || user.password !== password) return { ok: false, error: "Invalid username or password" };
-        if (user.status !== "ACTIVE") return { ok: false, error: "This account has been deactivated" };
-        set((s) => {
-          s.session.user = { ...user, lastLogin: nowIso() };
-          s.session.activeBranchId = user.branchIds[0] ?? null;
-          const idx = s.users.findIndex((u) => u.id === user.id);
-          if (idx >= 0) s.users[idx].lastLogin = nowIso();
-        });
-        return { ok: true };
-      },
+      login: () => ({ ok: false, error: "Use the database login form" }),
       setAuthenticatedSession: (user, accessToken) => set((s) => {
         s.session.user = user;
         s.session.accessToken = accessToken;
         s.session.activeBranchId = user.branchIds[0] ?? null;
+        // Never keep a previous browser snapshot visible while the database is loading.
+        s.branches = [];
+        s.patients = [];
+        void get().hydrateFromApi(accessToken);
       }),
+      hydrateFromApi: async (accessToken) => {
+        const [branches, patients] = await Promise.all([
+          getBranchesWithApi(accessToken),
+          getPatientsWithApi(accessToken),
+        ]);
+        set((s) => {
+          s.branches = branches;
+          s.patients = patients;
+          if (!s.session.activeBranchId && branches[0]) s.session.activeBranchId = branches[0].id;
+        });
+      },
       logout: () => set((s) => {
         s.session.user = null;
         s.session.activeBranchId = null;
@@ -749,7 +745,7 @@ export const useClinicStore = create<ClinicState>()(
         if (version < 5) {
           const mapBranch = (id: string) => (id === "br-cnx" ? "br-sal" : id);
           const mapBranches = (ids: string[]) => [...new Set(ids.map(mapBranch))];
-          state.branches = seedBranches;
+          state.branches = [];
           state.session.activeBranchId = state.session.activeBranchId
             ? mapBranch(state.session.activeBranchId)
             : null;
@@ -798,6 +794,12 @@ export const useClinicStore = create<ClinicState>()(
         return state;
       },
       onRehydrateStorage: () => (state) => {
+        if (state?.session.accessToken) {
+          // Persisted data is only a session cache; the database is the source of truth.
+          state.branches = [];
+          state.patients = [];
+          void state.hydrateFromApi(state.session.accessToken);
+        }
         if (state?.session.user && !VALID_ROLES.includes(state.session.user.role)) {
           state.session = { user: null, activeBranchId: null, accessToken: null };
         }

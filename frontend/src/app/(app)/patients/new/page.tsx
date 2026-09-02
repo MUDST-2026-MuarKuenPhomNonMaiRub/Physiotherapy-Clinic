@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarPlus, CheckCircle2, Fingerprint, Tags, User, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
+import { createPatientWithApi } from "@/lib/auth/clinic-api";
 import { useSession } from "@/lib/auth/use-session";
 import { getMasterDataByCategory } from "@/lib/mock-data/master-data";
 import { generateHN } from "@/lib/mock-data/patients";
@@ -63,10 +64,10 @@ interface FormState {
 
 export default function NewPatientPage() {
   const router = useRouter();
-  const { user, activeBranchId } = useSession();
+  const { user, activeBranchId, accessToken } = useSession();
   const branches = useClinicStore((s) => s.branches);
   const patients = useClinicStore((s) => s.patients);
-  const addPatient = useClinicStore((s) => s.addPatient);
+  const hydrateFromApi = useClinicStore((s) => s.hydrateFromApi);
   const customerGroups = getMasterDataByCategory("CUSTOMER_GROUP").filter((m) => m.status === "ACTIVE");
   const referralChannels = getMasterDataByCategory("REFERRAL_CHANNEL").filter((m) => m.status === "ACTIVE");
   const insuranceCompanies = getMasterDataByCategory("INSURANCE_COMPANY").filter((m) => m.status === "ACTIVE");
@@ -133,31 +134,37 @@ export default function NewPatientPage() {
     return Object.keys(e).length === 0;
   }
 
-  function handleSubmit(ev: React.FormEvent) {
+  async function handleSubmit(ev: React.FormEvent) {
     ev.preventDefault();
     if (!validate()) return;
-    const patient = addPatient({
-      customerType: form.customerType,
-      titleTh: form.titleTh,
-      firstNameTh: form.firstNameTh || form.firstNameEn,
-      lastNameTh: form.lastNameTh || form.lastNameEn,
-      firstNameEn: form.firstNameEn || form.firstNameTh,
-      lastNameEn: form.lastNameEn || form.lastNameTh,
-      nickname: form.nickname,
-      gender: form.gender,
-      dob: form.dob,
-      bloodGroup: form.bloodGroup,
-      nationality: form.nationality,
-      nationalId: form.customerType === "THAI" ? form.nationalId : undefined,
-      passport: form.customerType === "FOREIGNER" ? form.passport : undefined,
-      phone: form.phone,
-      address: form.address,
-      customerGroup: form.customerGroup,
-      referralChannel: form.referralChannel,
-      insuranceCompany: form.insuranceCompany,
-      registrationBranchId: form.registrationBranchId,
-    });
-    setCreated(patient);
+    if (!accessToken) {
+      setErrors({ form: "Please sign in again before registering a patient" });
+      return;
+    }
+    try {
+      const patient = await createPatientWithApi(accessToken, {
+        customerType: form.customerType,
+        prefix: form.titleTh,
+        firstNameTh: form.firstNameTh || form.firstNameEn,
+        lastNameTh: form.lastNameTh || form.lastNameEn,
+        firstNameEn: form.firstNameEn || form.firstNameTh,
+        lastNameEn: form.lastNameEn || form.lastNameTh,
+        nickname: form.nickname,
+        genderCode: form.gender,
+        nationalIdCiphertext: form.customerType === "THAI" ? form.nationalId : undefined,
+        birthDate: form.dob,
+        phone: form.phone,
+        addressJson: form.address ? JSON.stringify({ text: form.address }) : undefined,
+        customerGroupCode: form.customerGroup,
+        referralChannelCode: form.referralChannel,
+        insuranceCompanyCode: form.insuranceCompany,
+        registeredBranchId: Number(form.registrationBranchId),
+      });
+      await hydrateFromApi(accessToken);
+      setCreated(patient);
+    } catch (error) {
+      setErrors({ form: error instanceof Error ? error.message : "Unable to save patient" });
+    }
   }
 
   if (created) {
