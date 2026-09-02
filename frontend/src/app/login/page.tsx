@@ -50,9 +50,12 @@ export default function LoginPage() {
     }
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    submit(username, password);
+    const formData = new FormData(e.currentTarget);
+    const emailValue = String(formData.get("email") ?? username).trim();
+    const passwordValue = String(formData.get("password") ?? password);
+    submit(emailValue, passwordValue);
   }
 
   return (
@@ -120,6 +123,7 @@ export default function LoginPage() {
               <Label htmlFor="username">Email</Label>
               <Input
                 id="username"
+                name="email"
                 autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
@@ -133,6 +137,7 @@ export default function LoginPage() {
                 <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="password"
+                  name="password"
                   type="password"
                   autoComplete="current-password"
                   value={password}
