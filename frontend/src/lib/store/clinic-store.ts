@@ -739,13 +739,59 @@ export const useClinicStore = create<ClinicState>()(
     })),
     {
       name: "clinic-erp-store",
-      version: 4,
+      version: 5,
       migrate: (persisted, version) => {
         // v3 collapsed four roles into two and rebuilt the staff/user seed data;
         // v4 renamed the MANAGER role to ADMIN. Anything older is discarded
         // rather than patched — an empty object merges over the fresh initial state.
-        if (version < 4) return {} as ClinicState;
         const state = persisted as ClinicState;
+        if (version < 4) return {} as ClinicState;
+        if (version < 5) {
+          const mapBranch = (id: string) => (id === "br-cnx" ? "br-sal" : id);
+          const mapBranches = (ids: string[]) => [...new Set(ids.map(mapBranch))];
+          state.branches = seedBranches;
+          state.session.activeBranchId = state.session.activeBranchId
+            ? mapBranch(state.session.activeBranchId)
+            : null;
+          state.session.user = state.session.user
+            ? {
+                ...state.session.user,
+                branchIds: mapBranches(state.session.user.branchIds),
+              }
+            : null;
+          state.users = state.users.map((user) => ({
+            ...user,
+            branchIds: mapBranches(user.branchIds),
+          }));
+          state.staff = state.staff.map((person) => ({
+            ...person,
+            branchIds: mapBranches(person.branchIds),
+          }));
+          state.patients = state.patients.map((patient) => ({
+            ...patient,
+            registrationBranchId: mapBranch(patient.registrationBranchId),
+          }));
+          state.patientCourses = state.patientCourses.map((course) => ({
+            ...course,
+            branchId: mapBranch(course.branchId),
+          }));
+          state.courseLedger = state.courseLedger.map((entry) => ({
+            ...entry,
+            branchId: mapBranch(entry.branchId),
+          }));
+          state.appointments = state.appointments.map((appointment) => ({
+            ...appointment,
+            branchId: mapBranch(appointment.branchId),
+          }));
+          state.transactions = state.transactions.map((transaction) => ({
+            ...transaction,
+            branchId: mapBranch(transaction.branchId),
+          }));
+          state.resources = state.resources.map((resource) => ({
+            ...resource,
+            branchId: mapBranch(resource.branchId),
+          }));
+        }
         if (state?.session?.user && !VALID_ROLES.includes(state.session.user.role)) {
           state.session = { user: null, activeBranchId: null, accessToken: null };
         }
