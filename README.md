@@ -193,6 +193,49 @@ curl http://localhost:8080/actuator/health
 ถ้าต้องการกลับไปใช้ฐาน local ให้ล้างค่าตัวแปร `DATABASE_URL_DOCKER`,
 `DATABASE_USERNAME_DOCKER` และ `DATABASE_PASSWORD_DOCKER` ใน `.env` แล้วใช้คำสั่ง local ตามด้านบน
 
+## Deploy บน Server กลางให้เข้าจากที่ไหนก็ได้
+
+สำหรับใช้งานจริง ให้เลือก VPS/Cloud ที่มี Public IP แล้วชี้ Domain ไปที่ IP นั้น
+Docker จะรัน Frontend, Backend, PostgreSQL และ Caddy ใน Server เดียวกัน โดย PostgreSQL
+จะไม่เปิด port ออก Internet และ Caddy จะออก HTTPS ให้อัตโนมัติเมื่อ DNS ชี้ถูกต้อง
+
+บน Server:
+
+```bash
+git clone https://github.com/MUDST-2026-MuarKuenPhomNonMaiRub/Physiotherapy-Clinic.git
+cd Physiotherapy-Clinic
+git checkout dev3
+cp .env.production.example .env
+```
+
+แก้ `PUBLIC_DOMAIN`, รหัสผ่าน PostgreSQL, `APP_JWT_SECRET` และรหัสผ่าน Admin ใน `.env`
+ให้เป็นค่าจริง จากนั้นตรวจว่า DNS A record ของ Domain ชี้มาที่ Public IP ของ Server แล้วรัน:
+
+```bash
+docker compose -f docker-compose.production.yml up --build -d
+docker compose -f docker-compose.production.yml logs -f backend
+```
+
+ทุกคนเข้าใช้งานผ่าน `https://<PUBLIC_DOMAIN>` ไม่ต้องรัน Docker ในเครื่องตัวเอง
+การเพิ่มผู้ป่วย นัดหมาย หรือข้อมูลอื่นจะเขียนลง PostgreSQL container กลางชุดเดียวกัน
+
+อัปเดตเวอร์ชันบน Server:
+
+```bash
+git pull origin dev3
+docker compose -f docker-compose.production.yml up --build -d
+```
+
+สำรองข้อมูลก่อน deploy หรือ migration สำคัญ:
+
+```bash
+docker compose -f docker-compose.production.yml exec -T postgres \
+  pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" > backup.sql
+```
+
+ห้ามใช้ `docker compose down -v` บน Production เพราะจะลบข้อมูล PostgreSQL และห้ามเปิด
+port `5432` สู่ Internet โดยตรง
+
 ## รัน frontend/backend แยกจาก Docker
 
 เปิด PostgreSQL ก่อน:
