@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # First run on a new machine: writes a private .env with freshly generated
-# secrets, then brings the whole stack up.
+# secrets. Starting the stack is left to docker compose, so that this script
+# finishes quickly and the terminal stays free.
 #
 # Safe to run again. An existing .env is kept as it is, except that a secret
 # still holding the template placeholder is replaced — copying .env.example by
@@ -81,4 +82,5 @@ else
 fi
 
 echo
-docker compose up --build
+echo "ขั้นต่อไป / Next:"
+echo "  docker compose up -d --build"

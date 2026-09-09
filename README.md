@@ -4,13 +4,30 @@ Starter monorepo based on the Clinic Figma design.
 
 ## Run with Docker
 
+Three commands from a clean clone:
+
+```bash
+git clone -b dev3 https://github.com/MUDST-2026-MuarKuenPhomNonMaiRub/Physiotherapy-Clinic.git
+cd Physiotherapy-Clinic
+```
+
 ```bash
 bash setup-local.sh
 ```
 
-The first run creates the PostgreSQL database and a local bootstrap admin account.
-The setup script generates a random admin password and prints it once. Do not
-commit `.env`.
+```bash
+docker compose up -d --build
+```
+
+`setup-local.sh` writes a private `.env` with a freshly generated JWT secret and
+admin password, and **prints that password once** — copy it before moving on. It
+does not start anything, so the build stays a separate, visible step. Running it
+again leaves your own settings alone and only fills in values still holding the
+template placeholders. Never commit `.env`.
+
+The first build takes five to ten minutes. Flyway then creates every table and
+the starting catalogue when the API container comes up, so the clinic screens
+have services, courses, rooms and payment methods to work with.
 
 For a shared team database, put the same cloud PostgreSQL JDBC connection URL
 in `DATABASE_URL_DOCKER`, username in `DATABASE_USERNAME_DOCKER`, and password
