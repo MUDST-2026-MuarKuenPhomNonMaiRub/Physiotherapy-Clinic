@@ -96,6 +96,18 @@ public class TransactionReader {
           new CheckoutDtos.CourseImpact(label, ((Number) entry.get("quantity")).intValue()));
     }
 
+    // The cash figures live on the payment row, not the transaction, and are
+    // present only for a cash receipt.
+    List<Map<String, Object>> cashRows =
+        db.queryForList(
+            "SELECT cash_received,change_given FROM payments WHERE sales_transaction_id=?"
+                + " AND cash_received IS NOT NULL ORDER BY id DESC LIMIT 1",
+            id);
+    BigDecimal cashReceived =
+        cashRows.isEmpty() ? null : (BigDecimal) cashRows.get(0).get("cash_received");
+    BigDecimal changeGiven =
+        cashRows.isEmpty() ? null : (BigDecimal) cashRows.get(0).get("change_given");
+
     CheckoutDtos.VoidInfo voidInfo = null;
     if ("CANCELLED".equals(transaction.get("status"))) {
       List<Map<String, Object>> cancellations =
@@ -129,6 +141,8 @@ public class TransactionReader {
         (BigDecimal) transaction.get("subtotal"),
         (BigDecimal) transaction.get("total_amount"),
         asLong(transaction.get("payment_method_id")),
+        cashReceived,
+        changeGiven,
         asLong(transaction.get("treating_staff_id")),
         asLong(transaction.get("salesperson_id")),
         "CANCELLED".equals(transaction.get("status")) ? "VOID" : "COMPLETED",

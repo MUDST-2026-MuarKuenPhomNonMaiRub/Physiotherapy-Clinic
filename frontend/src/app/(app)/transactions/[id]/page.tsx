@@ -216,6 +216,13 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ id
             <ol className="space-y-3">
               <TimelineItem label="Transaction created" detail={formatDateTime(txn.date)} done />
               <TimelineItem label={`Payment received via ${pm?.name ?? "—"}`} detail={formatCurrency(txn.total)} done />
+              {txn.cashReceived !== undefined && (
+                <TimelineItem
+                  label="Cash taken at the counter"
+                  detail={`${formatCurrency(txn.cashReceived)} in, ${formatCurrency(txn.changeGiven ?? 0)} change`}
+                  done
+                />
+              )}
               {txn.courseImpact.length > 0 && <TimelineItem label="Course balance updated" detail={`${txn.courseImpact.length} ledger ${txn.courseImpact.length === 1 ? "entry" : "entries"} created`} done />}
               {txn.commission.length > 0 && <TimelineItem label="Commission generated" detail={formatCurrency(commissionTotal)} done />}
               {txn.voidInfo && (

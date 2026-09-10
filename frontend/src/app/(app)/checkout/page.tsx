@@ -23,6 +23,7 @@ import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
 import { formatCurrency, formatCurrencySigned, formatDate } from "@/lib/format";
 import { remainingSessions, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageLoading } from "@/components/shared/page-loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,6 +92,9 @@ function CheckoutContent() {
   const [treatingStaffId, setTreatingStaffId] = useState(linkedAppointment?.physiotherapistId ?? "");
   const [salespersonId, setSalespersonId] = useState(user?.staffId ?? "");
   const [paymentMethodId, setPaymentMethodId] = useState("");
+  // Kept as the typed string so the box can be cleared; "" is "not entered yet"
+  // rather than zero.
+  const [cashReceivedInput, setCashReceivedInput] = useState("");
   const [result, setResult] = useState<Transaction | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Empty string = "use the catalogue price"; a typed value overrides it.
@@ -181,6 +185,18 @@ function CheckoutContent() {
     mode === "SINGLE" || (mode === "COURSE" && (subMode === "USE_EXISTING" ? !!useCourseId : useToday));
   const needsSalesperson = mode === "SINGLE" || (mode === "COURSE" && subMode === "PURCHASE");
 
+  // Cash is the one method where the sum handed over differs from the sum
+  // billed, so it is the only one that asks for a figure and owes change back.
+  const isCashPayment =
+    paymentMethods.find((p) => p.id === paymentMethodId)?.code === "CASH";
+  const cashReceived = cashReceivedInput === "" ? null : Number(cashReceivedInput);
+  const cashIsShort =
+    isCashPayment && (cashReceived === null || !Number.isFinite(cashReceived) || cashReceived < total);
+  const changeDue =
+    isCashPayment && cashReceived !== null && Number.isFinite(cashReceived) && cashReceived >= total
+      ? cashReceived - total
+      : null;
+
   const canConfirm =
     !!patientId &&
     !!paymentMethodId &&
@@ -191,7 +207,8 @@ function CheckoutContent() {
       : !!purchaseTemplateId) &&
     (!needsTreatingStaff || !!treatingStaffId) &&
     (!needsSalesperson || !!salespersonId) &&
-    !overDiscounted;
+    !overDiscounted &&
+    !cashIsShort;
 
   async function handleConfirm() {
     if (!canConfirm || !user || submitting) return;
@@ -209,6 +226,7 @@ function CheckoutContent() {
         treatingStaffId: needsTreatingStaff ? treatingStaffId : undefined,
         salespersonId: needsSalesperson ? salespersonId : undefined,
         paymentMethodId,
+        cashReceived: isCashPayment && cashReceived !== null ? cashReceived : undefined,
         servicePrice: mode === "SINGLE" && priceWasOverridden ? basePrice : undefined,
         coursePurchasePrice:
           mode === "COURSE" && subMode === "PURCHASE" && priceWasOverridden ? basePrice : undefined,
@@ -248,6 +266,12 @@ function CheckoutContent() {
           )}
           <SummaryRow label="Amount Paid" value={formatCurrency(result.total)} bold />
           <SummaryRow label="Payment Method" value={pm?.name ?? "-"} />
+          {result.cashReceived !== undefined && (
+            <>
+              <SummaryRow label="Cash Received" value={formatCurrency(result.cashReceived)} mono />
+              <SummaryRow label="Change" value={formatCurrency(result.changeGiven ?? 0)} mono />
+            </>
+          )}
           {treatingStaff && <SummaryRow label="Treating Staff" value={treatingStaff.name} />}
           {salesperson && <SummaryRow label="Salesperson" value={salesperson.name} />}
           {result.courseImpact.length > 0 && (
@@ -738,7 +762,7 @@ function CheckoutContent() {
                   {enabledPayments.map((pm) => (
                     <button
                       key={pm.id}
-                      onClick={() => setPaymentMethodId(pm.id)}
+                      onClick={() => { setPaymentMethodId(pm.id); if (pm.code !== "CASH") setCashReceivedInput(""); }}
                       className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${paymentMethodId === pm.id ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted/50"}`}
                     >
                       {pm.name}
@@ -746,6 +770,36 @@ function CheckoutContent() {
                   ))}
                 </div>
               </div>
+
+              {isCashPayment && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cash-received">Cash Received</Label>
+                  <Input
+                    id="cash-received"
+                    type="number"
+                    min={total}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={cashReceivedInput}
+                    onChange={(e) => setCashReceivedInput(e.target.value)}
+                    placeholder={formatCurrency(total)}
+                  />
+                  {changeDue !== null ? (
+                    <div className="flex items-center justify-between rounded-lg bg-success/10 px-3 py-2 text-sm">
+                      <span className="font-medium text-muted-foreground">Change</span>
+                      <span className="font-mono text-base font-semibold text-success">
+                        {formatCurrency(changeDue)}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {cashReceivedInput === ""
+                        ? "Enter what the patient handed over."
+                        : "That is less than the amount due."}
+                    </p>
+                  )}
+                </div>
+              )}
 
               <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={handleConfirm}>
                 Confirm Payment
@@ -769,7 +823,7 @@ function SummaryRow({ label, value, bold, mono }: { label: string; value: string
 
 export default function CheckoutPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <CheckoutContent />
     </Suspense>
   );

@@ -23,6 +23,8 @@ public final class CheckoutDtos {
       Long salespersonId,
       @Positive long paymentMethodId,
       String paymentReferenceNo,
+      /** Cash handed over. Required when the method is cash, ignored otherwise. */
+      BigDecimal cashReceived,
       BigDecimal servicePrice,
       BigDecimal coursePurchasePrice,
       List<Adjustment> adjustments) {}
@@ -50,6 +52,8 @@ public final class CheckoutDtos {
       BigDecimal subtotal,
       BigDecimal total,
       Long paymentMethodId,
+      BigDecimal cashReceived,
+      BigDecimal changeGiven,
       Long treatingStaffId,
       Long salespersonId,
       String status,

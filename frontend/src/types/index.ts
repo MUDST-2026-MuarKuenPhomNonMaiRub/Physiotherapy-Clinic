@@ -234,6 +234,9 @@ export interface Transaction {
   total: number; // what the patient actually paid
 
   paymentMethodId: string;
+  /** Cash handed over, and the change returned. Only set on a cash receipt. */
+  cashReceived?: number;
+  changeGiven?: number;
   treatingStaffId?: string;
   salespersonId?: string;
   status: TransactionStatus;
@@ -260,6 +263,8 @@ export interface CommissionRule {
 
 export interface PaymentMethod {
   id: string;
+  /** CASH, TRANSFER, QR, CARD — the stable handle rules key off, unlike the name. */
+  code: string;
   name: string;
   icon: string;
   enabled: boolean;

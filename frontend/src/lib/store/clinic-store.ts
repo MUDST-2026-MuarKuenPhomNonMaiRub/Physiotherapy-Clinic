@@ -49,6 +49,8 @@ export interface CheckoutInput {
   treatingStaffId?: string;
   salespersonId?: string;
   paymentMethodId: string;
+  /** Cash handed over at the counter. Only meaningful when paying by cash. */
+  cashReceived?: number;
   /** Counter override for the service line; falls back to the catalogue price. */
   servicePrice?: number;
   /** Counter override for the course-purchase line. */

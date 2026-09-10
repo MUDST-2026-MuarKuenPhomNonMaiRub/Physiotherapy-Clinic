@@ -216,19 +216,46 @@ public class CheckoutService {
 
     // ---- payment ----------------------------------------------------------
     if (netTotal.signum() > 0) {
+      // Cash is counted at the drawer, so the note handed over is recorded
+      // alongside the change owed. Revenue stays the amount billed — the change
+      // goes straight back and was never the clinic's.
+      BigDecimal cashReceived = isCash(r.paymentMethodId()) ? r.cashReceived() : null;
+      if (cashReceived != null) {
+        InputRules.money(cashReceived, "The cash received");
+        InputRules.require(
+            cashReceived.compareTo(netTotal) >= 0,
+            "The cash received is less than the amount due");
+      }
       db.update(
           "INSERT INTO payments(payment_no,sales_transaction_id,payment_method_id,amount,"
-              + "reference_no,received_by) VALUES(?,?,?,?,?,?)",
+              + "reference_no,received_by,cash_received,change_given) VALUES(?,?,?,?,?,?,?,?)",
           nextNumber("PM", "payments", "payment_no"),
           transactionId,
           r.paymentMethodId(),
           netTotal,
           r.paymentReferenceNo(),
-          actorUserId);
+          actorUserId,
+          cashReceived,
+          cashReceived == null ? null : cashReceived.subtract(netTotal));
     }
 
     if (purchasedCourseId != null) refreshCourseStatus(purchasedCourseId);
     return reader.get(transactionId);
+  }
+
+  /**
+   * Cash is the one method where what changes hands is not the amount billed,
+   * so it is the one method that carries a tendered figure. Read from the
+   * method's own code rather than a hard-coded id, which differs per install.
+   */
+  private boolean isCash(long paymentMethodId) {
+    // EXISTS always yields a row, so an unknown id answers "not cash" here and
+    // is left to fail on the foreign key with a message that names it.
+    return Boolean.TRUE.equals(
+        db.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM payment_methods WHERE id=? AND code='CASH')",
+            Boolean.class,
+            paymentMethodId));
   }
 
   /**

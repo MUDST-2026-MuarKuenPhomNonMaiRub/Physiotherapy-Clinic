@@ -138,6 +138,7 @@ export function toCourseTemplate(row: Row): CourseTemplate {
 export function toPaymentMethod(row: Row): PaymentMethod {
   return {
     id: id(row.id),
+    code: str(row.code).trim().toUpperCase(),
     name: str(row.name),
     icon: str(row.icon) || "Wallet",
     enabled: bool(row.active),
@@ -360,6 +361,8 @@ export function toTransaction(row: Row): Transaction {
     subtotal: num(row.subtotal),
     total: num(row.total),
     paymentMethodId: row.paymentMethodId == null ? "" : id(row.paymentMethodId),
+    cashReceived: row.cashReceived == null ? undefined : num(row.cashReceived),
+    changeGiven: row.changeGiven == null ? undefined : num(row.changeGiven),
     treatingStaffId: row.treatingStaffId == null ? undefined : id(row.treatingStaffId),
     salespersonId: row.salespersonId == null ? undefined : id(row.salespersonId),
     status: str(row.status) === "VOID" ? "VOID" : "COMPLETED",
