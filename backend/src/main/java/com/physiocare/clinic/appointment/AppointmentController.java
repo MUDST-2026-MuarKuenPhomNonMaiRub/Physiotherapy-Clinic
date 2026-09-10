@@ -2,6 +2,7 @@ package com.physiocare.clinic.appointment;
 
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
+import com.physiocare.clinic.common.InputRules;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
@@ -89,8 +90,9 @@ public class AppointmentController {
       @Valid @RequestBody AppointmentRequest r, Authentication authentication) {
     branches.requireAccess(authentication, r.branchId());
     branches.requireActiveBranch(r.branchId());
-    if (!r.endsAt().isAfter(r.startsAt()))
-      throw new IllegalArgumentException("The end time must be after the start time");
+    validateSlot(r.startsAt(), r.endsAt());
+    InputRules.text(r.patientNote(), 500, "The note");
+    InputRules.text(r.internalNote(), 500, "The internal note");
     requireFreeSlot(r, null);
 
     long id =
@@ -126,8 +128,7 @@ public class AppointmentController {
     Map<String, Object> original = get(id);
     long branchId = ((Number) original.get("branch_id")).longValue();
     branches.requireAccess(authentication, branchId);
-    if (!r.endsAt().isAfter(r.startsAt()))
-      throw new IllegalArgumentException("The end time must be after the start time");
+    validateSlot(r.startsAt(), r.endsAt());
 
     AppointmentRequest moved =
         new AppointmentRequest(
@@ -279,6 +280,22 @@ public class AppointmentController {
             r.endsAt());
     if (roomClash != null && roomClash > 0)
       throw new IllegalArgumentException("This treatment room is unavailable at that time");
+  }
+
+  /**
+   * A slot has to run forwards, fit inside a working day, and sit near enough
+   * to today to be a real booking rather than a mistyped year.
+   */
+  private void validateSlot(OffsetDateTime startsAt, OffsetDateTime endsAt) {
+    InputRules.require(
+        endsAt.isAfter(startsAt), "The end time must be after the start time");
+    long minutes = java.time.Duration.between(startsAt, endsAt).toMinutes();
+    InputRules.require(
+        minutes <= InputRules.MAX_DURATION_MINUTES,
+        "An appointment cannot run longer than "
+            + (InputRules.MAX_DURATION_MINUTES / 60)
+            + " hours");
+    InputRules.bookingWindow(startsAt.toLocalDate());
   }
 
   private boolean isAllowedTransition(String from, String to) {

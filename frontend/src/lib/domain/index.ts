@@ -16,6 +16,44 @@ export function today(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+// ------------------------------------------------------------------ validation
+
+/**
+ * The same rules the API enforces, repeated here so a form can answer straight
+ * away. The server remains the one that decides — these only save a round trip.
+ */
+export const fieldRules = {
+  nationalId(value: string): string | null {
+    if (!value.trim()) return "Required";
+    return /^\d{13}$/.test(value.trim()) ? null : "A Thai national ID has exactly 13 digits";
+  },
+
+  passport(value: string): string | null {
+    if (!value.trim()) return "Required";
+    return /^[A-Za-z0-9]{5,20}$/.test(value.trim())
+      ? null
+      : "5 to 20 letters or digits";
+  },
+
+  phone(value: string): string | null {
+    if (!value.trim()) return "Required";
+    const trimmed = value.trim();
+    if (!/^[0-9+\-() ]{6,25}$/.test(trimmed))
+      return "Only digits and + - ( ) spaces";
+    return trimmed.replace(/[^0-9]/g, "").length >= 6 ? null : "Not enough digits";
+  },
+
+  birthDate(value: string): string | null {
+    if (!value) return "Required";
+    if (value > today()) return "A date of birth cannot be in the future";
+    const hundredAndThirtyYearsAgo = new Date();
+    hundredAndThirtyYearsAgo.setFullYear(hundredAndThirtyYearsAgo.getFullYear() - 130);
+    return value > hundredAndThirtyYearsAgo.toISOString().slice(0, 10)
+      ? null
+      : "That date is not plausible";
+  },
+};
+
 // -------------------------------------------------------------------- patients
 
 export function getPatientFullNameTh(patient: Patient): string {

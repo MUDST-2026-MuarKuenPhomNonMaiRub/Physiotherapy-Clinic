@@ -2,6 +2,7 @@ package com.physiocare.clinic.checkout;
 
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
+import com.physiocare.clinic.common.InputRules;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -72,8 +73,12 @@ public class CheckoutService {
         course == null
             ? BigDecimal.ZERO
             : r.coursePurchasePrice() != null ? r.coursePurchasePrice() : (BigDecimal) course.get("price");
-    if (servicePrice.signum() < 0 || coursePrice.signum() < 0)
-      throw new IllegalArgumentException("A price cannot be negative");
+    InputRules.money(servicePrice, "The service price");
+    InputRules.money(coursePrice, "The course price");
+    for (CheckoutDtos.Adjustment adjustment : adjustments) {
+      InputRules.text(adjustment.label(), 250, "An adjustment label");
+      InputRules.money(adjustment.amount().abs(), "An adjustment");
+    }
 
     BigDecimal grossTotal = servicePrice.add(coursePrice);
     BigDecimal adjustmentTotal =
@@ -83,7 +88,17 @@ public class CheckoutService {
             .map(CheckoutDtos.Adjustment::amount)
             .filter(a -> a.signum() < 0)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
-    BigDecimal netTotal = grossTotal.add(adjustmentTotal).max(BigDecimal.ZERO);
+    BigDecimal netTotal = grossTotal.add(adjustmentTotal);
+    /*
+     * Clamping a negative total to zero would leave a receipt whose lines no
+     * longer add up to what was charged, which the transaction screen and the
+     * revenue report both read as truth. A discount bigger than the bill is a
+     * keying mistake, so it is refused rather than absorbed.
+     */
+    InputRules.require(
+        netTotal.signum() >= 0,
+        "The discount is larger than the bill. The most that can be taken off is "
+            + grossTotal.add(adjustmentTotal.subtract(discountTotal)));
 
     /*
      * Percentage commission follows what was actually earned: a counter price

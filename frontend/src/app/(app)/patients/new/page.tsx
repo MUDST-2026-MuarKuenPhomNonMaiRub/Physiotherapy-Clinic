@@ -9,7 +9,7 @@ import type { LucideIcon } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getMasterDataByCategory } from "@/lib/domain";
-import { previewHN } from "@/lib/domain";
+import { fieldRules, previewHN } from "@/lib/domain";
 import { today } from "@/lib/domain";
 import type { CustomerType, Gender, Patient } from "@/types";
 import { PageHeader } from "@/components/shared/page-header";
@@ -122,15 +122,19 @@ export default function NewPatientPage() {
     if (form.customerType === "THAI") {
       if (!form.firstNameTh) e.firstNameTh = "Required";
       if (!form.lastNameTh) e.lastNameTh = "Required";
-      if (!form.nationalId || form.nationalId.length < 13) e.nationalId = "Enter a valid 13-digit National ID";
+      const nationalId = fieldRules.nationalId(form.nationalId);
+      if (nationalId) e.nationalId = nationalId;
     } else {
       if (!form.firstNameEn) e.firstNameEn = "Required";
       if (!form.lastNameEn) e.lastNameEn = "Required";
-      if (!form.passport) e.passport = "Required";
+      const passport = fieldRules.passport(form.passport);
+      if (passport) e.passport = passport;
       if (!form.nationality) e.nationality = "Required";
     }
-    if (!form.dob) e.dob = "Required";
-    if (!form.phone) e.phone = "Required";
+    const dob = fieldRules.birthDate(form.dob);
+    if (dob) e.dob = dob;
+    const phone = fieldRules.phone(form.phone);
+    if (phone) e.phone = phone;
     if (!form.registrationBranchId) e.registrationBranchId = "Required";
     setErrors(e);
     return Object.keys(e).length === 0;

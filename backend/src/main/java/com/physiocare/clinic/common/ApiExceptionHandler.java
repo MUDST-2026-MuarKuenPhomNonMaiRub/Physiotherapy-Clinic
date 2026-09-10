@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.*;
 import org.springframework.security.access.AccessDeniedException;
@@ -45,6 +46,26 @@ public class ApiExceptionHandler {
         .body(
             Map.of(
                 "timestamp", Instant.now(), "error", "INVALID_REQUEST", "message", e.getMessage()));
+  }
+
+  /**
+   * A reference to a row that is not there, or a value the schema refuses, is
+   * something the caller sent — not a fault on this side. Postgres phrases those
+   * for a database administrator, so the reply says which constraint failed
+   * without repeating the raw SQL.
+   */
+  @ExceptionHandler(DataIntegrityViolationException.class)
+  ResponseEntity<?> integrity(DataIntegrityViolationException e) {
+    String detail = e.getMostSpecificCause().getMessage();
+    String message =
+        detail != null && detail.contains("violates foreign key constraint")
+            ? "That refers to a record that does not exist."
+            : detail != null && detail.contains("duplicate key")
+                ? "That record already exists."
+                : "Some of the details are not valid for this record.";
+    log.warn("Rejected a write that the database refused: {}", detail);
+    return ResponseEntity.badRequest()
+        .body(Map.of("timestamp", Instant.now(), "error", "INVALID_REQUEST", "message", message));
   }
 
   /** A denied write is the caller's answer, not a server fault. */

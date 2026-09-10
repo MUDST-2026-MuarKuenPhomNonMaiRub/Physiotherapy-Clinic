@@ -1,5 +1,6 @@
 package com.physiocare.clinic.catalog;
 
+import com.physiocare.clinic.common.InputRules;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
@@ -45,6 +46,25 @@ public class CatalogController {
 
   public record ActiveRequest(boolean active) {}
 
+  private static final List<String> SERVICE_TYPES = List.of("ASSESSMENT", "SINGLE_VISIT");
+
+  private void validate(ServiceRequest r) {
+    InputRules.oneOf(r.serviceType(), SERVICE_TYPES, "Service type");
+    InputRules.money(r.basePrice(), "The price");
+    InputRules.inRange(r.durationMinutes(), 1, InputRules.MAX_DURATION_MINUTES, "The duration");
+    InputRules.text(r.nameTh(), 200, "The name");
+  }
+
+  private void validate(CourseRequest r) {
+    InputRules.money(r.price(), "The price");
+    InputRules.inRange(r.totalSessions(), 1, InputRules.MAX_SESSIONS, "The number of sessions");
+    InputRules.inRange(r.bonusSessions(), 0, InputRules.MAX_SESSIONS, "The bonus sessions");
+    if (r.validityDays() != null)
+      InputRules.inRange(r.validityDays(), 1, 3650, "The validity in days");
+    InputRules.text(r.nameTh(), 200, "The name");
+    InputRules.text(r.description(), 1000, "The description");
+  }
+
   // ---------------------------------------------------------------- services
 
   @GetMapping("/services")
@@ -58,6 +78,7 @@ public class CatalogController {
   @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> addService(@Valid @RequestBody ServiceRequest r) {
+    validate(r);
     long id =
         db.queryForObject(
             "INSERT INTO"
@@ -78,6 +99,7 @@ public class CatalogController {
   @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> updateService(
       @PathVariable long id, @Valid @RequestBody ServiceRequest r) {
+    validate(r);
     int rows =
         db.update(
             "UPDATE services SET"
@@ -127,6 +149,7 @@ public class CatalogController {
   @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> addCourse(@Valid @RequestBody CourseRequest r) {
+    validate(r);
     long id =
         db.queryForObject(
             "INSERT INTO"
@@ -149,6 +172,7 @@ public class CatalogController {
   @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> updateCourse(
       @PathVariable long id, @Valid @RequestBody CourseRequest r) {
+    validate(r);
     int rows =
         db.update(
             "UPDATE courses SET"
@@ -229,6 +253,7 @@ public class CatalogController {
   @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> addMasterData(@Valid @RequestBody MasterDataRequest r) {
+    InputRules.text(r.nameTh(), 200, "The value");
     String type = r.dataType().toUpperCase();
     Integer nextOrder =
         db.queryForObject(

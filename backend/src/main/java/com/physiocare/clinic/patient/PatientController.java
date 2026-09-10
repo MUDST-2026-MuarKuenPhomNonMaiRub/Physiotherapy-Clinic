@@ -2,6 +2,7 @@ package com.physiocare.clinic.patient;
 
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
+import com.physiocare.clinic.common.InputRules;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.nio.charset.StandardCharsets;
@@ -62,12 +63,42 @@ public class PatientController {
       String insuranceCompanyCode,
       @Positive long registeredBranchId) {}
 
+  private static final List<String> CUSTOMER_TYPES = List.of("THAI", "FOREIGNER");
+  private static final List<String> GENDERS = List.of("MALE", "FEMALE", "OTHER");
+
+  /**
+   * The registration form applies most of these too, but a record can also
+   * arrive straight from the API, so the rules are enforced here as well.
+   */
+  private void validate(PatientRequest r) {
+    InputRules.oneOf(r.customerType(), CUSTOMER_TYPES, "Customer type");
+    InputRules.oneOf(r.genderCode(), GENDERS, "Gender");
+    InputRules.phone(r.phone());
+    InputRules.email(r.email());
+    InputRules.birthDate(r.birthDate());
+    InputRules.nationalId(r.nationalId());
+    InputRules.passport(r.passportNo());
+    InputRules.text(r.firstNameTh(), 100, "First name");
+    InputRules.text(r.lastNameTh(), 100, "Last name");
+    InputRules.text(r.firstNameEn(), 100, "First name (EN)");
+    InputRules.text(r.lastNameEn(), 100, "Last name (EN)");
+    InputRules.text(r.nickname(), 100, "Nickname");
+    InputRules.text(r.addressText(), 500, "Address");
+    // A Thai patient is identified by their national ID, which is what keeps
+    // the same person from being registered twice.
+    if ("THAI".equals(r.customerType()))
+      InputRules.require(
+          r.nationalId() != null && !r.nationalId().isBlank(),
+          "A Thai patient needs a national ID");
+  }
+
   @PostMapping
   @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST','FINANCE')")
   @ResponseStatus(HttpStatus.CREATED)
   @Transactional
   public Map<String, Object> create(
       @Valid @RequestBody PatientRequest r, Authentication authentication) {
+    validate(r);
     branches.requireAccess(authentication, r.registeredBranchId());
     branches.requireActiveBranch(r.registeredBranchId());
 
@@ -148,6 +179,7 @@ public class PatientController {
   @Transactional
   public Map<String, Object> update(
       @PathVariable long id, @Valid @RequestBody PatientRequest r, Authentication authentication) {
+    validate(r);
     Map<String, Object> existing = get(id);
     branches.requireAccess(
         authentication, ((Number) existing.get("registered_branch_id")).longValue());

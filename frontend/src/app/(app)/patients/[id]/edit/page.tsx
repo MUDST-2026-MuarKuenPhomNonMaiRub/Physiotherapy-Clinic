@@ -8,7 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getMasterDataByCategory } from "@/lib/domain";
+import { getMasterDataByCategory, fieldRules } from "@/lib/domain";
 import type { CustomerType, Gender } from "@/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { Forbidden } from "@/components/shared/forbidden";
@@ -100,14 +100,20 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
     if (form.customerType === "THAI") {
       if (!form.firstNameTh) e.firstNameTh = "Required";
       if (!form.lastNameTh) e.lastNameTh = "Required";
-      if (!form.nationalId) e.nationalId = "Required";
+      const nationalId = fieldRules.nationalId(form.nationalId);
+      if (nationalId) e.nationalId = nationalId;
     } else {
       if (!form.firstNameEn) e.firstNameEn = "Required";
       if (!form.lastNameEn) e.lastNameEn = "Required";
-      if (!form.passport) e.passport = "Required";
+      const passport = fieldRules.passport(form.passport);
+      if (passport) e.passport = passport;
+      if (!form.nationality) e.nationality = "Required";
     }
-    if (!form.dob) e.dob = "Required";
-    if (!form.phone) e.phone = "Required";
+    const dob = fieldRules.birthDate(form.dob);
+    if (dob) e.dob = dob;
+    const phone = fieldRules.phone(form.phone);
+    if (phone) e.phone = phone;
+
     setErrors(e);
     return Object.keys(e).length === 0;
   }
