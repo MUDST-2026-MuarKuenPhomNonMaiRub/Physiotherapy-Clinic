@@ -81,8 +81,26 @@ export default function ServicesSettingsPage() {
     setCourseForm({ name: c.name, description: c.description, price: c.price, sessions: c.sessions, bonusSessions: c.bonusSessions, expiryDays: c.expiryDays });
     setCourseOpen(true);
   }
+  /**
+   * A package with no price, no sessions or no shelf life is not a package the
+   * clinic could sell, so the form says which one is missing rather than
+   * letting the API refuse the whole thing.
+   */
+  const courseProblem =
+    !courseForm.name.trim()
+      ? "A course name is required"
+      : courseForm.price <= 0
+        ? "The price must be more than 0"
+        : courseForm.sessions <= 0
+          ? "A course needs at least one session"
+          : courseForm.bonusSessions < 0
+            ? "Bonus sessions cannot be negative"
+            : courseForm.expiryDays <= 0
+              ? "The expiry must be at least one day"
+              : null;
+
   async function saveCourse() {
-    if (!courseForm.name) return;
+    if (courseProblem) return;
     try {
       if (editingCourse) { await updateCourseTemplate(editingCourse.id, courseForm); toast.success("Course updated"); }
       else { await addCourseTemplate({ ...courseForm, status: "ACTIVE" }); toast.success("Course created"); }
@@ -267,25 +285,32 @@ export default function ServicesSettingsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Price (THB)</Label>
-                <Input type="number" value={courseForm.price} onChange={(e) => setCourseForm((f) => ({ ...f, price: Number(e.target.value) }))} />
+                <Input type="number" min={1} value={courseForm.price} onChange={(e) => setCourseForm((f) => ({ ...f, price: Number(e.target.value) }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Number of Sessions</Label>
-                <Input type="number" value={courseForm.sessions} onChange={(e) => setCourseForm((f) => ({ ...f, sessions: Number(e.target.value) }))} />
+                <Input type="number" min={1} value={courseForm.sessions} onChange={(e) => setCourseForm((f) => ({ ...f, sessions: Number(e.target.value) }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Bonus Sessions</Label>
-                <Input type="number" value={courseForm.bonusSessions} onChange={(e) => setCourseForm((f) => ({ ...f, bonusSessions: Number(e.target.value) }))} />
+                <Input type="number" min={0} value={courseForm.bonusSessions} onChange={(e) => setCourseForm((f) => ({ ...f, bonusSessions: Number(e.target.value) }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Expiry (days)</Label>
-                <Input type="number" value={courseForm.expiryDays} onChange={(e) => setCourseForm((f) => ({ ...f, expiryDays: Number(e.target.value) }))} />
+                <Input type="number" min={1} value={courseForm.expiryDays} onChange={(e) => setCourseForm((f) => ({ ...f, expiryDays: Number(e.target.value) }))} />
               </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCourseOpen(false)}>Cancel</Button>
-            <Button disabled={!courseForm.name} onClick={saveCourse}>{editingCourse ? "Save Changes" : "Add Course"}</Button>
+          <DialogFooter className="items-center gap-2 sm:justify-between">
+            {courseProblem ? (
+              <p className="text-xs text-destructive sm:mr-auto">{courseProblem}</p>
+            ) : (
+              <span className="sm:mr-auto" />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setCourseOpen(false)}>Cancel</Button>
+              <Button disabled={!!courseProblem} onClick={saveCourse}>{editingCourse ? "Save Changes" : "Add Course"}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -57,10 +57,13 @@ public class CatalogController {
 
   private void validate(CourseRequest r) {
     InputRules.money(r.price(), "The price");
+    // A package is something the clinic sells, so unlike a single service it
+    // cannot be given away at nothing.
+    InputRules.require(r.price().signum() > 0, "A course price must be more than 0");
     InputRules.inRange(r.totalSessions(), 1, InputRules.MAX_SESSIONS, "The number of sessions");
     InputRules.inRange(r.bonusSessions(), 0, InputRules.MAX_SESSIONS, "The bonus sessions");
-    if (r.validityDays() != null)
-      InputRules.inRange(r.validityDays(), 1, 3650, "The validity in days");
+    InputRules.require(r.validityDays() != null, "A course needs an expiry in days");
+    InputRules.inRange(r.validityDays(), 1, 3650, "The validity in days");
     InputRules.text(r.nameTh(), 200, "The name");
     InputRules.text(r.description(), 1000, "The description");
   }
