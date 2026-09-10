@@ -10,6 +10,7 @@ import { getPatientFullNameTh } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
 import { today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageLoading } from "@/components/shared/page-loading";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TableScrollArea } from "@/components/shared/table-scroll-area";
@@ -204,7 +205,7 @@ function AppointmentsPageContent() {
 
 export default function AppointmentsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <AppointmentsPageContent />
     </Suspense>
   );

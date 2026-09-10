@@ -12,6 +12,7 @@ import { getPatientFullNameEn, getPatientFullNameTh, searchPatients } from "@/li
 import { remainingSessions } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageLoading } from "@/components/shared/page-loading";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TablePagination, paginate, usePageReset } from "@/components/shared/table-pagination";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
@@ -291,7 +292,7 @@ function PatientsPageContent() {
 
 export default function PatientsPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <PatientsPageContent />
     </Suspense>
   );
