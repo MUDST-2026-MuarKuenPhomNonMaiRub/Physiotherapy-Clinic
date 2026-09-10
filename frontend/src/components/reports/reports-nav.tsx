@@ -2,17 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "@/lib/auth/use-session";
+import { navigationByRole } from "@/lib/permissions/navigation";
 import { cn } from "@/lib/utils";
 
-const items = [
-  { href: "/reports/revenue", label: "Revenue" },
-  { href: "/reports/course-balance", label: "Course Balance" },
-  { href: "/reports/staff-sales", label: "Staff Sales" },
-  { href: "/reports/commission", label: "Commission" },
-];
-
+/**
+ * The tabs mirror the sidebar's Report group, so a report the role cannot open
+ * is not offered here either.
+ */
 export function ReportsNav() {
   const pathname = usePathname();
+  const { user } = useSession();
+  if (!user) return null;
+
+  const items =
+    navigationByRole[user.role].find((group) => group.title === "Report")?.items ?? [];
+
   return (
     <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/50 p-1">
       {items.map((item) => (

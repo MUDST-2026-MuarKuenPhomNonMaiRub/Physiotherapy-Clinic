@@ -32,14 +32,23 @@ const financeGroup: NavGroup = {
   ],
 };
 
-const reportGroup: NavGroup = {
+const revenueItem: NavItem = { label: "Revenue", href: "/reports/revenue", icon: "TrendingUp" };
+const courseBalanceItem: NavItem = { label: "Course Balance", href: "/reports/course-balance", icon: "Package" };
+const staffSalesItem: NavItem = { label: "Staff Sales", href: "/reports/staff-sales", icon: "UserCog" };
+const commissionItem: NavItem = { label: "Commission", href: "/reports/commission", icon: "Banknote" };
+
+const adminReportGroup: NavGroup = {
   title: "Report",
-  items: [
-    { label: "Revenue", href: "/reports/revenue", icon: "TrendingUp" },
-    { label: "Course Balance", href: "/reports/course-balance", icon: "Package" },
-    { label: "Staff Sales", href: "/reports/staff-sales", icon: "UserCog" },
-    { label: "Commission", href: "/reports/commission", icon: "Banknote" },
-  ],
+  items: [revenueItem, courseBalanceItem, staffSalesItem, commissionItem],
+};
+
+/**
+ * Staff Sales ranks people against each other, which is a management view. A
+ * physiotherapist's own figures are already on the Commission report.
+ */
+const physioReportGroup: NavGroup = {
+  title: "Report",
+  items: [revenueItem, courseBalanceItem, commissionItem],
 };
 
 const administrationGroup: NavGroup = {
@@ -61,8 +70,8 @@ export const pinnedByRole: Record<Role, NavItem> = {
 };
 
 export const navigationByRole: Record<Role, NavGroup[]> = {
-  ADMIN: [patientGroup, financeGroup, reportGroup, administrationGroup],
-  PHYSIOTHERAPIST: [patientGroup, financeGroup, reportGroup],
+  ADMIN: [patientGroup, financeGroup, adminReportGroup, administrationGroup],
+  PHYSIOTHERAPIST: [patientGroup, financeGroup, physioReportGroup],
 };
 
 export const defaultRouteByRole: Record<Role, string> = {
@@ -87,6 +96,9 @@ export function findActiveHref(role: Role, pathname: string): string | null {
 // are open to any authenticated user; per-action rules live in rolePermissions.
 export const routeAccess: { prefix: string; roles: Role[] }[] = [
   { prefix: "/settings", roles: ["ADMIN"] },
+  // Hidden from the menu as well, but the address bar is the way in that
+  // actually needs closing.
+  { prefix: "/reports/staff-sales", roles: ["ADMIN"] },
 ];
 
 export function canAccessRoute(role: Role, pathname: string): boolean {
