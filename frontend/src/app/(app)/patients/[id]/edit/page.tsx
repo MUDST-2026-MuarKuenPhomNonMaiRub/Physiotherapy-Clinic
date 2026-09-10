@@ -98,8 +98,10 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (form.customerType === "THAI") {
-      if (!form.firstNameTh) e.firstNameTh = "Required";
-      if (!form.lastNameTh) e.lastNameTh = "Required";
+      const firstNameTh = fieldRules.thaiName(form.firstNameTh);
+      if (firstNameTh) e.firstNameTh = firstNameTh;
+      const lastNameTh = fieldRules.thaiName(form.lastNameTh);
+      if (lastNameTh) e.lastNameTh = lastNameTh;
       const nationalId = fieldRules.nationalId(form.nationalId);
       if (nationalId) e.nationalId = nationalId;
     } else {
@@ -159,6 +161,10 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
     errors.nationalId ?? (form.nationalId ? fieldRules.nationalId(form.nationalId) : null);
   const passportError =
     errors.passport ?? (form.passport ? fieldRules.passport(form.passport) : null);
+  const firstNameThError =
+    errors.firstNameTh ?? (form.firstNameTh ? fieldRules.thaiName(form.firstNameTh) : null);
+  const lastNameThError =
+    errors.lastNameTh ?? (form.lastNameTh ? fieldRules.thaiName(form.lastNameTh) : null);
 
   return (
     <>
@@ -215,12 +221,12 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
                   <div className="space-y-1.5 sm:col-span-1.5">
                     <Label>Thai First Name <span className="text-destructive">*</span></Label>
                     <Input value={form.firstNameTh} onChange={(e) => update("firstNameTh", e.target.value)} autoComplete="given-name" />
-                    {errors.firstNameTh && <p className="text-xs text-destructive">{errors.firstNameTh}</p>}
+                    {firstNameThError && <p className="text-xs text-destructive">{firstNameThError}</p>}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Thai Last Name <span className="text-destructive">*</span></Label>
                     <Input value={form.lastNameTh} onChange={(e) => update("lastNameTh", e.target.value)} autoComplete="family-name" />
-                    {errors.lastNameTh && <p className="text-xs text-destructive">{errors.lastNameTh}</p>}
+                    {lastNameThError && <p className="text-xs text-destructive">{lastNameThError}</p>}
                   </div>
                 </>
               ) : (
@@ -284,7 +290,7 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {form.customerType === "THAI" ? (
               <div className="space-y-1.5">
-                <Label>National ID</Label>
+                <Label>National ID <span className="text-destructive">*</span></Label>
                 <Input
                   value={form.nationalId}
                   maxLength={13}

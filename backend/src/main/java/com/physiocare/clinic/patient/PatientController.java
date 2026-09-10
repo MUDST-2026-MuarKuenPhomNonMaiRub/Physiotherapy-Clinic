@@ -85,11 +85,16 @@ public class PatientController {
     InputRules.text(r.nickname(), 100, "Nickname");
     InputRules.text(r.addressText(), 500, "Address");
     // A Thai patient is identified by their national ID, which is what keeps
-    // the same person from being registered twice.
-    if ("THAI".equals(r.customerType()))
+    // the same person from being registered twice, and their name is held in
+    // Thai. A foreigner's English name is copied into the same name columns, so
+    // neither rule can be applied to every record.
+    if ("THAI".equals(r.customerType())) {
       InputRules.require(
           r.nationalId() != null && !r.nationalId().isBlank(),
           "A Thai patient needs a national ID");
+      InputRules.thaiText(r.firstNameTh(), "First name");
+      InputRules.thaiText(r.lastNameTh(), "Last name");
+    }
   }
 
   @PostMapping
@@ -220,17 +225,40 @@ public class PatientController {
   }
 
   /**
+   * The HN the next registration at this branch would be given, without taking
+   * it. The form shows this so the number on screen is the one the sequence
+   * will actually mint — counting existing patients diverges from it as soon as
+   * a record is removed, because the sequence only ever moves forward.
+   *
+   * <p>It is a forecast rather than a reservation: two people on the form at
+   * once see the same number, and whoever saves second gets the one after. That
+   * is the same promise the form made before, now measured against the sequence
+   * instead of the patient list.
+   */
+  @GetMapping("/hn-preview")
+  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST','FINANCE')")
+  public Map<String, Object> hnPreview(
+      @RequestParam long branchId, Authentication authentication) {
+    branches.requireAccess(authentication, branchId);
+    branches.requireActiveBranch(branchId);
+    String yearMonth = YearMonth.now().toString().replace("-", "");
+    int taken =
+        db.queryForObject(
+            "SELECT coalesce(max(last_number),0) FROM hn_sequences WHERE branch_id=? AND"
+                + " year_month=?",
+            Integer.class,
+            branchId,
+            yearMonth);
+    return Map.of("hn", formatHn(branchCode(branchId), yearMonth, taken + 1));
+  }
+
+  /**
    * HN is YY + branch code + MM + a 4-digit running number that restarts every
    * month per branch, per the workflow brief.
    */
   private String nextHn(long branchId) {
     String yearMonth = YearMonth.now().toString().replace("-", "");
-    String branchCode =
-        db.queryForObject(
-            "SELECT trim(code) FROM branches WHERE id=? AND active AND deleted_at IS NULL",
-            String.class,
-            branchId);
-    if (branchCode == null) throw new IllegalArgumentException("Invalid or inactive branch");
+    String branchCode = branchCode(branchId);
     Integer running =
         db.queryForObject(
             "INSERT INTO hn_sequences(branch_id,year_month,last_number) VALUES(?,?,1) ON"
@@ -239,6 +267,20 @@ public class PatientController {
             Integer.class,
             branchId,
             yearMonth);
+    return formatHn(branchCode, yearMonth, running);
+  }
+
+  private String branchCode(long branchId) {
+    String code =
+        db.queryForObject(
+            "SELECT trim(code) FROM branches WHERE id=? AND active AND deleted_at IS NULL",
+            String.class,
+            branchId);
+    if (code == null) throw new IllegalArgumentException("Invalid or inactive branch");
+    return code;
+  }
+
+  private static String formatHn(String branchCode, String yearMonth, int running) {
     return String.format(
         "%02d%s%s%04d",
         Year.now().getValue() % 100, branchCode, yearMonth.substring(4), running);

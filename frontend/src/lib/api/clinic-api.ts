@@ -369,6 +369,17 @@ export const setCommissionRuleActive = (id: string, active: boolean) =>
 export const listPatients = (branchId?: string | null) =>
   apiRequest<Row[]>(`/api/v1/patients${query({ branchId })}`).then((rows) => rows.map(toPatient));
 
+/**
+ * The HN the next registration at this branch would be given. Asked of the
+ * server because the number comes from a sequence that only moves forward —
+ * counting the patients already on file drifts from it the moment one is
+ * removed.
+ */
+export const previewPatientHN = (branchId: string) =>
+  apiRequest<{ hn: string }>(`/api/v1/patients/hn-preview${query({ branchId })}`).then(
+    (row) => row.hn
+  );
+
 export const createPatient = (patient: Omit<Patient, "id" | "hn" | "createdAt">) =>
   apiRequest<Row>("/api/v1/patients", { method: "POST", body: toPatientRequest(patient) }).then(
     toPatient
@@ -496,6 +507,8 @@ export interface CheckoutInput {
   treatingStaffId?: string;
   salespersonId?: string;
   paymentMethodId: string;
+  /** Cash handed over at the counter. Only meaningful when paying by cash. */
+  cashReceived?: number;
   servicePrice?: number;
   coursePurchasePrice?: number;
   adjustments?: CheckoutAdjustmentInput[];
@@ -520,6 +533,7 @@ export const checkout = (input: CheckoutInput): Promise<Transaction> =>
       treatingStaffId: input.treatingStaffId ? Number(input.treatingStaffId) : null,
       salespersonId: input.salespersonId ? Number(input.salespersonId) : null,
       paymentMethodId: Number(input.paymentMethodId),
+      cashReceived: input.cashReceived ?? null,
       servicePrice: input.servicePrice ?? null,
       coursePurchasePrice: input.coursePurchasePrice ?? null,
       adjustments: input.adjustments ?? [],

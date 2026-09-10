@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,8 +9,8 @@ import type { LucideIcon } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getMasterDataByCategory, fieldInput } from "@/lib/domain";
-import { fieldRules, previewHN } from "@/lib/domain";
-import { today } from "@/lib/domain";
+import { fieldRules } from "@/lib/domain";
+import { previewPatientHN } from "@/lib/api/clinic-api";
 import type { CustomerType, Gender, Patient } from "@/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -66,7 +66,6 @@ export default function NewPatientPage() {
   const router = useRouter();
   const { user, activeBranchId } = useSession();
   const branches = useClinicStore((s) => s.branches);
-  const patients = useClinicStore((s) => s.patients);
   const addPatient = useClinicStore((s) => s.addPatient);
   const masterData = useClinicStore((s) => s.masterData);
   const customerGroups = getMasterDataByCategory(masterData, "CUSTOMER_GROUP").filter((m) => m.status === "ACTIVE");
@@ -99,19 +98,30 @@ export default function NewPatientPage() {
   const [created, setCreated] = useState<Patient | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // A preview only — the server mints the real HN when the record is saved.
-  const hnPreview = useMemo(() => {
-    const branch = branches.find((b) => b.id === form.registrationBranchId);
-    if (!branch) return null;
-    const now = new Date(`${today()}T00:00:00`);
-    const prefix = `${String(now.getFullYear() % 100).padStart(2, "0")}${branch.code}${String(
-      now.getMonth() + 1
-    ).padStart(2, "0")}`;
-    const sameMonth = patients.filter(
-      (p) => p.registrationBranchId === form.registrationBranchId && p.hn.startsWith(prefix)
-    );
-    return previewHN(branch.code, sameMonth.length + 1);
-  }, [form.registrationBranchId, branches, patients]);
+  // Read from the same sequence that will mint the real HN, rather than counted
+  // off the patient list: the sequence never goes backwards, so a branch that
+  // has had a registration removed would show a number already spent.
+  const [hnPreview, setHnPreview] = useState<string | null>(null);
+  useEffect(() => {
+    const branchId = form.registrationBranchId;
+    if (!branchId) {
+      setHnPreview(null);
+      return;
+    }
+    let current = true;
+    previewPatientHN(branchId)
+      .then((hn) => {
+        if (current) setHnPreview(hn);
+      })
+      // A preview is not worth an error message; the real HN still comes back
+      // with the saved record.
+      .catch(() => {
+        if (current) setHnPreview(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, [form.registrationBranchId]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -120,8 +130,10 @@ export default function NewPatientPage() {
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (form.customerType === "THAI") {
-      if (!form.firstNameTh) e.firstNameTh = "Required";
-      if (!form.lastNameTh) e.lastNameTh = "Required";
+      const firstNameTh = fieldRules.thaiName(form.firstNameTh);
+      if (firstNameTh) e.firstNameTh = firstNameTh;
+      const lastNameTh = fieldRules.thaiName(form.lastNameTh);
+      if (lastNameTh) e.lastNameTh = lastNameTh;
       const nationalId = fieldRules.nationalId(form.nationalId);
       if (nationalId) e.nationalId = nationalId;
     } else {
@@ -212,6 +224,10 @@ export default function NewPatientPage() {
     errors.nationalId ?? (form.nationalId ? fieldRules.nationalId(form.nationalId) : null);
   const passportError =
     errors.passport ?? (form.passport ? fieldRules.passport(form.passport) : null);
+  const firstNameThError =
+    errors.firstNameTh ?? (form.firstNameTh ? fieldRules.thaiName(form.firstNameTh) : null);
+  const lastNameThError =
+    errors.lastNameTh ?? (form.lastNameTh ? fieldRules.thaiName(form.lastNameTh) : null);
 
   return (
     <>
@@ -271,12 +287,12 @@ export default function NewPatientPage() {
                   <div className="space-y-1.5">
                     <Label>Thai First Name <span className="text-destructive">*</span></Label>
                     <Input value={form.firstNameTh} onChange={(e) => update("firstNameTh", e.target.value)} autoComplete="given-name" />
-                    {errors.firstNameTh && <p className="text-xs text-destructive">{errors.firstNameTh}</p>}
+                    {firstNameThError && <p className="text-xs text-destructive">{firstNameThError}</p>}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Thai Last Name <span className="text-destructive">*</span></Label>
                     <Input value={form.lastNameTh} onChange={(e) => update("lastNameTh", e.target.value)} autoComplete="family-name" />
-                    {errors.lastNameTh && <p className="text-xs text-destructive">{errors.lastNameTh}</p>}
+                    {lastNameThError && <p className="text-xs text-destructive">{lastNameThError}</p>}
                   </div>
                 </>
               ) : (
@@ -341,7 +357,7 @@ export default function NewPatientPage() {
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {form.customerType === "THAI" ? (
               <div className="space-y-1.5">
-                <Label>National ID</Label>
+                <Label>National ID <span className="text-destructive">*</span></Label>
                 <Input
                   value={form.nationalId}
                   maxLength={13}

@@ -45,6 +45,16 @@ export const fieldRules = {
     return trimmed.replace(/[^0-9]/g, "").length >= 6 ? null : "Not enough digits";
   },
 
+  /**
+   * A Thai patient's name is recorded in Thai, so the box takes Thai letters
+   * and the spaces between names — nothing else. Only reached for a Thai
+   * patient: a foreigner's record carries their English name in this field.
+   */
+  thaiName(value: string): string | null {
+    if (!value.trim()) return "Required";
+    return /^[\u0E00-\u0E7F\s]+$/.test(value.trim()) ? null : "Thai letters only";
+  },
+
   birthDate(value: string): string | null {
     if (!value) return "Required";
     if (value > today()) return "A date of birth cannot be in the future";
@@ -94,18 +104,6 @@ export function searchPatients(query: string, list: Patient[]): Patient[] {
       .filter(Boolean)
       .some((field) => field.toLowerCase().includes(term))
   );
-}
-
-/**
- * The HN the server will mint: YY + branch code + MM + a running number that
- * restarts each month per branch. Shown as a preview only — registration takes
- * the real one from the API response.
- */
-export function previewHN(branchCode: string, sequence: number): string {
-  const now = new Date();
-  const year = String(now.getFullYear() % 100).padStart(2, "0");
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${year}${branchCode}${month}${String(sequence).padStart(4, "0")}`;
 }
 
 // ----------------------------------------------------------------- master data
