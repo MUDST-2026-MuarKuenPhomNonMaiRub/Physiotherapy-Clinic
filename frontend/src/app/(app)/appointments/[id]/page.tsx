@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getPatientFullNameTh } from "@/lib/domain";
+import { getPatientFullNameTh, today } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -94,6 +94,11 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
 
   async function doReschedule() {
     if (!newDate || !newStart || !service) return;
+    // The API refuses a booking behind today; saying so here saves the trip.
+    if (newDate < today()) {
+      toast.error("An appointment cannot be booked in the past");
+      return;
+    }
     const [h, m] = newStart.split(":").map(Number);
     const endMin = h * 60 + m + service.duration;
     const newEnd = `${String(Math.floor(endMin / 60) % 24).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
@@ -294,7 +299,7 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>New Date</Label>
-              <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
+              <Input type="date" min={today()} value={newDate} onChange={(e) => setNewDate(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>New Start Time</Label>

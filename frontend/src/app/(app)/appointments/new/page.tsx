@@ -5,8 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Search, X } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh, searchPatients, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
+import { PageLoading } from "@/components/shared/page-loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,6 +71,9 @@ function NewAppointmentContent() {
     const e: Record<string, string> = {};
     if (!patientId) e.patientId = "Select a patient";
     if (!date) e.date = "Required";
+    // A visit that has already happened is recorded by moving an existing
+    // appointment through its statuses, not by booking one behind today.
+    else if (date < today()) e.date = "An appointment cannot be booked in the past";
     if (!branchId) e.branchId = "Required";
     if (!physioId) e.physioId = "Required";
     if (!serviceId) e.serviceId = "Required";
@@ -159,7 +163,7 @@ function NewAppointmentContent() {
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label>Date</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                <Input type="date" min={today()} value={date} onChange={(e) => setDate(e.target.value)} />
                 {fieldErrors.date && <p className="text-xs text-destructive">{fieldErrors.date}</p>}
               </div>
               <div className="space-y-1.5">
@@ -240,7 +244,7 @@ function NewAppointmentContent() {
 
 export default function NewAppointmentPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<PageLoading />}>
       <NewAppointmentContent />
     </Suspense>
   );

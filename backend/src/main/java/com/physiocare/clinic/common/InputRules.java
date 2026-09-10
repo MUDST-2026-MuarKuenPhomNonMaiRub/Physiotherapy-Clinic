@@ -2,6 +2,7 @@ package com.physiocare.clinic.common;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
@@ -24,7 +25,6 @@ public final class InputRules {
   /** A course covering more than a year of daily visits is a mistake. */
   public static final int MAX_SESSIONS = 365;
 
-  private static final int MAX_PAST_YEARS = 1;
   private static final int MAX_FUTURE_YEARS = 2;
 
   public static void require(boolean condition, String message) {
@@ -95,15 +95,32 @@ public final class InputRules {
         value.trim().matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+"), "That email address is not valid");
   }
 
-  /** Keeps a booking inside the window a clinic could plausibly be working in. */
-  public static void bookingWindow(LocalDate startDate) {
-    LocalDate today = LocalDate.now();
-    require(
-        !startDate.isBefore(today.minusYears(MAX_PAST_YEARS)),
-        "That date is too far in the past to book");
+  /**
+   * A booking is made for a day that has not gone yet, and near enough to be a
+   * real appointment rather than a mistyped year.
+   *
+   * <p>"Today" is read in the offset the caller sent, not the server's own: the
+   * container runs on UTC while the clinic works several hours ahead, so the
+   * server's date is the wrong one to measure a booking against.
+   */
+  public static void bookingWindow(OffsetDateTime startsAt) {
+    LocalDate startDate = startsAt.toLocalDate();
+    LocalDate today = LocalDate.now(startsAt.getOffset());
+    require(!startDate.isBefore(today), "An appointment cannot be booked in the past");
     require(
         !startDate.isAfter(today.plusYears(MAX_FUTURE_YEARS)),
         "That date is too far in the future to book");
+  }
+
+  /**
+   * A Thai patient's name is recorded in Thai script. Only applied to a patient
+   * registered as Thai — a foreigner's record carries their English name in the
+   * same column, so the rule cannot be hung on the column itself.
+   */
+  public static void thaiText(String value, String label) {
+    require(!isBlank(value), label + " is required");
+    require(
+        value.trim().matches("[\\u0E00-\\u0E7F\\s]+"), label + " must be written in Thai");
   }
 
   public static void text(String value, int max, String label) {

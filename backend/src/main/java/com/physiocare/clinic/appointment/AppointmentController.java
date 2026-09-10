@@ -283,8 +283,9 @@ public class AppointmentController {
   }
 
   /**
-   * A slot has to run forwards, fit inside a working day, and sit near enough
-   * to today to be a real booking rather than a mistyped year.
+   * A slot has to run forwards, fit inside a working day, and fall on a day
+   * that has not gone yet — a visit already past is recorded by moving the
+   * appointment through its statuses, not by booking a new one behind today.
    */
   private void validateSlot(OffsetDateTime startsAt, OffsetDateTime endsAt) {
     InputRules.require(
@@ -295,7 +296,7 @@ public class AppointmentController {
         "An appointment cannot run longer than "
             + (InputRules.MAX_DURATION_MINUTES / 60)
             + " hours");
-    InputRules.bookingWindow(startsAt.toLocalDate());
+    InputRules.bookingWindow(startsAt);
   }
 
   private boolean isAllowedTransition(String from, String to) {
