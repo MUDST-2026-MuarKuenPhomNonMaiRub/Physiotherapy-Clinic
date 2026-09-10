@@ -8,7 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getMasterDataByCategory, fieldRules } from "@/lib/domain";
+import { getMasterDataByCategory, fieldRules, fieldInput } from "@/lib/domain";
 import type { CustomerType, Gender } from "@/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { Forbidden } from "@/components/shared/forbidden";
@@ -152,6 +152,14 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
     }
   }
 
+  // Shown while typing once the box has something in it; the submit-time errors
+  // still cover the case where it was left empty.
+  const phoneError = errors.phone ?? (form.phone ? fieldRules.phone(form.phone) : null);
+  const nationalIdError =
+    errors.nationalId ?? (form.nationalId ? fieldRules.nationalId(form.nationalId) : null);
+  const passportError =
+    errors.passport ?? (form.passport ? fieldRules.passport(form.passport) : null);
+
   return (
     <>
       <Link href={`/patients/${patient.id}`} className="mb-3 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
@@ -283,13 +291,17 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
                   onChange={(e) => update("nationalId", e.target.value.replace(/\D/g, ""))}
                   placeholder="13-digit number"
                 />
-                {errors.nationalId && <p className="text-xs text-destructive">{errors.nationalId}</p>}
+                {nationalIdError && <p className="text-xs text-destructive">{nationalIdError}</p>}
               </div>
             ) : (
               <div className="space-y-1.5">
                 <Label>Passport Number <span className="text-destructive">*</span></Label>
-                <Input value={form.passport} onChange={(e) => update("passport", e.target.value)} autoComplete="off" />
-                {errors.passport && <p className="text-xs text-destructive">{errors.passport}</p>}
+                <Input
+                  value={form.passport}
+                  onChange={(e) => update("passport", fieldInput.passport(e.target.value))}
+                  autoComplete="off"
+                />
+                {passportError && <p className="text-xs text-destructive">{passportError}</p>}
               </div>
             )}
           </CardContent>
@@ -307,10 +319,10 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
                 inputMode="tel"
                 autoComplete="tel"
                 value={form.phone}
-                onChange={(e) => update("phone", e.target.value)}
+                onChange={(e) => update("phone", fieldInput.phone(e.target.value))}
                 placeholder="08X-XXX-XXXX"
               />
-              {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
+              {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Address</Label>

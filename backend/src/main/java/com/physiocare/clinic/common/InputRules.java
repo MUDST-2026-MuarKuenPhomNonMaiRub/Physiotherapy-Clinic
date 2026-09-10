@@ -72,13 +72,18 @@ public final class InputRules {
         "A passport number is 5 to 20 letters or digits");
   }
 
-  /** Digits plus the punctuation people write phone numbers with. */
+  /**
+   * Digits plus the punctuation people write phone numbers with. The character
+   * and length checks are separate so a number that is merely short is not told
+   * off for characters it does not contain.
+   */
   public static void phone(String value) {
     require(!isBlank(value), "A phone number is required");
     String trimmed = value.trim();
     require(
-        trimmed.matches("[0-9+\\-() ]{6,25}"),
+        trimmed.matches("[0-9+\\-() ]+"),
         "A phone number can only contain digits and + - ( ) spaces");
+    require(trimmed.length() <= 25, "That is too long for a phone number");
     require(
         trimmed.replaceAll("[^0-9]", "").length() >= 6,
         "That phone number does not have enough digits");
