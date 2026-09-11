@@ -73,6 +73,13 @@ export default function DashboardPage() {
     .filter((branch) => branchFilter === "ALL" ? isAccessible(branch.id) : branch.id === branchFilter)
     .map((branch) => ({ name: branch.name, count: periodPatients.filter((p) => p.registrationBranchId === branch.id).length }))
     .filter((branch) => branch.count > 0);
+  const branchSales = branches
+    .filter((branch) => branchFilter === "ALL" ? isAccessible(branch.id) : branch.id === branchFilter)
+    .map((branch) => ({
+      name: branch.name,
+      sales: periodTransactions.filter((t) => t.branchId === branch.id).reduce((sum, t) => sum + t.total, 0),
+    }))
+    .filter((branch) => branch.sales > 0);
 
   return (
     <>
@@ -111,6 +118,24 @@ export default function DashboardPage() {
             <Line name={comparisonYear} type="monotone" dataKey="comparison" stroke="var(--chart-2)" strokeWidth={2.5} dot={{ r: 3 }} />
           </LineChart>
         </ResponsiveContainer>
+      </div>
+
+      <div className="mb-5 rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Sales by branch</h2>
+        <p className="mb-3 text-xs text-muted-foreground">Revenue from completed checkouts in the selected period</p>
+        {branchSales.length ? (
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={branchSales} margin={{ left: 0, right: 12 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 11 }} width={64} />
+              <Tooltip formatter={(value) => formatCurrency(Number(value))} />
+              <Bar dataKey="sales" name="Sales" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="py-16 text-center text-sm text-muted-foreground">No sales data for this period</p>
+        )}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">

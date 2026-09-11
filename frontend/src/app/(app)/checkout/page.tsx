@@ -83,7 +83,9 @@ function CheckoutContent() {
 
   const [patientId, setPatientId] = useState(preselectPatientId ?? "");
   const [patientQuery, setPatientQuery] = useState("");
-  const [branchId] = useState(activeBranchId ?? branches[0]?.id ?? "");
+  // Always follow the branch selected in the app header so a checkout opened
+  // before switching branches is still recorded against the current branch.
+  const branchId = activeBranchId ?? branches[0]?.id ?? "";
   const [mode, setMode] = useState<Mode>("SINGLE");
   const [serviceId, setServiceId] = useState(linkedAppointment?.serviceId ?? "");
   const [subMode, setSubMode] = useState<CourseSubMode>("USE_EXISTING");
