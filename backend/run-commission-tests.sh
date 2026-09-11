@@ -37,7 +37,7 @@ done
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
-mvn test \
+./mvnw test \
   -Dtest="${1:-com.physiocare.clinic.commission.CommissionFlowTest}" \
   -Dit.db.url="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}" \
   -Dit.db.username="$DB_USER" \
