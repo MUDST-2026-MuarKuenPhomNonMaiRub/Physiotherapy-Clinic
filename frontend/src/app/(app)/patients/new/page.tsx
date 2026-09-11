@@ -104,10 +104,7 @@ export default function NewPatientPage() {
   const [hnPreview, setHnPreview] = useState<string | null>(null);
   useEffect(() => {
     const branchId = form.registrationBranchId;
-    if (!branchId) {
-      setHnPreview(null);
-      return;
-    }
+    if (!branchId) return;
     let current = true;
     previewPatientHN(branchId)
       .then((hn) => {
@@ -438,7 +435,7 @@ export default function NewPatientPage() {
               </Select>
               {errors.registrationBranchId && <p className="text-xs text-destructive">{errors.registrationBranchId}</p>}
             </div>
-            {hnPreview && (
+            {form.registrationBranchId && hnPreview && (
               <div className="flex items-center gap-3 rounded-lg bg-primary/5 px-3 py-2 sm:col-span-2 lg:col-span-4">
                 <span className="text-xs font-medium text-muted-foreground">HN Preview</span>
                 <span className="font-mono text-sm font-semibold tracking-wider text-primary">{hnPreview}</span>
