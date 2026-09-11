@@ -34,6 +34,14 @@ import { toast } from "sonner";
 const emptyServiceForm = { name: "", type: "SINGLE_VISIT" as ServiceType, price: 0, duration: 60, code: "" };
 const emptyCourseForm = { code: "", name: "", description: "", price: 0, sessions: 10, bonusSessions: 0, expiryDays: 180 };
 
+function formatDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes} min`;
+  if (remainingMinutes === 0) return `${hours} hr`;
+  return `${hours} hr ${remainingMinutes} min`;
+}
+
 export default function ServicesSettingsPage() {
   const services = useClinicStore((s) => s.services);
   const courseTemplates = useClinicStore((s) => s.courseTemplates);
@@ -61,6 +69,8 @@ export default function ServicesSettingsPage() {
       ? "A service name is required"
       : !Number.isFinite(serviceForm.price) || serviceForm.price <= 0
         ? "The price must be more than 0"
+        : !Number.isInteger(serviceForm.duration) || serviceForm.duration <= 0
+          ? "The duration must be more than 0 minutes"
         : serviceForm.code.trim() && !/^[A-Z0-9_-]+$/.test(serviceForm.code.trim())
           ? "Item code may contain only letters, numbers, hyphens and underscores"
           : null;
@@ -145,6 +155,7 @@ export default function ServicesSettingsPage() {
                     <TableHead>Code</TableHead>
                     <TableHead>Service Name</TableHead>
                     <TableHead>Type</TableHead>
+                    <TableHead>Duration</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -166,6 +177,7 @@ export default function ServicesSettingsPage() {
                           {s.type === "ASSESSMENT" ? "Assessment" : "Single Visit"}
                         </span>
                       </TableCell>
+                      <TableCell className="text-muted-foreground">{formatDuration(s.duration)}</TableCell>
                       <TableCell>
                         <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 font-mono text-sm font-semibold text-foreground">
                           {formatCurrency(s.price)}
@@ -271,7 +283,19 @@ export default function ServicesSettingsPage() {
             <div className="space-y-1.5">
               <Label>Price (THB)</Label>
               <Input type="number" min={0.01} step="0.01" value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: Number(e.target.value) }))} />
-              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Duration (minutes)</Label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                value={serviceForm.duration}
+                onChange={(e) => setServiceForm((f) => ({ ...f, duration: Number(e.target.value) }))}
+                aria-label="Duration in minutes"
+              />
+              <p className="text-xs text-muted-foreground">Used to calculate the appointment end time and calendar block.</p>
+            </div>
           </div>
           <DialogFooter className="items-center gap-2 sm:justify-between">
             {serviceProblem ? <p className="text-xs text-destructive sm:mr-auto">{serviceProblem}</p> : <span className="sm:mr-auto" />}
