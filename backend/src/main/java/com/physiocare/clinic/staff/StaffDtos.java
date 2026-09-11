@@ -10,18 +10,13 @@ public final class StaffDtos {
       String nameEn,
       @NotBlank String position,
       String phone,
-      @NotBlank @Email String email,
+      @Email String email,
       @NotBlank String branchIds,
-      @NotBlank String role,
-      // A staff record always carries a login, so it is held to the same
-      // password policy as an account created directly.
-      @NotBlank
-          @Size(min = 12, max = 72)
-          @Pattern(
-              regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z\\d]).+$",
-              message = "Password must contain upper, lower, number and special character")
-          String password,
-      String avatarColor) {}
+      String role,
+      String password,
+      String avatarColor,
+      /** Salespeople may be created as commission-only records without a login. */
+      Boolean hasAccount) {}
 
   public record UpdateRequest(
       @NotBlank String name,

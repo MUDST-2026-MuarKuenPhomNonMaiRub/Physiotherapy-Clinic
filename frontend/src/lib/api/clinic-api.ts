@@ -161,7 +161,7 @@ export const listStaff = () =>
 
 export const createStaff = (
   staff: Omit<Staff, "id">,
-  account: { role: Role; password: string }
+  account: { role: Role; password: string } | null
 ) =>
   apiRequest<{ staffId: number; userId: number | null }>("/api/v1/staff", {
     method: "POST",
@@ -170,11 +170,12 @@ export const createStaff = (
       nameEn: staff.nameEn || "Staff",
       position: staff.position,
       phone: staff.phone,
-      email: staff.email,
+      email: account ? staff.email : null,
       branchIds: toBranchIdsJson(staff.branchIds),
-      role: toRoleCode(account.role),
-      password: account.password,
+      role: account ? toRoleCode(account.role) : null,
+      password: account?.password ?? null,
       avatarColor: staff.avatarColor,
+      hasAccount: !!account,
     },
   });
 

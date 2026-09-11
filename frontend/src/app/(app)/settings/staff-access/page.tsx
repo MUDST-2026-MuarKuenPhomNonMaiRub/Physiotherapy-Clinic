@@ -279,7 +279,7 @@ export default function StaffAccessPage() {
             status: "ACTIVE",
             avatarColor: avatarColors[staff.length % avatarColors.length],
           },
-          { role: form.role, password: form.password }
+          form.hasAccount ? { role: form.role, password: form.password } : null
         );
         toast.success(`${profile.name} added`);
       }

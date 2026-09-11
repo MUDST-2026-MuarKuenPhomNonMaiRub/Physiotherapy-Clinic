@@ -113,7 +113,7 @@ interface ClinicState {
   toggleBranchStatus: (id: string) => Promise<void>;
 
   // admin: staff
-  addStaff: (data: Omit<Staff, "id">, account: { role: Role; password: string }) => Promise<void>;
+  addStaff: (data: Omit<Staff, "id">, account: { role: Role; password: string } | null) => Promise<void>;
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
   toggleStaffStatus: (id: string) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;

@@ -132,7 +132,9 @@ function CheckoutContent() {
   const branchSales = staff.filter((s) => s.status === "ACTIVE" && s.branchIds.includes(branchId));
 
   const selectedService: Service | undefined = services.find((s) => s.id === serviceId);
-  const selectedUseCourse = patientCourses.find((pc) => pc.id === useCourseId);
+  // Only resolve a course from the active list for the currently selected
+  // patient. This prevents a stale course id surviving a patient switch.
+  const selectedUseCourse = activeCourses.find((pc) => pc.id === useCourseId);
   const selectedUseCourseTemplate = selectedUseCourse ? courseTemplates.find((c) => c.id === selectedUseCourse.courseId) : undefined;
   const selectedPurchaseTemplate = courseTemplates.find((c) => c.id === purchaseTemplateId);
 
@@ -226,6 +228,16 @@ function CheckoutContent() {
     (!needsSalesperson || !!salespersonId) &&
     !overDiscounted &&
     !cashIsShort;
+
+  const shouldOpenQr = isQrPayment && total > 0;
+
+  function selectPatient(nextPatientId: string) {
+    setPatientId(nextPatientId);
+    setUseCourseId("");
+    setUseQty(1);
+    setAppointmentId(undefined);
+    setPatientQuery("");
+  }
 
   async function handleConfirm() {
     if (!canConfirm || !user || submitting) return;
@@ -352,7 +364,7 @@ function CheckoutContent() {
                   {patientMatches.map((p) => (
                     <button
                       key={p.id}
-                      onClick={() => { setPatientId(p.id); setAppointmentId(undefined); setPatientQuery(""); }}
+                      onClick={() => selectPatient(p.id)}
                       className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
                     >
                       <span className="font-medium">{getPatientFullNameTh(p)}</span>
@@ -379,7 +391,7 @@ function CheckoutContent() {
                           <button
                             key={a.id}
                             onClick={() => {
-                              setPatientId(p.id);
+                              selectPatient(p.id);
                               setAppointmentId(a.id);
                               setMode("SINGLE");
                               setServiceId(a.serviceId);
@@ -433,7 +445,7 @@ function CheckoutContent() {
                 {linkedAppointment && <p className="mt-1 text-xs text-muted-foreground">Linked visit: {formatDate(linkedAppointment.date)} {linkedAppointment.startTime}</p>}
               </div>
               {!preselectPatientId && (
-                <Button variant="ghost" size="icon" onClick={() => { setPatientId(""); setAppointmentId(undefined); }}><X className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => { selectPatient(""); setAppointmentId(undefined); }}><X className="h-4 w-4" /></Button>
               )}
             </div>
 
@@ -853,9 +865,14 @@ function CheckoutContent() {
                 </div>
               )}
 
-              <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={() => { if (isQrPayment) setQrOpen(true); else void handleConfirm(); }}>
-                {isQrPayment && <QrCode className="h-4 w-4" />}
-                Confirm Payment
+              {total === 0 && mode === "COURSE" && subMode === "USE_EXISTING" && (
+                <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+                  การใช้คอร์สเดิมไม่มีค่าใช้จ่าย จึงไม่ต้องเปิด QR
+                </p>
+              )}
+              <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={() => { if (shouldOpenQr) setQrOpen(true); else void handleConfirm(); }}>
+                {shouldOpenQr && <QrCode className="h-4 w-4" />}
+                {total === 0 ? "Complete Course Usage" : "Confirm Payment"}
               </Button>
             </div>
           </div>

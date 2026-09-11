@@ -21,7 +21,7 @@ public class Staff {
   @Column(nullable = false, length = 50)
   private String phone;
 
-  @Column(nullable = false, length = 255)
+  @Column(length = 255)
   private String email;
 
   @Column(name = "branch_ids", nullable = false, columnDefinition = "TEXT")
@@ -33,7 +33,7 @@ public class Staff {
   @Column(name = "avatar_color", nullable = false, length = 100)
   private String avatarColor;
 
-  @Column(name = "user_id", nullable = false, unique = true)
+  @Column(name = "user_id", unique = true)
   private Long userId;
 
   @Column(name = "deleted_at")
