@@ -430,6 +430,20 @@ public class CheckoutService {
             bonus,
             branchId,
             validityDays == null ? null : today.plusDays(validityDays));
+    // Keep the per-patient balance in sync with every newly purchased course.
+    // Checkout usage validates and decrements this row, including for shared
+    // courses, so creating only patient_courses is not sufficient.
+    db.update(
+        "INSERT INTO shared_course_members(patient_course_id,patient_id,role)"
+            + " VALUES(?,?,'OWNER') ON CONFLICT (patient_course_id,patient_id) DO NOTHING",
+        id,
+        patientId);
+    db.update(
+        "INSERT INTO course_member_balances(patient_course_id,patient_id,allocated_visits,used_visits)"
+            + " VALUES(?,?,?,0) ON CONFLICT (patient_course_id,patient_id) DO NOTHING",
+        id,
+        patientId,
+        sessions + bonus);
     return id;
   }
 
