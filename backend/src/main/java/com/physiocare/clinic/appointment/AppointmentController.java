@@ -3,6 +3,7 @@ package com.physiocare.clinic.appointment;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.common.InputRules;
+import com.physiocare.clinic.commission.CourseUsageService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
@@ -22,12 +23,17 @@ public class AppointmentController {
   private final JdbcTemplate db;
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
+  private final CourseUsageService courseUsage;
 
   public AppointmentController(
-      JdbcTemplate db, BranchAccessService branches, CurrentUser currentUser) {
+      JdbcTemplate db,
+      BranchAccessService branches,
+      CurrentUser currentUser,
+      CourseUsageService courseUsage) {
     this.db = db;
     this.branches = branches;
     this.currentUser = currentUser;
+    this.courseUsage = courseUsage;
   }
 
   /** Statuses that still hold the slot, so a second booking must not overlap them. */
@@ -240,7 +246,41 @@ public class AppointmentController {
               + " appointments WHERE id=? ON CONFLICT(appointment_id) DO UPDATE SET"
               + " status='COMPLETED',completed_at=now()",
           id);
+      recordAppointmentCourseUsage(id, authentication);
     }
+  }
+
+  /**
+   * Completing an appointment is the operational Visit event. If the patient
+   * has an active course balance, consume one session and let the commission
+   * pipeline allocate it. Patients without a course remain ordinary single
+   * visits and create no course commission.
+   */
+  private void recordAppointmentCourseUsage(long appointmentId, Authentication authentication) {
+    Map<String, Object> appointment =
+        db.queryForMap(
+            "SELECT patient_id,branch_id,provider_staff_id FROM appointments WHERE id=?",
+            appointmentId);
+    List<Long> courseIds =
+        db.queryForList(
+            "SELECT cmb.patient_course_id FROM course_member_balances cmb JOIN patient_courses pc"
+                + " ON pc.id=cmb.patient_course_id WHERE cmb.patient_id=? AND pc.status='ACTIVE'"
+                + " AND cmb.allocated_visits>cmb.used_visits AND (pc.valid_until IS NULL OR"
+                + " pc.valid_until>=CURRENT_DATE) ORDER BY pc.valid_until NULLS LAST, pc.sale_date, pc.id"
+                + " LIMIT 1",
+            Long.class,
+            appointment.get("patient_id"));
+    if (courseIds.isEmpty()) return;
+    courseUsage.recordAppointmentUsage(
+        courseIds.get(0),
+        ((Number) appointment.get("patient_id")).longValue(),
+        1,
+        ((Number) appointment.get("branch_id")).longValue(),
+        appointmentId,
+        ((Number) appointment.get("provider_staff_id")).longValue(),
+        currentUser.displayName(authentication),
+        currentUser.id(authentication),
+        LocalDate.now());
   }
 
   /**

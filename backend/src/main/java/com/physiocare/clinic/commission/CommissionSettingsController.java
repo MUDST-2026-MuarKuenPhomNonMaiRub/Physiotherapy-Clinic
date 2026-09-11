@@ -2,10 +2,12 @@ package com.physiocare.clinic.commission;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
+import com.physiocare.clinic.common.CurrentUser;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -15,16 +17,21 @@ import org.springframework.web.bind.annotation.*;
 @PreAuthorize("hasRole('ADMIN')")
 public class CommissionSettingsController {
   private final JdbcTemplate db;
+  private final CommissionAuditService audit;
+  private final CurrentUser currentUser;
 
-  public CommissionSettingsController(JdbcTemplate db) {
+  public CommissionSettingsController(
+      JdbcTemplate db, CommissionAuditService audit, CurrentUser currentUser) {
     this.db = db;
+    this.audit = audit;
+    this.currentUser = currentUser;
   }
 
   public record Tier(
       @Positive int order,
       @NotNull @DecimalMin("0") BigDecimal min,
       BigDecimal max,
-      @NotNull @DecimalMin("0") BigDecimal rate) {}
+      @NotNull @DecimalMin("0") @DecimalMax("1") BigDecimal rate) {}
 
   public record Scheme(
       @NotBlank String code,
@@ -43,17 +50,21 @@ public class CommissionSettingsController {
 
   @PostMapping
   @Transactional
-  public Object create(@Valid @RequestBody Scheme r) {
+  public Object create(@Valid @RequestBody Scheme r, Authentication authentication) {
     List<Tier> tiers = new ArrayList<>(r.tiers());
     tiers.sort(Comparator.comparing(Tier::min));
     for (int i = 0; i < tiers.size(); i++) {
       Tier a = tiers.get(i);
       if (a.max() != null && a.max().compareTo(a.min()) < 0)
         throw new IllegalArgumentException("Tier maximum must be >= minimum");
+      if (a.max() == null && i < tiers.size() - 1)
+        throw new IllegalArgumentException("An unlimited tier must be the final tier");
       if (i > 0) {
         Tier p = tiers.get(i - 1);
         if (p.max() == null || p.max().add(BigDecimal.valueOf(.01)).compareTo(a.min()) > 0)
           throw new IllegalArgumentException("Tier ranges overlap or are invalid");
+        if (p.max().add(BigDecimal.valueOf(.01)).compareTo(a.min()) != 0)
+          throw new IllegalArgumentException("Tier ranges contain an unintended gap");
       }
     }
     Integer version =
@@ -80,6 +91,15 @@ public class CommissionSettingsController {
           t.min(),
           t.max(),
           t.rate());
+    audit.record(
+        currentUser.id(authentication),
+        null,
+        "COMMISSION_SCHEME_CREATED",
+        "commission_schemes",
+        String.valueOf(id),
+        null,
+        Map.of("code", r.code(), "version", version, "effectiveFrom", r.effectiveFrom(), "tiers", tiers),
+        "New commission scheme version");
     return Map.of("id", id, "code", r.code(), "version", version);
   }
 }

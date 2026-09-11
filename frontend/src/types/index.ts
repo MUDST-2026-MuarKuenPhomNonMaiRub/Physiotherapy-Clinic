@@ -56,6 +56,20 @@ export interface Staff {
   commissionAfterTerminationPolicy?: string;
 }
 
+export interface CommissionAuditLog {
+  id: string;
+  occurredAt: string;
+  actorUserId?: string;
+  branchId?: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  beforeData?: unknown;
+  afterData?: unknown;
+  reason?: string;
+  requestId?: string;
+}
+
 export interface AppUser {
   id: string;
   username: string;

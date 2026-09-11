@@ -91,7 +91,7 @@ public class CommissionAllocationService {
     Optional<TreatmentFeeResolver.Resolution> resolution =
         treatingId == ownerId
             ? Optional.empty()
-            : feeResolver.resolve(treatingId, ownerId, null, visitDate);
+            : feeResolver.resolve(treatingId, ownerId, serviceIdForUsage(usage), visitDate);
     if (resolution.isPresent()) {
       TreatmentFeeResolver.Resolution rule = resolution.get();
       ruleId = rule.ruleId();
@@ -191,5 +191,18 @@ public class CommissionAllocationService {
         .stream()
         .findFirst()
         .orElse("CAP_AT_COMMISSION");
+  }
+
+  private Long serviceIdForUsage(Map<String, Object> usage) {
+    Object visitId = usage.get("visit_id");
+    if (visitId == null) return null;
+    return db.queryForList(
+            "SELECT a.service_id FROM visits v JOIN appointments a ON a.id=v.appointment_id"
+                + " WHERE v.id=?",
+            Long.class,
+            ((Number) visitId).longValue())
+        .stream()
+        .findFirst()
+        .orElse(null);
   }
 }

@@ -35,6 +35,7 @@ import type {
   Branch,
   ClosingHistoryRow,
   ClosingPreviewRow,
+  CommissionAuditLog,
   CommissionRule,
   CommissionScheme,
   CourseCommissionReportRow,
@@ -434,6 +435,23 @@ export const getCourseCommissionReport = (from: string, to: string, staffId?: st
 export const getCourseCommissionDetail = (patientCourseId: string) =>
   apiRequest<Record<string, unknown>>(`/api/v1/commission/courses/${patientCourseId}/detail`);
 
+export const listCommissionAudit = (): Promise<CommissionAuditLog[]> =>
+  apiRequest<Row[]>("/api/v1/commission/audit").then((rows) =>
+    rows.map((row) => ({
+      id: String(row.id),
+      occurredAt: String(row.occurred_at),
+      actorUserId: row.actor_user_id == null ? undefined : String(row.actor_user_id),
+      branchId: row.branch_id == null ? undefined : String(row.branch_id),
+      action: String(row.action),
+      entityType: String(row.entity_type),
+      entityId: String(row.entity_id),
+      beforeData: row.before_data,
+      afterData: row.after_data,
+      reason: row.reason == null ? undefined : String(row.reason),
+      requestId: row.request_id == null ? undefined : String(row.request_id),
+    }))
+  );
+
 export const listSharedCourseMembers = (patientCourseId: string): Promise<SharedCourseMember[]> =>
   apiRequest<Row[]>(`/api/v1/commission/courses/${patientCourseId}/members`).then((rows) =>
     rows.map(toSharedCourseMember)
@@ -471,6 +489,22 @@ export const createTreatmentFeeRule = (rule: {
 }) =>
   apiRequest<Row>("/api/v1/treatment-fee-rules", {
     method: "POST",
+    body: {
+      employeeId: rule.employeeId ? Number(rule.employeeId) : null,
+      employeeGroup: rule.employeeGroup || null,
+      serviceId: rule.serviceId ? Number(rule.serviceId) : null,
+      feeType: rule.feeType,
+      feeValue: rule.feeValue,
+      percentageBase: rule.percentageBase || null,
+      effectiveFrom: rule.effectiveFrom,
+      effectiveTo: rule.effectiveTo || null,
+      active: true,
+    },
+  }).then(toTreatmentFeeRule);
+
+export const updateTreatmentFeeRule = (id: string, rule: Parameters<typeof createTreatmentFeeRule>[0]) =>
+  apiRequest<Row>(`/api/v1/treatment-fee-rules/${id}`, {
+    method: "PATCH",
     body: {
       employeeId: rule.employeeId ? Number(rule.employeeId) : null,
       employeeGroup: rule.employeeGroup || null,

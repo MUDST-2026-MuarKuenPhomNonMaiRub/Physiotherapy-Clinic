@@ -58,8 +58,43 @@ public class CourseUsageService {
       String performedByName,
       Long performedByUserId,
       LocalDate usageDate) {
+    return recordUsage(
+        patientCourseId, patientId, quantity, branchId, transactionId, null, treatingStaffId,
+        performedByName, performedByUserId, usageDate);
+  }
+
+  /** Records one session produced by completing an appointment. */
+  @Transactional
+  public long recordAppointmentUsage(
+      long patientCourseId,
+      long patientId,
+      int quantity,
+      long branchId,
+      long appointmentId,
+      Long treatingStaffId,
+      String performedByName,
+      Long performedByUserId,
+      LocalDate usageDate) {
+    return recordUsage(
+        patientCourseId, patientId, quantity, branchId, null, appointmentId, treatingStaffId,
+        performedByName, performedByUserId, usageDate);
+  }
+
+  private long recordUsage(
+      long patientCourseId,
+      long patientId,
+      int quantity,
+      long branchId,
+      Long transactionId,
+      Long appointmentId,
+      Long treatingStaffId,
+      String performedByName,
+      Long performedByUserId,
+      LocalDate usageDate) {
     String idempotencyKey =
-        transactionId == null ? null : "checkout:" + transactionId + ":course:" + patientCourseId;
+        transactionId != null
+            ? "checkout:" + transactionId + ":course:" + patientCourseId
+            : appointmentId == null ? null : "appointment:" + appointmentId + ":course:" + patientCourseId;
     if (idempotencyKey != null) {
       List<Long> existing =
           db.queryForList("SELECT id FROM course_usages WHERE idempotency_key=?", Long.class, idempotencyKey);
@@ -121,7 +156,7 @@ public class CourseUsageService {
             : ((Number) course.get("case_owner_employee_id")).longValue();
     long ownerId = caseOwnerId != null ? caseOwnerId : ((Number) course.get("patient_id")).longValue();
     long treatingId = treatingStaffId != null ? treatingStaffId : ownerId;
-    Long visitId = resolveVisitIdForTransaction(transactionId);
+    Long visitId = resolveVisitId(transactionId, appointmentId);
 
     String commissionStatus = (String) course.get("commission_status");
     boolean everAllocatable = "PROVISIONAL".equals(commissionStatus) || "LOCKED".equals(commissionStatus);
@@ -169,13 +204,17 @@ public class CourseUsageService {
    * server's own appointment/visit history can be trusted for who actually
    * treated the patient.
    */
-  private Long resolveVisitIdForTransaction(Long transactionId) {
-    if (transactionId == null) return null;
+  private Long resolveVisitId(Long transactionId, Long appointmentId) {
+    if (transactionId == null && appointmentId == null) return null;
     List<Long> ids =
         db.queryForList(
-            "SELECT v.id FROM visits v JOIN sales_transactions st ON st.appointment_id=v.appointment_id"
-                + " WHERE st.id=?",
+            "SELECT v.id FROM visits v WHERE (?::bigint IS NOT NULL AND v.appointment_id=?) OR"
+                + " (?::bigint IS NOT NULL AND v.appointment_id=(SELECT appointment_id FROM"
+                + " sales_transactions WHERE id=?))",
             Long.class,
+            appointmentId,
+            appointmentId,
+            transactionId,
             transactionId);
     return ids.isEmpty() ? null : ids.get(0);
   }

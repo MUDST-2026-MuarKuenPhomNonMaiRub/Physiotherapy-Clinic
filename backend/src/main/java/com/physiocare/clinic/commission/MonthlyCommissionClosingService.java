@@ -151,6 +151,22 @@ public class MonthlyCommissionClosingService {
             closingId);
     for (Long usageId : pendingUsages) allocationService.allocate(usageId);
 
+    audit.record(
+        actorUserId,
+        null,
+        "COMMISSION_MONTH_CLOSED",
+        "monthly_commission_closings",
+        String.valueOf(closingId),
+        Map.of("status", "OPEN"),
+        Map.of(
+            "status", "CLOSED",
+            "month", month.toString(),
+            "employeeId", employee,
+            "monthlyCourseSales", sales,
+            "lockedCommissionRate", rate,
+            "schemeVersion", schemeVersion),
+        "Monthly commission closing");
+
     return true;
   }
 

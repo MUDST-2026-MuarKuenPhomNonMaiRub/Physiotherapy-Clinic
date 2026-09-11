@@ -16,8 +16,8 @@
 |---|---|---:|---:|---:|---:|---|
 | `InputRulesTest` | กฎการตรวจสอบข้อมูลแบบ Unit Test | 19 | 0 | 0 | 0 | ผ่าน |
 | `RequestValidationTest` | ตรวจ request ของ Auth, Patient, Service, Course, Appointment และ Checkout | 7 | 0 | 0 | 0 | ผ่าน |
-| `CommissionFlowTest` | Flow คอมมิชชันกับ PostgreSQL ชั่วคราว | 21 | 0 | 0 | 0 | ผ่าน |
-| **รวม Automated Test** |  | **47** | **0** | **0** | **0** | **ผ่าน** |
+| `CommissionFlowTest` | Flow คอมมิชชันกับ PostgreSQL ชั่วคราว | 22 | 0 | 0 | 0 | ผ่าน |
+| **รวม Automated Test** |  | **48** | **0** | **0** | **0** | **ผ่าน** |
 
 ## บันทึก Test ที่ไม่ผ่าน
 
@@ -130,7 +130,7 @@ bash run-commission-tests.sh
 ผลที่ควรได้:
 
 ```text
-Tests run: 21, Failures: 0, Errors: 0, Skipped: 0
+Tests run: 22, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 
@@ -154,7 +154,7 @@ BUILD SUCCESS
 
 ## สรุปสำหรับนำเสนอ
 
-ระบบมี Automated Test ทั้งหมด **47 รายการ ผ่าน 47 รายการ ไม่ผ่าน 0 รายการ**
+ระบบมี Automated Test ทั้งหมด **48 รายการ ผ่าน 48 รายการ ไม่ผ่าน 0 รายการ**
 
 โดย Unit Test ใช้ตรวจฟังก์ชัน validation แยกเป็นส่วน ๆ และ Integration Test
 ใช้ตรวจการทำงานร่วมกันของระบบคอมมิชชันกับ PostgreSQL จริง

@@ -63,6 +63,34 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     assertThat((BigDecimal) allocation.get("gross_commission_allocation")).isEqualByComparingTo("210.00");
   }
 
+  @Test
+  void appointmentUsageLinksTheCompletedVisitAndAllocatesTheCourseCommission() {
+    long owner = seedStaff("Appointment PT");
+    long patient = seedPatient("Appointment Patient");
+    seedFlatScheme("T_APPOINTMENT", new BigDecimal("0.07"), null);
+    long course = seedCourse(owner, owner, patient, new BigDecimal("10000"), 10, LocalDate.of(2026, 8, 1));
+    closing.close(YearMonth.of(2026, 8), null);
+
+    long appointmentId = nextId();
+    long visitId = nextId();
+    long serviceId = db.queryForObject("SELECT id FROM services LIMIT 1", Long.class);
+    db.update(
+        "INSERT INTO appointments(id,appointment_no,patient_id,branch_id,provider_staff_id,service_id,"
+            + "starts_at,ends_at,status) VALUES(?,?,?,?,?,?,'2026-09-10 10:00:00+07','2026-09-10 10:30:00+07','COMPLETED')",
+        appointmentId, "AP-TEST-" + appointmentId, patient, 1L, owner, serviceId);
+    db.update(
+        "INSERT INTO visits(id,appointment_id,patient_id,branch_id,treating_staff_id,completed_at,status)"
+            + " VALUES(?,?,?,?,?,now(),'COMPLETED')",
+        visitId, appointmentId, patient, 1L, owner);
+
+    long usageId = courseUsage.recordAppointmentUsage(
+        course, patient, 1, 1L, appointmentId, owner, "Tester", null, LocalDate.of(2026, 9, 10));
+    Map<String, Object> allocation = db.queryForMap(
+        "SELECT * FROM commission_allocations WHERE course_usage_id=?", usageId);
+    assertThat(((Number) allocation.get("visit_id")).longValue()).isEqualTo(visitId);
+    assertThat((BigDecimal) allocation.get("gross_commission_allocation")).isEqualByComparingTo("70.00");
+  }
+
   // ---- Case 5: Course Usage Limit -------------------------------------------
   @Test
   void usageIsRefusedPastRemainingBalance() {

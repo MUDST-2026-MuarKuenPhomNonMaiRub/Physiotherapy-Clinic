@@ -155,13 +155,9 @@ public class CheckoutService {
           (String) service.get("name_th"), servicePrice, "BASE");
       subtotal = subtotal.add(servicePrice);
       type = "ASSESSMENT".equals(service.get("service_type")) ? "ASSESSMENT" : "SINGLE_VISIT";
-      BigDecimal base = servicePrice.multiply(discountRatio);
-      if (r.treatingStaffId() != null)
-        recordCommission(transactionId, "TREATMENT", "SERVICE", (Long) idOf(service),
-            r.treatingStaffId(), base, today);
-      if (r.salespersonId() != null)
-        recordCommission(transactionId, "SALES", "SERVICE", (Long) idOf(service),
-            r.salespersonId(), base, today);
+      // Single-visit checkout does not create course-pool commission and does
+      // not require a salesperson. Course commission is released only from a
+      // purchased course when its sessions are used.
     }
 
     // ---- course purchase --------------------------------------------------

@@ -16,8 +16,8 @@
 |---|---|---:|---:|---:|---:|---|
 | `InputRulesTest` | Unit validation rules | 19 | 0 | 0 | 0 | PASS |
 | `RequestValidationTest` | Request validation for auth, patients, catalogue, appointments and checkout | 7 | 0 | 0 | 0 | PASS |
-| `CommissionFlowTest` | Commission flow with throwaway PostgreSQL | 21 | 0 | 0 | 0 | PASS |
-| **Total automated** |  | **47** | **0** | **0** | **0** | **PASS** |
+| `CommissionFlowTest` | Commission flow with throwaway PostgreSQL | 22 | 0 | 0 | 0 | PASS |
+| **Total automated** |  | **48** | **0** | **0** | **0** | **PASS** |
 
 ## Failure log
 
@@ -117,7 +117,7 @@ bash run-commission-tests.sh
 Expected result:
 
 ```text
-Tests run: 21, Failures: 0, Errors: 0, Skipped: 0
+Tests run: 22, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 

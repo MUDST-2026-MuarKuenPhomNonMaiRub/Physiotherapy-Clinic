@@ -47,10 +47,11 @@ const courseCommissionItem: NavItem = {
   href: "/reports/course-commission",
   icon: "PiggyBank",
 };
+const commissionAuditItem: NavItem = { label: "Commission Audit", href: "/reports/commission-audit", icon: "FileSearch" };
 
 const adminReportGroup: NavGroup = {
   title: "Report",
-  items: [courseBalanceItem, staffSalesItem, commissionItem, courseCommissionItem],
+  items: [courseBalanceItem, staffSalesItem, commissionItem, courseCommissionItem, commissionAuditItem],
 };
 
 /**
