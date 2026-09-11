@@ -1,8 +1,12 @@
 package com.physiocare.clinic.commission;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.physiocare.clinic.checkout.CheckoutDtos;
+import com.physiocare.clinic.checkout.CheckoutService;
+import com.physiocare.clinic.checkout.CourseTransferController;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -10,6 +14,10 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.server.ResponseStatusException;
 
 /** Covers the PDF's acceptance criteria (section 29) against real PostgreSQL. */
@@ -21,6 +29,9 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
   @Autowired private CommissionAdjustmentService adjustments;
   @Autowired private SharedCourseService sharedCourse;
   @Autowired private TreatmentFeeResolver feeResolver;
+  @Autowired private CommissionQueryService commissionQueries;
+  @Autowired private CheckoutService checkout;
+  @Autowired private CourseTransferController transfers;
 
   private long use(long courseId, long patientId, int qty, LocalDate date, Long treatingId) {
     return courseUsage.recordCheckoutUsage(
@@ -418,6 +429,127 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     assertThat(second).isEqualTo(first);
     Integer visitsUsed = db.queryForObject("SELECT visits_used FROM patient_courses WHERE id=?", Integer.class, course);
     assertThat(visitsUsed).isEqualTo(1);
+  }
+
+  // ---- Checkout integration: a zero-price usage still completes -------------
+  @Test
+  void zeroPriceCourseUsageCompletesWithoutCreatingPayment() {
+    long owner = seedStaff("Checkout Owner");
+    long patient = seedPatient("Checkout Patient");
+    long course = seedCourse(owner, owner, patient, new BigDecimal("10000"), 10, LocalDate.of(2026, 8, 1));
+    long branch = activeBranchId();
+    long cash = db.queryForObject("SELECT id FROM payment_methods WHERE code='CASH'", Long.class);
+    long paymentsBefore = db.queryForObject("SELECT count(*) FROM payments", Long.class);
+
+    CheckoutDtos.TransactionView result =
+        checkout.checkout(
+            new CheckoutDtos.CheckoutRequest(
+                patient, branch, null, null, null, course, 1, false, owner, null, cash, null,
+                null, null, null, List.of()),
+            adminAuthentication());
+
+    assertThat(result.total()).isEqualByComparingTo("0.00");
+    assertThat(result.patientCourseId()).isEqualTo(course);
+    assertThat(db.queryForObject("SELECT count(*) FROM payments", Long.class))
+        .isEqualTo(paymentsBefore);
+    assertThat(db.queryForObject("SELECT visits_used FROM patient_courses WHERE id=?", Integer.class, course))
+        .isEqualTo(1);
+  }
+
+  // ---- Checkout integration: sale -> provisional pool -> monthly close ------
+  @Test
+  void coursePurchaseCreatesProvisionalPoolAndClosesWithFrozenRate() {
+    long seller = seedStaff("Course Seller");
+    long treating = seedStaff("Course Therapist");
+    long patient = seedPatient("Course Buyer");
+    long branch = activeBranchId();
+    seedFlatScheme("T_CHECKOUT_PURCHASE", new BigDecimal("0.07"), null);
+    long courseTemplate = db.queryForObject("SELECT id FROM courses LIMIT 1", Long.class);
+    BigDecimal price = db.queryForObject("SELECT price FROM courses WHERE id=?", BigDecimal.class, courseTemplate);
+    long cash = db.queryForObject("SELECT id FROM payment_methods WHERE code='CASH'", Long.class);
+
+    CheckoutDtos.TransactionView sale =
+        checkout.checkout(
+            new CheckoutDtos.CheckoutRequest(
+                patient, branch, null, null, courseTemplate, null, null, true, treating, seller, cash,
+                null, price, null, null, List.of()),
+            adminAuthentication());
+
+    long patientCourse = sale.patientCourseId();
+    Map<String, Object> provisional = db.queryForMap(
+        "SELECT commission_status,total_course_commission_pool,seller_employee_id FROM patient_courses WHERE id=?",
+        patientCourse);
+    assertThat(provisional.get("commission_status")).isEqualTo("PROVISIONAL");
+    assertThat(provisional.get("total_course_commission_pool")).isNull();
+    assertThat(((Number) provisional.get("seller_employee_id")).longValue()).isEqualTo(seller);
+
+    assertThat(closing.close(YearMonth.now(), seedActorUserId())).isEqualTo(1);
+    Map<String, Object> locked = db.queryForMap(
+        "SELECT commission_status,locked_commission_rate FROM patient_courses WHERE id=?", patientCourse);
+    assertThat(locked.get("commission_status")).isEqualTo("LOCKED");
+    assertThat((BigDecimal) locked.get("locked_commission_rate")).isEqualByComparingTo("0.07");
+  }
+
+  // ---- Transfer integration: transferred balance remains spendable ----------
+  @Test
+  void transferredCourseCanBeUsedByRecipientWithoutANewSale() {
+    long owner = seedStaff("Transfer Owner");
+    long sourcePatient = seedPatient("Transfer Source");
+    long recipient = seedPatient("Transfer Recipient");
+    long course = seedCourse(owner, owner, sourcePatient, new BigDecimal("10000"), 10, LocalDate.of(2026, 8, 1));
+
+    Authentication authentication = adminAuthentication();
+    SecurityContextHolder.getContext().setAuthentication(authentication);
+    try {
+      transfers.transfer(
+          new CourseTransferController.TransferRequest(course, recipient, 4, "family transfer"),
+          authentication);
+    } finally {
+      SecurityContextHolder.clearContext();
+    }
+
+    assertThat(db.queryForObject(
+        "SELECT allocated_visits FROM course_member_balances WHERE patient_course_id=? AND patient_id=?",
+        Integer.class, course, sourcePatient)).isEqualTo(6);
+    long recipientCourse = db.queryForObject(
+        "SELECT id FROM patient_courses WHERE patient_id=? AND package_id=(SELECT package_id FROM patient_courses WHERE id=?)",
+        Long.class, recipient, course);
+    assertThat(db.queryForObject(
+        "SELECT allocated_visits FROM course_member_balances WHERE patient_course_id=? AND patient_id=?",
+        Integer.class, recipientCourse, recipient)).isEqualTo(4);
+
+    assertThatCode(() -> courseUsage.recordCheckoutUsage(
+        recipientCourse, recipient, 1, 1L, null, owner, "Transfer Owner", null, LocalDate.of(2026, 9, 12)))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void releasedCourseCommissionAppearsInTheCommissionLedger() {
+    long owner = seedStaff("Ledger Owner");
+    long patient = seedPatient("Ledger Patient");
+    seedFlatScheme("T_LEDGER", new BigDecimal("0.07"), null);
+    long course = seedCourse(owner, owner, patient, new BigDecimal("10000"), 10, LocalDate.of(2026, 8, 1));
+    closing.close(YearMonth.of(2026, 8), null);
+    use(course, patient, 1, LocalDate.of(2026, 8, 5), owner);
+
+    List<Map<String, Object>> rows = commissionQueries.ledgerRecords(
+        LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31), null, owner, adminAuthentication());
+    assertThat(rows).hasSize(1);
+    assertThat(rows.get(0).get("commission_type")).isEqualTo("COURSE_OWNER");
+    assertThat((BigDecimal) rows.get(0).get("commission_amount")).isEqualByComparingTo("70.00");
+  }
+
+  private Authentication adminAuthentication() {
+    long actor = seedActorUserId();
+    return new UsernamePasswordAuthenticationToken(
+        "actor" + actor + "@test.local", "x",
+        List.of(new SimpleGrantedAuthority("ROLE_ADMIN")));
+  }
+
+  private long activeBranchId() {
+    return db.queryForObject(
+        "SELECT id FROM branches WHERE active AND deleted_at IS NULL ORDER BY id LIMIT 1",
+        Long.class);
   }
 
   // ---- Treatment fee resolver specificity ------------------------------------

@@ -165,7 +165,7 @@ export default function CourseCommissionReportPage() {
       )}
 
       <Dialog open={detail !== null} onOpenChange={(open) => !open && setDetail(null)}>
-        <DialogContent className="w-[95vw] max-w-[1800px] max-h-[92vh] overflow-hidden p-6">
+        <DialogContent className="flex !h-[calc(100vh-2rem)] !w-[calc(100vw-2rem)] !max-w-none flex-col overflow-hidden p-8">
           <DialogHeader>
             <DialogTitle>Commission Allocation Details</DialogTitle>
             <DialogDescription>
@@ -175,8 +175,8 @@ export default function CourseCommissionReportPage() {
           {detailLoading ? (
             <p className="py-8 text-center text-muted-foreground">กำลังโหลดรายละเอียด...</p>
           ) : detail ? (
-            <div className="max-h-[calc(92vh-150px)] overflow-auto rounded-lg border">
-              <Table className="min-w-[1080px] text-xs">
+            <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
+              <Table className="min-w-[1080px] text-sm">
                 <TableHeader><TableRow><TableHead>Course</TableHead><TableHead>Sale Date</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Pool</TableHead><TableHead className="text-right">Outstanding</TableHead><TableHead className="text-right">Gross</TableHead><TableHead className="text-right">Treatment Fee</TableHead><TableHead className="text-right">Owner Net</TableHead></TableRow></TableHeader>
                 <TableBody>
                   {detail.map((a, index) => <TableRow key={`${String(a.id ?? index)}-${String(a.visit_date ?? "course")}`}><TableCell className="font-medium">{String(a.course_id ?? "-")}</TableCell><TableCell>{String(a.sale_date ?? "-")}</TableCell><TableCell>{String(a.commission_status ?? "-")}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.total_course_commission_pool ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.outstanding_pool ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.gross_commission_allocation ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.treatment_fee_amount ?? 0))}</TableCell><TableCell className="text-right text-success">{formatCurrency(Number(a.owner_net_commission ?? 0))}</TableCell></TableRow>)}

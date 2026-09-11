@@ -36,6 +36,41 @@ public class CommissionQueryService {
       BigDecimal outstandingPool,
       BigDecimal totalVariablePay) {}
 
+  public List<Map<String, Object>> ledgerRecords(
+      LocalDate from, LocalDate to, Long branchId, Long requestedStaffId, Authentication auth) {
+    Long staffFilter = effectiveStaffFilter(requestedStaffId, auth);
+    return db.queryForList(
+        "WITH base AS (SELECT ca.id,ca.patient_course_id,pc.course_id,pc.package_name_snapshot,"
+            + "ca.visit_date,ca.allocation_status,ca.case_owner_employee_id,ca.treating_employee_id,"
+            + "ca.owner_net_commission,ca.treatment_fee_amount,pc.patient_id,pc.branch_id,"
+            + "COALESCE(st.transaction_no,pc.course_id) AS transaction_no FROM commission_allocations ca"
+            + " JOIN patient_courses pc ON pc.id=ca.patient_course_id"
+            + " LEFT JOIN course_usages cu ON cu.id=ca.course_usage_id"
+            + " LEFT JOIN sales_transactions st ON st.id=cu.sales_transaction_id"
+            + " WHERE ca.allocation_status='ALLOCATED' AND ca.visit_date BETWEEN ? AND ?"
+            + " AND (?::bigint IS NULL OR pc.branch_id=?))"
+            + " SELECT id,patient_course_id,course_id,package_name_snapshot,visit_date,allocation_status,"
+            + "case_owner_employee_id,treating_employee_id,owner_net_commission,treatment_fee_amount,"
+            + "case_owner_employee_id AS staff_id,'COURSE_OWNER' AS commission_type,"
+            + "owner_net_commission AS commission_amount,patient_id,branch_id,transaction_no FROM base"
+            + " WHERE (?::bigint IS NULL OR case_owner_employee_id=?)"
+            + " UNION ALL SELECT id,patient_course_id,course_id,package_name_snapshot,visit_date,allocation_status,"
+            + "case_owner_employee_id,treating_employee_id,owner_net_commission,treatment_fee_amount,"
+            + "treating_employee_id AS staff_id,'COURSE_TREATING' AS commission_type,"
+            + "treatment_fee_amount AS commission_amount,patient_id,branch_id,transaction_no FROM base"
+            + " WHERE treating_employee_id<>case_owner_employee_id AND treatment_fee_amount<>0"
+            + " AND (?::bigint IS NULL OR treating_employee_id=?)"
+            + " ORDER BY visit_date,id",
+        from,
+        to,
+        branchId,
+        branchId,
+        staffFilter,
+        staffFilter,
+        staffFilter,
+        staffFilter);
+  }
+
   public List<ReportRow> report(LocalDate from, LocalDate to, Long requestedStaffId, Authentication auth) {
     Long staffFilter = effectiveStaffFilter(requestedStaffId, auth);
     List<Map<String, Object>> rows =

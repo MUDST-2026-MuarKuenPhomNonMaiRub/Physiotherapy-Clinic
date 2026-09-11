@@ -283,6 +283,21 @@ export interface CommissionRule {
   status: "ACTIVE" | "INACTIVE";
 }
 
+export interface CommissionLedgerRecord {
+  id: string;
+  staffId: string;
+  transactionId: string;
+  transactionNo: string;
+  date: string;
+  patientId: string;
+  branchId: string;
+  type: "COURSE_OWNER" | "COURSE_TREATING";
+  ruleId: string;
+  ruleName: string;
+  amount: number;
+  reversed: boolean;
+}
+
 // -------------------------------------------------------- course commission
 // The monthly-closing tier/pool model (LA Balance requirement). Deliberately
 // separate from CommissionRule above, which is the immediate per-receipt

@@ -111,9 +111,10 @@ public class CourseTransferController {
       targetId =
           db.queryForObject(
               "INSERT INTO patient_courses(course_id,patient_id,package_id,"
-                  + "package_name_snapshot,sale_date,sale_month,course_price,total_visits,"
-                  + "bonus_visits,transfer_in_visits,branch_id,valid_until,status)"
-                  + " VALUES(?,?,?,?,?,date_trunc('month',?::date),0,0,0,?,?,?,'ACTIVE')"
+                  + "package_name_snapshot,sale_date,sale_month,seller_employee_id,"
+                  + "case_owner_employee_id,seller_name_snapshot,case_owner_name_snapshot,"
+                  + "course_price,total_visits,bonus_visits,transfer_in_visits,branch_id,valid_until,status)"
+                  + " VALUES(?,?,?,?,?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
                   + " RETURNING id",
               Long.class,
               checkout.nextNumber("PC", "patient_courses", "course_id"),
@@ -122,6 +123,13 @@ public class CourseTransferController {
               source.get("package_name_snapshot"),
               LocalDate.now(),
               LocalDate.now(),
+              source.get("seller_employee_id"),
+              source.get("case_owner_employee_id"),
+              source.get("seller_name_snapshot"),
+              source.get("case_owner_name_snapshot"),
+              source.get("course_price"),
+              0,
+              0,
               r.sessions(),
               branchId,
               source.get("valid_until"));

@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { useReportScope } from "@/lib/auth/use-report-scope";
 import { getCommissionRecords, today } from "@/lib/domain";
+import { getCommissionLedgerRecords } from "@/lib/api/clinic-api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { ReportsNav } from "@/components/reports/reports-nav";
@@ -48,6 +49,7 @@ export default function CommissionReportPage() {
   const [dateTo, setDateTo] = useState(range.to);
   const [branchFilter, setBranchFilter] = useState("ALL");
   const [staffFilter, setStaffFilter] = useState("ALL");
+  const [courseRecords, setCourseRecords] = useState<import("@/types").CommissionLedgerRecord[]>([]);
 
   // "commission.view.own" — a physiotherapist sees their own earnings only.
   const effectiveStaffFilter = seesEveryone ? staffFilter : ownStaffId ?? "__none__";
@@ -59,7 +61,29 @@ export default function CommissionReportPage() {
       .filter((r) => r.date.slice(0, 10) >= dateFrom && r.date.slice(0, 10) <= dateTo);
   }, [transactions, branchFilter, effectiveStaffFilter, dateFrom, dateTo, isAccessible]);
 
-  const active = records.filter((r) => !r.reversed);
+  useEffect(() => {
+    let cancelled = false;
+    const requestedStaff = seesEveryone ? (staffFilter === "ALL" ? undefined : staffFilter) : ownStaffId ?? undefined;
+    getCommissionLedgerRecords(
+      dateFrom,
+      dateTo,
+      branchFilter === "ALL" ? undefined : branchFilter,
+      requestedStaff
+    )
+      .then((result) => {
+        if (!cancelled) setCourseRecords(result);
+      })
+      .catch(() => {
+        if (!cancelled) setCourseRecords([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dateFrom, dateTo, branchFilter, staffFilter, seesEveryone, ownStaffId]);
+
+  const allRecords = useMemo(() => [...records, ...courseRecords], [records, courseRecords]);
+
+  const active = allRecords.filter((r) => !r.reversed);
   const treatmentTotal = active.filter((r) => r.type === "TREATMENT").reduce((s, r) => s + r.amount, 0);
   const salesTotal = active.filter((r) => r.type === "SALES").reduce((s, r) => s + r.amount, 0);
   const activeTotal = treatmentTotal + salesTotal;
@@ -114,18 +138,24 @@ export default function CommissionReportPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {records.map((r) => {
+              {allRecords.map((r) => {
                 const s = staff.find((st) => st.id === r.staffId);
                 return (
                   <TableRow key={r.id}>
                     {seesEveryone && <TableCell className="font-medium text-foreground">{s?.name}</TableCell>}
                     <TableCell>
-                      <Link href={`/transactions/${r.transactionId}`} className="font-mono text-xs text-primary hover:underline">
-                        {r.transactionNo}
-                      </Link>
+                      {r.transactionId ? (
+                        <Link href={`/transactions/${r.transactionId}`} className="font-mono text-xs text-primary hover:underline">
+                          {r.transactionNo}
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-xs text-primary">{r.transactionNo}</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{formatDate(r.date)}</TableCell>
-                    <TableCell><Badge variant="outline" className="font-normal">{r.type === "TREATMENT" ? "Treating" : "Sales"}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="font-normal">
+                      {r.type === "TREATMENT" ? "Treating" : r.type === "SALES" ? "Sales" : r.type === "COURSE_OWNER" ? "Course Owner" : "Course Treating"}
+                    </Badge></TableCell>
                     <TableCell className="text-muted-foreground">{r.ruleName}</TableCell>
                     <TableCell>
                       <Badge variant={r.reversed ? "destructive" : "secondary"}>

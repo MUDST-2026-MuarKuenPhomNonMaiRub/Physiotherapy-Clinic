@@ -36,6 +36,7 @@ import type {
   ClosingHistoryRow,
   ClosingPreviewRow,
   CommissionAuditLog,
+  CommissionLedgerRecord,
   CommissionRule,
   CommissionScheme,
   CourseCommissionReportRow,
@@ -437,7 +438,32 @@ export const getCourseCommissionDetail = (patientCourseId: string) =>
   apiRequest<Record<string, unknown>>(`/api/v1/commission/courses/${patientCourseId}/detail`);
 
 export const getCourseCommissionStaffDetail = (staffId: string, from: string, to: string) =>
-  apiRequest<Row[]>(`/api/v1/commission/staff/${staffId}/detail${query({ from, to })}`);
+    apiRequest<Row[]>(`/api/v1/commission/staff/${staffId}/detail${query({ from, to })}`);
+
+export const getCommissionLedgerRecords = (
+  from: string,
+  to: string,
+  branchId?: string,
+  staffId?: string
+): Promise<CommissionLedgerRecord[]> =>
+  apiRequest<Row[]>(`/api/v1/commission/ledger-records${query({ from, to, branchId, staffId })}`).then(
+    (rows) =>
+      rows.map((row) => ({
+        id: `course-${String(row.id)}`,
+        staffId: String(row.staff_id ?? ""),
+        transactionId: "",
+        transactionNo: String(row.transaction_no ?? row.course_id ?? "-"),
+        date: String(row.visit_date ?? ""),
+        patientId: String(row.patient_id ?? ""),
+        branchId: String(row.branch_id ?? ""),
+        type: String(row.commission_type) as CommissionLedgerRecord["type"],
+        ruleId: String(row.patient_course_id),
+        ruleName: "Course Commission",
+        amount: Number(row.commission_amount ?? 0),
+        reversed: false,
+      }))
+      .filter((row) => row.amount !== 0)
+  );
 
 export const listCommissionAudit = (): Promise<CommissionAuditLog[]> =>
   apiRequest<Row[]>("/api/v1/commission/audit").then((rows) =>

@@ -155,4 +155,31 @@ class InputRulesTest {
     assertDoesNotThrow(() -> InputRules.text("12345", 5, "Nickname"));
     assertThrows(IllegalArgumentException.class, () -> InputRules.text("123456", 5, "Nickname"));
   }
+
+  @Test
+  void branchCodeAcceptsClinicIdentifiers() {
+    assertDoesNotThrow(() -> InputRules.branchCode("PR9"));
+    assertDoesNotThrow(() -> InputRules.branchCode("branch-01"));
+  }
+
+  @Test
+  void branchCodeRejectsBlankInvalidCharactersAndWrongLength() {
+    assertThrows(IllegalArgumentException.class, () -> InputRules.branchCode(null));
+    assertThrows(IllegalArgumentException.class, () -> InputRules.branchCode("A"));
+    assertThrows(IllegalArgumentException.class, () -> InputRules.branchCode("branch 1"));
+    assertThrows(IllegalArgumentException.class, () -> InputRules.branchCode("branch-code-too-long"));
+  }
+
+  @Test
+  void branchPhoneAcceptsNineOrTenDigitsWithDisplaySeparators() {
+    assertDoesNotThrow(() -> InputRules.branchPhone("02-123-4567"));
+    assertDoesNotThrow(() -> InputRules.branchPhone("0812345678"));
+  }
+
+  @Test
+  void branchPhoneRejectsBlankAndWrongDigitCount() {
+    assertThrows(IllegalArgumentException.class, () -> InputRules.branchPhone(null));
+    assertThrows(IllegalArgumentException.class, () -> InputRules.branchPhone("12345678"));
+    assertThrows(IllegalArgumentException.class, () -> InputRules.branchPhone("08123456789"));
+  }
 }

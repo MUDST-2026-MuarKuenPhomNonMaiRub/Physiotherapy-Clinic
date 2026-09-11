@@ -85,8 +85,8 @@ export const navigationByRole: Record<Role, NavGroup[]> = {
 };
 
 export const defaultRouteByRole: Record<Role, string> = {
-  ADMIN: "/dashboard",
-  PHYSIOTHERAPIST: "/dashboard",
+  ADMIN: "/calendar",
+  PHYSIOTHERAPIST: "/calendar",
 };
 
 /**
