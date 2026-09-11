@@ -56,8 +56,16 @@ export default function ServicesSettingsPage() {
   function openEditService(s: Service) {
     setEditingService(s); setServiceForm({ name: s.name, type: s.type, price: s.price, duration: s.duration, code: s.code }); setServiceOpen(true);
   }
+  const serviceProblem =
+    !serviceForm.name.trim()
+      ? "A service name is required"
+      : !Number.isFinite(serviceForm.price) || serviceForm.price <= 0
+        ? "The price must be more than 0"
+        : serviceForm.code.trim() && !/^[A-Z0-9_-]+$/.test(serviceForm.code.trim())
+          ? "Item code may contain only letters, numbers, hyphens and underscores"
+          : null;
   async function saveService() {
-    if (!serviceForm.name) return;
+    if (serviceProblem) return;
     try {
       if (editingService) { await updateService(editingService.id, serviceForm); toast.success("Service updated"); }
       else { await addService({ ...serviceForm, status: "ACTIVE" }); toast.success("Service created"); }
@@ -97,7 +105,9 @@ export default function ServicesSettingsPage() {
             ? "Bonus sessions cannot be negative"
             : courseForm.expiryDays <= 0
               ? "The expiry must be at least one day"
-              : null;
+              : courseForm.code.trim() && !/^[A-Z0-9_-]+$/.test(courseForm.code.trim())
+                ? "Item code may contain only letters, numbers, hyphens and underscores"
+                : null;
 
   async function saveCourse() {
     if (courseProblem) return;
@@ -260,12 +270,13 @@ export default function ServicesSettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Price (THB)</Label>
-              <Input type="number" value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: Number(e.target.value) }))} />
+              <Input type="number" min={0.01} step="0.01" value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: Number(e.target.value) }))} />
               </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="items-center gap-2 sm:justify-between">
+            {serviceProblem ? <p className="text-xs text-destructive sm:mr-auto">{serviceProblem}</p> : <span className="sm:mr-auto" />}
             <Button variant="outline" onClick={() => setServiceOpen(false)}>Cancel</Button>
-            <Button disabled={!serviceForm.name} onClick={saveService}>{editingService ? "Save Changes" : "Add Service"}</Button>
+            <Button disabled={!!serviceProblem} onClick={saveService}>{editingService ? "Save Changes" : "Add Service"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

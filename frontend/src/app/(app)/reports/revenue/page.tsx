@@ -1,5 +1,7 @@
 "use client";
 
+import { redirect } from "next/navigation";
+
 import { useMemo, useState } from "react";
 import { today } from "@/lib/domain";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -28,6 +30,8 @@ function defaultRange(): { from: string; to: string } {
 }
 
 export default function RevenueReportPage() {
+  redirect("/dashboard");
+
   const transactions = useClinicStore((s) => s.transactions);
   const { isAccessible } = useBranchScope();
 

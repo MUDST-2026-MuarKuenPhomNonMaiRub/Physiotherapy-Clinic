@@ -15,6 +15,7 @@ import {
   Tag,
   Ticket,
   X,
+  QrCode,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useClinicStore } from "@/lib/store/clinic-store";
@@ -30,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -101,6 +103,7 @@ function CheckoutContent() {
   const [priceOverride, setPriceOverride] = useState("");
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [adjustmentSeq, setAdjustmentSeq] = useState(1);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const patient = patients.find((p) => p.id === patientId);
   const patientMatches = useMemo(
@@ -189,6 +192,8 @@ function CheckoutContent() {
   // billed, so it is the only one that asks for a figure and owes change back.
   const isCashPayment =
     paymentMethods.find((p) => p.id === paymentMethodId)?.code === "CASH";
+  const isQrPayment =
+    paymentMethods.find((p) => p.id === paymentMethodId)?.code === "QR";
   const cashReceived = cashReceivedInput === "" ? null : Number(cashReceivedInput);
   const cashIsShort =
     isCashPayment && (cashReceived === null || !Number.isFinite(cashReceived) || cashReceived < total);
@@ -801,15 +806,56 @@ function CheckoutContent() {
                 </div>
               )}
 
-              <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={handleConfirm}>
+              <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={() => { if (isQrPayment) setQrOpen(true); else void handleConfirm(); }}>
+                {isQrPayment && <QrCode className="h-4 w-4" />}
                 Confirm Payment
               </Button>
             </div>
           </div>
         </div>
       )}
+
+      <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5 text-primary" /> QR Payment</DialogTitle>
+            <DialogDescription>ให้ลูกค้าสแกน QR เพื่อชำระเงินตามยอดด้านล่าง</DialogDescription>
+          </DialogHeader>
+          <div className="overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm">
+            <div className="bg-[#075b8c] px-5 py-4 text-center text-white">
+              <p className="text-xl font-bold tracking-wide">THAI QR PAYMENT</p>
+              <p className="mt-0.5 text-xs text-white/80">PromptPay · Krungthai mockup</p>
+            </div>
+            <div className="space-y-4 px-6 py-5 text-center">
+              <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-lg border-8 border-white bg-white shadow-[0_0_0_1px_#dbeafe]">
+                <MockQrCode />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Amount to pay</p>
+                <p className="mt-1 text-3xl font-bold text-foreground">{formatCurrency(total)}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 px-4 py-3 text-left text-sm">
+                <div className="flex justify-between gap-4"><span className="text-muted-foreground">Account name</span><span className="font-medium text-foreground">คลินิกกายภาพบำบัด</span></div>
+                <div className="mt-1 flex justify-between gap-4"><span className="text-muted-foreground">Payment method</span><span className="font-medium text-foreground">PromptPay</span></div>
+              </div>
+              <p className="text-xs text-muted-foreground">รูป QR นี้เป็น mockup สำหรับทดสอบหน้าจอ ยังไม่ใช่ QR ที่ใช้รับเงินจริง</p>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button variant="outline" onClick={() => setQrOpen(false)}>Cancel</Button>
+            <Button disabled={submitting} onClick={() => void handleConfirm()}>Confirm Payment Received</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
+}
+
+function MockQrCode() {
+  const modules = [
+    "111111100101101111111", "100000101001001100001", "101110100111101101101", "101110101010101101101", "101110100110101101101", "100000101101001100001", "111111101010101111111", "000000001101000000000", "110101111011101011010", "001011001100101100111", "111101111011111010100", "010010001101001111010", "101111101111101001101", "000000001001101010011", "111111101110011101100", "100000101011100111001", "101110101110111010111", "101110100011001100100", "101110101101111011011", "100000100110001001110", "111111101011101110101",
+  ];
+  return <svg viewBox="0 0 21 21" className="h-full w-full" role="img" aria-label="Mock QR code">{modules.flatMap((row, y) => [...row].map((cell, x) => cell === "1" ? <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill="currentColor" /> : null))}</svg>;
 }
 
 function SummaryRow({ label, value, bold, mono }: { label: string; value: string; bold?: boolean; mono?: boolean }) {

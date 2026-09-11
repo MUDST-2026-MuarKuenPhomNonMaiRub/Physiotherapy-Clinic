@@ -14,7 +14,7 @@ import {
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameEn, getPatientFullNameTh } from "@/lib/domain";
-import { calcAge, formatCurrency, formatDate } from "@/lib/format";
+import { calcAge, formatCurrency, formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
 import { remainingSessions } from "@/lib/domain";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -76,7 +76,7 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
             <p className="text-sm text-muted-foreground">{getPatientFullNameEn(patient)}</p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span>{patient.gender === "MALE" ? "Male" : patient.gender === "FEMALE" ? "Female" : "Other"} · {age} yrs</span>
-              <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{patient.phone}</span>
+              <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{formatPhone(patient.phone)}</span>
               <span>{patient.customerGroup}</span>
               <span>Registered at {branch?.name}</span>
             </div>
@@ -125,14 +125,14 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
               <Row label="Date of Birth" value={`${formatDate(patient.dob)} (${age} yrs)`} />
               <Row label="Blood Group" value={patient.bloodGroup} />
               <Row label="Nationality" value={patient.nationality} />
-              <Row label="National ID" value={patient.nationalId ?? "—"} />
+              <Row label="National ID" value={patient.nationalId ? formatThaiNationalId(patient.nationalId) : "—"} />
               <Row label="Passport" value={patient.passport ?? "—"} />
             </dl>
           </div>
           <div className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Contact</h3>
             <dl className="space-y-2.5 text-sm">
-              <Row label="Phone" value={patient.phone} />
+              <Row label="Phone" value={formatPhone(patient.phone)} />
               <Row label="Address" value={patient.address} />
             </dl>
             <h3 className="mb-3 mt-5 text-sm font-semibold text-foreground">Insurance</h3>

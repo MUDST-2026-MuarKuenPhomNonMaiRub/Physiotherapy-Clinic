@@ -13,6 +13,12 @@ export interface NavGroup {
 
 /** Pinned entry above the grouped sections — the landing screen for both roles. */
 const calendarItem: NavItem = { label: "Calendar", href: "/calendar", icon: "CalendarDays" };
+const dashboardItem: NavItem = { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" };
+
+const overviewGroup: NavGroup = {
+  title: "Overview",
+  items: [dashboardItem],
+};
 
 const patientGroup: NavGroup = {
   title: "Patient",
@@ -32,14 +38,13 @@ const financeGroup: NavGroup = {
   ],
 };
 
-const revenueItem: NavItem = { label: "Revenue", href: "/reports/revenue", icon: "TrendingUp" };
 const courseBalanceItem: NavItem = { label: "Course Balance", href: "/reports/course-balance", icon: "Package" };
 const staffSalesItem: NavItem = { label: "Staff Sales", href: "/reports/staff-sales", icon: "UserCog" };
 const commissionItem: NavItem = { label: "Commission", href: "/reports/commission", icon: "Banknote" };
 
 const adminReportGroup: NavGroup = {
   title: "Report",
-  items: [revenueItem, courseBalanceItem, staffSalesItem, commissionItem],
+  items: [courseBalanceItem, staffSalesItem, commissionItem],
 };
 
 /**
@@ -48,7 +53,7 @@ const adminReportGroup: NavGroup = {
  */
 const physioReportGroup: NavGroup = {
   title: "Report",
-  items: [revenueItem, courseBalanceItem, commissionItem],
+  items: [courseBalanceItem, commissionItem],
 };
 
 const administrationGroup: NavGroup = {
@@ -70,13 +75,13 @@ export const pinnedByRole: Record<Role, NavItem> = {
 };
 
 export const navigationByRole: Record<Role, NavGroup[]> = {
-  ADMIN: [patientGroup, financeGroup, adminReportGroup, administrationGroup],
-  PHYSIOTHERAPIST: [patientGroup, financeGroup, physioReportGroup],
+  ADMIN: [overviewGroup, patientGroup, financeGroup, adminReportGroup, administrationGroup],
+  PHYSIOTHERAPIST: [overviewGroup, patientGroup, financeGroup, physioReportGroup],
 };
 
 export const defaultRouteByRole: Record<Role, string> = {
-  ADMIN: "/calendar",
-  PHYSIOTHERAPIST: "/calendar",
+  ADMIN: "/dashboard",
+  PHYSIOTHERAPIST: "/dashboard",
 };
 
 /**

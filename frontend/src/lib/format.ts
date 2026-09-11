@@ -16,6 +16,20 @@ export function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+export function formatThaiNationalId(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 13
+    ? `${digits.slice(0, 1)}-${digits.slice(1, 5)}-${digits.slice(5, 10)}-${digits.slice(10, 12)}-${digits.slice(12)}`
+    : value || "-";
+}
+
+export function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length === 10 && digits.startsWith("0")) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 9 && digits.startsWith("0")) return `${digits.slice(0, 2)}-${digits.slice(2, 5)}-${digits.slice(5)}`;
+  return value || "-";
+}
+
 export function formatDateTime(dateStr: string): string {
   if (!dateStr) return "-";
   const d = new Date(dateStr);

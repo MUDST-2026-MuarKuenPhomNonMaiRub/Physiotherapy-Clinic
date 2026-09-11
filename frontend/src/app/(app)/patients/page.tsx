@@ -10,7 +10,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { getPatientFullNameEn, getPatientFullNameTh, searchPatients } from "@/lib/domain";
 import { remainingSessions } from "@/lib/domain";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageLoading } from "@/components/shared/page-loading";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -119,8 +119,6 @@ function PatientsPageContent() {
   const { can } = useSession();
   const { isAccessible } = useBranchScope();
   const patients = useClinicStore((s) => s.patients);
-  const branches = useClinicStore((s) => s.branches);
-  const appointments = useClinicStore((s) => s.appointments);
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [branchFilter, setBranchFilter] = useState("ALL");
   const [page, setPage] = useState(1);
@@ -130,14 +128,9 @@ function PatientsPageContent() {
       branchFilter === "ALL" ? isAccessible(p.registrationBranchId) : p.registrationBranchId === branchFilter
     );
     return filtered
-      .map((p) => {
-        const visits = appointments
-          .filter((a) => a.patientId === p.id && a.status === "COMPLETED")
-          .sort((a, b) => `${b.date}`.localeCompare(`${a.date}`));
-        return { patient: p, latestVisit: visits[0]?.date };
-      })
+      .map((patient) => ({ patient }))
       .sort((a, b) => b.patient.createdAt.localeCompare(a.patient.createdAt));
-  }, [query, patients, appointments, branchFilter, isAccessible]);
+  }, [query, patients, branchFilter, isAccessible]);
 
   usePageReset(`${query}|${branchFilter}`, setPage);
 
@@ -197,19 +190,18 @@ function PatientsPageContent() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="py-3">HN</TableHead>
-                  <TableHead className="py-3">Patient</TableHead>
-                  <TableHead className="py-3">Gender</TableHead>
-                  <TableHead className="py-3">Phone</TableHead>
-                  <TableHead className="py-3">Customer Group</TableHead>
-                  <TableHead className="py-3">Registration Branch</TableHead>
-                  <TableHead className="py-3">Courses</TableHead>
-                  <TableHead className="py-3">Latest Visit</TableHead>
+                  <TableHead className="py-3">Name</TableHead>
+                  <TableHead className="py-3">NickName</TableHead>
+                  <TableHead className="py-3">ID CARD</TableHead>
+                  <TableHead className="py-3">SEX</TableHead>
+                  <TableHead className="py-3">Phone No.</TableHead>
+                  <TableHead className="py-3">Group</TableHead>
+                  <TableHead className="py-3">Date Created</TableHead>
                   <TableHead className="py-3 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {pageResults.map(({ patient: p, latestVisit }) => {
-                  const branch = branches.find((b) => b.id === p.registrationBranchId);
+                {pageResults.map(({ patient: p }) => {
                   return (
                     <TableRow
                       key={p.id}
@@ -234,19 +226,19 @@ function PatientsPageContent() {
                           </div>
                         </div>
                       </TableCell>
+                      <TableCell className="py-3.5 text-sm text-muted-foreground">{p.nickname || "—"}</TableCell>
+                      <TableCell className="py-3.5 font-mono text-sm text-muted-foreground">
+                        {p.nationalId ? formatThaiNationalId(p.nationalId) : p.passport || "—"}
+                      </TableCell>
                       <TableCell className="py-3.5">
                         <Badge variant="outline" className="font-normal">
                           {p.gender === "MALE" ? "Male" : p.gender === "FEMALE" ? "Female" : "Other"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">{p.phone}</TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">{p.customerGroup}</TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">{branch?.name}</TableCell>
-                      <TableCell className="py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <CourseQuickGlance patientId={p.id} />
-                      </TableCell>
+                      <TableCell className="py-3.5 text-sm text-muted-foreground">{formatPhone(p.phone)}</TableCell>
+                      <TableCell className="py-3.5 text-sm text-muted-foreground">{p.customerGroup || "—"}</TableCell>
                       <TableCell className="py-3.5 text-sm text-muted-foreground">
-                        {latestVisit ? formatDate(latestVisit) : "—"}
+                        {p.createdAt ? formatDate(p.createdAt) : "—"}
                       </TableCell>
                       <TableCell className="py-3.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
