@@ -84,7 +84,7 @@ export default function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" description="Sales and customer overview" />
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className="motion-rise-in motion-delay-1 mb-5 flex flex-wrap items-center gap-2">
         <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -97,13 +97,13 @@ export default function DashboardPage() {
         <BranchFilterSelect value={branchFilter} onValueChange={setBranchFilter} className="w-48" />
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="motion-rise-in motion-delay-1 mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard label={`${period === "day" ? "Daily" : period === "month" ? "Monthly" : "Yearly"} Sales`} value={formatCurrency(totalSales)} icon={Wallet} tone="primary" />
         <StatCard label="Customers" value={String(periodPatients.length)} icon={Users} tone="info" />
         <StatCard label="New Customers" value={String(newCustomers)} icon={UserPlus} tone="success" />
       </div>
 
-      <div className="mb-5 rounded-xl border border-border bg-card p-5">
+      <div className="motion-rise-in motion-delay-2 mb-5 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div><h2 className="text-sm font-semibold text-foreground">Sales comparison by month</h2><p className="text-xs text-muted-foreground">Compare two years month by month</p></div>
           <Select value={comparisonYear} onValueChange={setComparisonYear}>
@@ -120,7 +120,7 @@ export default function DashboardPage() {
         </ResponsiveContainer>
       </div>
 
-      <div className="mb-5 rounded-xl border border-border bg-card p-5">
+      <div className="motion-rise-in motion-delay-3 mb-5 rounded-xl border border-border bg-card p-5">
         <h2 className="mb-1 text-sm font-semibold text-foreground">Sales by branch</h2>
         <p className="mb-3 text-xs text-muted-foreground">Revenue from completed checkouts in the selected period</p>
         {branchSales.length ? (
@@ -138,7 +138,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="motion-rise-in motion-delay-3 grid gap-5 lg:grid-cols-2">
         <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-1 text-sm font-semibold text-foreground">Customers by branch</h2><p className="mb-3 text-xs text-muted-foreground">Customers with completed sales in the selected period</p>
           {branchCounts.length ? <ResponsiveContainer width="100%" height={220}><BarChart data={branchCounts} margin={{ left: 0, right: 10 }}><CartesianGrid strokeDasharray="3 3" stroke="var(--border)" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tick={{ fontSize: 11 }} /><Tooltip /><Bar dataKey="count" name="Customers" fill="var(--chart-1)" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer> : <p className="py-16 text-center text-sm text-muted-foreground">No customer data for this period</p>}
