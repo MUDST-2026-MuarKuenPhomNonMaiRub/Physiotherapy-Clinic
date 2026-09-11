@@ -112,7 +112,7 @@ function NewAppointmentContent() {
       />
 
       <form onSubmit={handleSubmit} className="max-w-2xl space-y-5 pb-10">
-        <Card>
+        <Card className="relative z-20 overflow-visible">
           <CardHeader><CardTitle className="text-base">Patient</CardTitle></CardHeader>
           <CardContent>
             {selectedPatient ? (
@@ -126,7 +126,7 @@ function NewAppointmentContent() {
                 </Button>
               </div>
             ) : (
-              <div className="relative">
+              <div className="relative z-30">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
@@ -137,7 +137,7 @@ function NewAppointmentContent() {
                   />
                 </div>
                 {patientMatches.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-md">
+                  <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg ring-1 ring-black/5">
                     {patientMatches.map((p) => (
                       <button
                         type="button"
