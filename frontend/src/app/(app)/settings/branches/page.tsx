@@ -20,6 +20,7 @@ import {
 import { StatusBadge } from "@/components/shared/status-badge";
 import type { Branch } from "@/types";
 import { toast } from "sonner";
+import { fieldRules } from "@/lib/domain";
 
 const emptyForm = { name: "", code: "", phone: "", address: "" };
 
@@ -32,6 +33,11 @@ export default function BranchesSettingsPage() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const codeError = fieldRules.branchCode(form.code);
+  const phoneError = fieldRules.branchPhone(form.phone);
+  const nameError = !form.name.trim() ? "Required" : null;
+  const addressError = !form.address.trim() ? "Required" : null;
+  const canSave = !nameError && !codeError && !phoneError && !addressError;
 
   function openCreate() {
     setEditing(null); setForm(emptyForm); setOpen(true);
@@ -40,7 +46,7 @@ export default function BranchesSettingsPage() {
     setEditing(b); setForm({ name: b.name, code: b.code, phone: b.phone, address: b.address }); setOpen(true);
   }
   async function save() {
-    if (!form.name || !form.code) return;
+    if (!canSave) return;
     try {
       if (editing) {
         await updateBranch(editing.id, form);
@@ -126,25 +132,29 @@ export default function BranchesSettingsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Branch Name</Label>
-                <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} aria-invalid={!!nameError} />
+                {nameError && <p className="text-xs text-destructive">กรุณาระบุชื่อสาขา</p>}
               </div>
               <div className="space-y-1.5">
                 <Label>Branch Code</Label>
-                <Input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} maxLength={5} />
+                <Input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 10) }))} maxLength={10} aria-invalid={!!codeError} />
+                {codeError && <p className="text-xs text-destructive">ใช้ A-Z, 0-9 หรือขีดกลาง 2-10 ตัว</p>}
               </div>
             </div>
             <div className="space-y-1.5">
               <Label>Phone</Label>
-              <Input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+              <Input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} aria-invalid={!!phoneError} />
+              {phoneError && <p className="text-xs text-destructive">กรอกเบอร์โทร 9-10 หลัก</p>}
             </div>
             <div className="space-y-1.5">
               <Label>Address / Contact Information</Label>
-              <Textarea rows={2} value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
+              <Textarea rows={2} value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} aria-invalid={!!addressError} />
+              {addressError && <p className="text-xs text-destructive">กรุณาระบุที่อยู่สาขา</p>}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button disabled={!form.name || !form.code} onClick={save}>{editing ? "Save Changes" : "Create Branch"}</Button>
+            <Button disabled={!canSave} onClick={save}>{editing ? "Save Changes" : "Create Branch"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

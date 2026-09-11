@@ -106,6 +106,8 @@ interface ClinicState {
   refresh: () => Promise<void>;
   /** Reloads only the parts a sale or a transfer can change. */
   refreshOperational: () => Promise<void>;
+  /** Reloads the staff roster without resetting the rest of the clinic state. */
+  refreshStaff: () => Promise<void>;
 
   // admin: branches
   addBranch: (data: Omit<Branch, "id">) => Promise<void>;
@@ -323,6 +325,13 @@ export const useClinicStore = create<ClinicState>()(
           s.courseLedger = courses.courseLedger;
           s.appointments = appointments;
           s.transactions = transactions;
+        });
+      },
+
+      refreshStaff: async () => {
+        const staff = await api.listStaff();
+        set((s) => {
+          s.staff = staff;
         });
       },
 

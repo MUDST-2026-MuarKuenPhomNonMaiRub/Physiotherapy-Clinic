@@ -50,6 +50,21 @@ export const fieldRules = {
       : "A phone number must contain exactly 10 digits";
   },
 
+  branchCode(value: string): string | null {
+    if (!value.trim()) return "Required";
+    return /^[A-Z0-9-]{2,10}$/.test(value.trim())
+      ? null
+      : "Use 2-10 uppercase letters, numbers or hyphens";
+  },
+
+  branchPhone(value: string): string | null {
+    if (!value.trim()) return "Required";
+    const digits = value.replace(/\D/g, "");
+    return digits.length >= 9 && digits.length <= 10
+      ? null
+      : "Use a phone number with 9-10 digits";
+  },
+
   /**
    * A Thai patient's name is recorded in Thai, so the box takes Thai letters
    * and the spaces between names — nothing else. Only reached for a Thai

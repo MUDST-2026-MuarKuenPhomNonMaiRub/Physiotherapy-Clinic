@@ -201,6 +201,15 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
                 const tpl = courseTemplates.find((c) => c.id === pc.courseId);
                 const rem = remainingSessions(pc);
                 const total = pc.purchased + pc.bonus + pc.transferIn;
+                const remainingPercent = total > 0 ? Math.max(0, Math.min(100, (rem / total) * 100)) : 0;
+                const balanceColor =
+                  pc.status !== "ACTIVE"
+                    ? "bg-muted-foreground/40"
+                    : remainingPercent <= 20
+                      ? "bg-destructive"
+                      : remainingPercent <= 50
+                        ? "bg-warning"
+                        : "bg-success";
                 return (
                   <Link
                     key={pc.id}
@@ -214,8 +223,8 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
                     <p className="text-xs text-muted-foreground">Expires {formatDate(pc.expiryDate)}</p>
                     <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-full rounded-full bg-primary"
-                        style={{ width: `${total ? Math.min(100, ((total - rem) / total) * 100) : 0}%` }}
+                        className={`h-full rounded-full ${balanceColor}`}
+                        style={{ width: `${remainingPercent}%` }}
                       />
                     </div>
                     <p className="mt-1.5 text-xs text-muted-foreground">

@@ -34,4 +34,13 @@ public class CommissionReportController {
   public Map<String, Object> courseDetail(@PathVariable long id, Authentication authentication) {
     return query.courseDetail(id, authentication);
   }
+
+  @GetMapping("/staff/{id}/detail")
+  public List<Map<String, Object>> staffDetail(
+      @PathVariable long id,
+      @RequestParam LocalDate from,
+      @RequestParam LocalDate to,
+      Authentication authentication) {
+    return query.staffDetail(id, from, to, authentication);
+  }
 }

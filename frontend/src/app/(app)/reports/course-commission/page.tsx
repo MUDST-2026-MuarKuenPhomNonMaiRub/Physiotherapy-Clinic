@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PiggyBank, Wallet, HandCoins, PackageOpen } from "lucide-react";
+import { PiggyBank, Wallet, HandCoins, PackageOpen, Eye } from "lucide-react";
 import { toast } from "sonner";
-import { getCourseCommissionReport } from "@/lib/api/clinic-api";
+import { getCourseCommissionReport, getCourseCommissionStaffDetail } from "@/lib/api/clinic-api";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useReportScope } from "@/lib/auth/use-report-scope";
 import { today } from "@/lib/domain";
@@ -15,6 +15,8 @@ import { StatCard } from "@/components/shared/stat-card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { CourseCommissionReportRow } from "@/types";
 
 function defaultRange(): { from: string; to: string } {
@@ -41,6 +43,19 @@ export default function CourseCommissionReportPage() {
   const [dateTo, setDateTo] = useState(range.to);
   const [rows, setRows] = useState<CourseCommissionReportRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [detail, setDetail] = useState<Record<string, unknown>[] | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openDetail = async (staffId: string) => {
+    setDetailLoading(true);
+    try {
+      setDetail(await getCourseCommissionStaffDetail(staffId, dateFrom, dateTo));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load course details");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +130,7 @@ export default function CourseCommissionReportPage() {
                   <TableHead className="text-right">Adjustment</TableHead>
                   <TableHead className="text-right">Outstanding</TableHead>
                   <TableHead className="text-right">Total Variable Pay</TableHead>
+                  <TableHead className="text-right">Details</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -135,6 +151,11 @@ export default function CourseCommissionReportPage() {
                     <TableCell className="text-right font-semibold text-foreground">
                       {formatCurrency(r.totalVariablePay)}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="outline" size="sm" onClick={() => openDetail(r.staffId)}>
+                        <Eye className="mr-1 h-4 w-4" /> View Details
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -142,6 +163,30 @@ export default function CourseCommissionReportPage() {
           </div>
         </div>
       )}
+
+      <Dialog open={detail !== null} onOpenChange={(open) => !open && setDetail(null)}>
+        <DialogContent className="w-[95vw] max-w-[1800px] max-h-[92vh] overflow-hidden p-6">
+          <DialogHeader>
+            <DialogTitle>Commission Allocation Details</DialogTitle>
+            <DialogDescription>
+              รายละเอียดการแบ่งค่าคอมมิชชั่นของคอร์ส Owner และ Treating Therapist
+            </DialogDescription>
+          </DialogHeader>
+          {detailLoading ? (
+            <p className="py-8 text-center text-muted-foreground">กำลังโหลดรายละเอียด...</p>
+          ) : detail ? (
+            <div className="max-h-[calc(92vh-150px)] overflow-auto rounded-lg border">
+              <Table className="min-w-[1080px] text-xs">
+                <TableHeader><TableRow><TableHead>Course</TableHead><TableHead>Sale Date</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Pool</TableHead><TableHead className="text-right">Outstanding</TableHead><TableHead className="text-right">Gross</TableHead><TableHead className="text-right">Treatment Fee</TableHead><TableHead className="text-right">Owner Net</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {detail.map((a, index) => <TableRow key={`${String(a.id ?? index)}-${String(a.visit_date ?? "course")}`}><TableCell className="font-medium">{String(a.course_id ?? "-")}</TableCell><TableCell>{String(a.sale_date ?? "-")}</TableCell><TableCell>{String(a.commission_status ?? "-")}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.total_course_commission_pool ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.outstanding_pool ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.gross_commission_allocation ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.treatment_fee_amount ?? 0))}</TableCell><TableCell className="text-right text-success">{formatCurrency(Number(a.owner_net_commission ?? 0))}</TableCell></TableRow>)}
+                  {detail.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">ยังไม่มีรายละเอียด</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

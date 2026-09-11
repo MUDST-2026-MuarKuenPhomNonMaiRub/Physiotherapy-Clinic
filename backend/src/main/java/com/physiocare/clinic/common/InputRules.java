@@ -88,6 +88,21 @@ public final class InputRules {
         "A phone number must contain exactly 10 digits");
   }
 
+  /** Branch codes are short identifiers used in HN generation and reports. */
+  public static void branchCode(String value) {
+    require(!isBlank(value), "Branch code is required");
+    require(value.trim().matches("[A-Za-z0-9-]{2,10}"),
+        "Branch code must be 2-10 letters, numbers or hyphens");
+  }
+
+  /** Branch contact numbers may contain the usual display separators. */
+  public static void branchPhone(String value) {
+    require(!isBlank(value), "Branch phone is required");
+    String digits = value.replaceAll("\\D", "");
+    require(digits.length() >= 9 && digits.length() <= 10,
+        "Branch phone must contain 9-10 digits");
+  }
+
   public static void email(String value) {
     if (isBlank(value)) return;
     require(

@@ -68,6 +68,7 @@ const POSITIONS: StaffPosition[] = [
   "Physiotherapist",
   "Clinic Manager",
   "Assistant Therapist",
+  "Salesperson",
 ];
 
 export function toStaff(row: Row): Staff {

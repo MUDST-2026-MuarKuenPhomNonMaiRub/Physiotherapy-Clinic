@@ -58,11 +58,12 @@ public class CommissionQueryService {
                 + "  SELECT seller_employee_id AS staff_id, sum(net_course_sale_amount) AS"
                 + "  monthly_sales, sum(total_course_commission_pool) AS generated FROM"
                 + "  patient_courses WHERE sale_month BETWEEN ? AND ? AND commission_status<>"
-                + "  'LEGACY_EXCLUDED' GROUP BY seller_employee_id"
+                + "  'LEGACY_EXCLUDED' AND commission_status<>'CANCELLED' GROUP BY seller_employee_id"
                 + " ), outstanding AS ("
                 + "  SELECT case_owner_employee_id AS staff_id, sum(total_course_commission_pool -"
                 + "  gross_commission_allocated_total) AS outstanding FROM patient_courses WHERE"
-                + "  commission_status='LOCKED' GROUP BY case_owner_employee_id"
+                + "  commission_status='LOCKED' AND sale_month BETWEEN ? AND ? GROUP BY"
+                + "  case_owner_employee_id"
                 + " )"
                 + " SELECT s.id AS staff_id, s.name,"
                 + "   COALESCE(sales.monthly_sales,0) AS monthly_sales,"
@@ -80,9 +81,10 @@ public class CommissionQueryService {
                 + " LEFT JOIN outstanding ON outstanding.staff_id=s.id"
                 + " WHERE s.deleted_at IS NULL AND (?::bigint IS NULL OR s.id=?)"
                 + "   AND (sales.staff_id IS NOT NULL OR owner.staff_id IS NOT NULL OR"
-                + "        treating.staff_id IS NOT NULL OR adj.staff_id IS NOT NULL)"
+                + "        treating.staff_id IS NOT NULL OR adj.staff_id IS NOT NULL OR"
+                + "        outstanding.staff_id IS NOT NULL)"
                 + " ORDER BY s.name",
-            from, to, from, to, from, to, from, to, staffFilter, staffFilter);
+            from, to, from, to, from, to, from, to, from, to, staffFilter, staffFilter);
 
     return rows.stream()
         .map(
@@ -138,6 +140,23 @@ public class CommissionQueryService {
         "usages", usages,
         "adjustments", adjustments,
         "members", members);
+  }
+
+  public List<Map<String, Object>> staffDetail(
+      long staffId, LocalDate from, LocalDate to, Authentication auth) {
+    Long allowedStaff = effectiveStaffFilter(staffId, auth);
+    return db.queryForList(
+        "SELECT pc.id,pc.course_id,pc.package_name_snapshot,pc.sale_date,pc.commission_status,"
+            + "pc.total_course_commission_pool,"
+            + "(pc.total_course_commission_pool-COALESCE(pc.gross_commission_allocated_total,0))"
+            + " AS outstanding_pool,ca.visit_date,ca.gross_commission_allocation,"
+            + "ca.treatment_fee_amount,ca.owner_net_commission,ca.case_owner_employee_id,"
+            + "ca.treating_employee_id FROM patient_courses pc LEFT JOIN commission_allocations ca"
+            + " ON ca.patient_course_id=pc.id AND ca.allocation_status='ALLOCATED'"
+            + " AND ca.visit_date BETWEEN ? AND ? WHERE (pc.seller_employee_id=? OR"
+            + " pc.case_owner_employee_id=?) AND pc.sale_month BETWEEN ? AND ?"
+            + " ORDER BY pc.sale_date,ca.visit_date,pc.id",
+        from, to, allowedStaff, allowedStaff, from.withDayOfMonth(1), to.withDayOfMonth(1));
   }
 
   private Long effectiveStaffFilter(Long requested, Authentication auth) {

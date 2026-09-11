@@ -73,6 +73,9 @@ public class StaffService {
     p.setStatus("ACTIVE");
     p.setAvatarColor(r.avatarColor() == null ? "bg-[#1A4A2E]" : r.avatarColor());
     p.setUserId(user == null ? null : user.getId());
+    // A newly added treating staff member participates in commission flows by
+    // default. Admins can explicitly turn this off later from Staff & Access.
+    p.setCommissionEligible(true);
     Staff saved = staff.save(p);
     if (user != null) {
       db.update(

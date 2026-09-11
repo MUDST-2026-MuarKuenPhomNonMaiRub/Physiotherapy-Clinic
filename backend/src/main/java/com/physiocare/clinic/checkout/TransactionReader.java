@@ -155,23 +155,55 @@ public class TransactionReader {
   /** Course balance and its full history, for the course detail and report screens. */
   public Map<String, Object> courseLedger(Long patientId, Long branchId) {
     Map<String, Object> result = new LinkedHashMap<>();
-    result.put(
-        "patientCourses",
-        db.queryForList(
-            "SELECT id,course_id,patient_id,package_id,package_name_snapshot,sale_date,valid_until,"
-                + "total_visits,bonus_visits,visits_used,transfer_in_visits,transfer_out_visits,"
-                + "branch_id,status FROM patient_courses WHERE (?::bigint IS NULL OR patient_id=?)"
-                + " AND (?::bigint IS NULL OR branch_id=?) ORDER BY id",
-            patientId, patientId, branchId, branchId));
+    String courseSql;
+    Object[] courseArgs;
+    if (patientId == null) {
+      // The unscoped list is used by course reports and shows each course once,
+      // using the owner's balance as the display balance.
+      courseSql =
+          "SELECT pc.id,pc.course_id,pc.patient_id,pc.package_id,pc.package_name_snapshot,"
+              + "pc.sale_date,pc.valid_until,pc.total_visits,pc.bonus_visits,pc.visits_used,"
+              + "pc.transfer_in_visits,pc.transfer_out_visits,pc.branch_id,pc.status"
+              + " FROM patient_courses pc WHERE (?::bigint IS NULL OR pc.branch_id=?) ORDER BY pc.id";
+      courseArgs = new Object[] {branchId, branchId};
+    } else {
+      // A patient-scoped list must include both the owner and shared members;
+      // the balance columns are per patient, not just the course owner.
+      courseSql =
+          "SELECT pc.id,pc.course_id,cmb.patient_id,pc.package_id,pc.package_name_snapshot,"
+              + "pc.sale_date,pc.valid_until,cmb.allocated_visits AS total_visits,"
+              + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.bonus_visits ELSE 0 END AS bonus_visits,"
+              + "cmb.used_visits,CASE WHEN cmb.patient_id=pc.patient_id THEN pc.transfer_in_visits ELSE 0 END AS transfer_in_visits,"
+              + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.transfer_out_visits ELSE 0 END AS transfer_out_visits,"
+              + "pc.branch_id,pc.status FROM patient_courses pc JOIN course_member_balances cmb"
+              + " ON cmb.patient_course_id=pc.id WHERE cmb.patient_id=?"
+              + " AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY pc.id";
+      courseArgs = new Object[] {patientId, branchId, branchId};
+    }
+    result.put("patientCourses", db.queryForList(courseSql, courseArgs));
+    String ledgerSql;
+    Object[] ledgerArgs;
+    if (patientId == null) {
+      ledgerSql =
+          "SELECT e.id,e.patient_course_id,e.entry_type,e.quantity,e.balance_after,e.branch_id,"
+              + "e.related_transaction_id,e.transfer_group_id,e.counterparty_patient_id,"
+              + "e.performed_by_name,e.created_at FROM course_ledger_entries e JOIN"
+              + " patient_courses pc ON pc.id=e.patient_course_id WHERE (?::bigint IS NULL OR"
+              + " pc.patient_id=?) AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id";
+      ledgerArgs = new Object[] {null, null, branchId, branchId};
+    } else {
+      ledgerSql =
+          "SELECT e.id,e.patient_course_id,e.entry_type,e.quantity,e.balance_after,e.branch_id,"
+              + "e.related_transaction_id,e.transfer_group_id,e.counterparty_patient_id,"
+              + "e.performed_by_name,e.created_at FROM course_ledger_entries e JOIN"
+              + " patient_courses pc ON pc.id=e.patient_course_id JOIN course_member_balances cmb"
+              + " ON cmb.patient_course_id=e.patient_course_id WHERE cmb.patient_id=?"
+              + " AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id";
+      ledgerArgs = new Object[] {patientId, branchId, branchId};
+    }
     result.put(
         "ledger",
-        db.queryForList(
-            "SELECT e.id,e.patient_course_id,e.entry_type,e.quantity,e.balance_after,e.branch_id,"
-                + "e.related_transaction_id,e.transfer_group_id,e.counterparty_patient_id,"
-                + "e.performed_by_name,e.created_at FROM course_ledger_entries e JOIN"
-                + " patient_courses pc ON pc.id=e.patient_course_id WHERE (?::bigint IS NULL OR"
-                + " pc.patient_id=?) AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id",
-            patientId, patientId, branchId, branchId));
+        db.queryForList(ledgerSql, ledgerArgs));
     return result;
   }
 

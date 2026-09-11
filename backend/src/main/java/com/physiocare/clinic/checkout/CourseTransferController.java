@@ -80,6 +80,14 @@ public class CourseTransferController {
     db.update(
         "UPDATE patient_courses SET transfer_out_visits=transfer_out_visits+? WHERE id=?",
         r.sessions(), r.patientCourseId());
+    // Keep the member balance in sync with the aggregate course counters. The
+    // checkout usage flow consumes this per-patient row, including for a
+    // transferred course, so changing only transfer_out_visits would leave
+    // the source able to spend sessions that were already transferred.
+    db.update(
+        "UPDATE course_member_balances SET allocated_visits=allocated_visits-?,updated_at=now()"
+            + " WHERE patient_course_id=? AND patient_id=?",
+        r.sessions(), r.patientCourseId(), fromPatientId);
     checkout.addLedgerEntry(
         r.patientCourseId(), "TRANSFER_OUT", -r.sessions(),
         CheckoutService.remaining(checkout.patientCourse(r.patientCourseId())), branchId, null,
@@ -124,6 +132,16 @@ public class CourseTransferController {
           "UPDATE patient_courses SET transfer_in_visits=transfer_in_visits+? WHERE id=?",
           r.sessions(), targetId);
     }
+
+    // A transferred course is still one course/pool, but the recipient needs
+    // their own spendable balance row. Upsert also covers adding more visits
+    // to a recipient who already has the same package.
+    db.update(
+        "INSERT INTO course_member_balances(patient_course_id,patient_id,allocated_visits,used_visits)"
+            + " VALUES(?,?,?,0) ON CONFLICT(patient_course_id,patient_id) DO UPDATE SET"
+            + " allocated_visits=course_member_balances.allocated_visits+EXCLUDED.allocated_visits,"
+            + " updated_at=now()",
+        targetId, r.toPatientId(), r.sessions());
 
     checkout.addLedgerEntry(
         targetId, "TRANSFER_IN", r.sessions(),

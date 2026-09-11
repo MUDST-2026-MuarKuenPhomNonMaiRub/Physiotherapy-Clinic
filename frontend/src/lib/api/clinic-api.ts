@@ -436,6 +436,9 @@ export const getCourseCommissionReport = (from: string, to: string, staffId?: st
 export const getCourseCommissionDetail = (patientCourseId: string) =>
   apiRequest<Record<string, unknown>>(`/api/v1/commission/courses/${patientCourseId}/detail`);
 
+export const getCourseCommissionStaffDetail = (staffId: string, from: string, to: string) =>
+  apiRequest<Row[]>(`/api/v1/commission/staff/${staffId}/detail${query({ from, to })}`);
+
 export const listCommissionAudit = (): Promise<CommissionAuditLog[]> =>
   apiRequest<Row[]>("/api/v1/commission/audit").then((rows) =>
     rows.map((row) => ({

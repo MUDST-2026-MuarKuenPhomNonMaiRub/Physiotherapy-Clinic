@@ -1,5 +1,6 @@
 package com.physiocare.clinic.branch;
 
+import com.physiocare.clinic.common.InputRules;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -40,6 +41,7 @@ public class BranchController {
   @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasRole('ADMIN')")
   public Branch create(@Valid @RequestBody BranchRequest r) {
+    validate(r);
     long id;
     try {
       id =
@@ -60,6 +62,7 @@ public class BranchController {
   @PatchMapping("/{id}")
   @PreAuthorize("hasRole('ADMIN')")
   public Branch update(@PathVariable long id, @Valid @RequestBody BranchRequest r) {
+    validate(r);
     int rows;
     try {
       rows =
@@ -77,6 +80,13 @@ public class BranchController {
     }
     if (rows == 0) throw new IllegalArgumentException("Branch not found");
     return get(id);
+  }
+
+  private static void validate(BranchRequest r) {
+    InputRules.branchCode(r.code());
+    InputRules.require(r.name() != null && !r.name().trim().isBlank(), "Branch name is required");
+    InputRules.branchPhone(r.phone());
+    InputRules.require(r.address() != null && !r.address().trim().isBlank(), "Branch address is required");
   }
 
   @PatchMapping("/{id}/status")

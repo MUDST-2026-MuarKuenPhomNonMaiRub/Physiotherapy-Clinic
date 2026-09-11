@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -73,7 +73,12 @@ function CheckoutContent() {
   const patientCourses = useClinicStore((s) => s.patientCourses);
   const paymentMethods = useClinicStore((s) => s.paymentMethods);
   const appointments = useClinicStore((s) => s.appointments);
+  const refreshStaff = useClinicStore((s) => s.refreshStaff);
   const createTransaction = useClinicStore((s) => s.createTransaction);
+
+  useEffect(() => {
+    void refreshStaff();
+  }, [refreshStaff]);
 
   const preselectPatientId = searchParams.get("patientId");
   const [appointmentId, setAppointmentId] = useState(
@@ -127,9 +132,16 @@ function CheckoutContent() {
     [patientCourses, patientId]
   );
   const enabledPayments = paymentMethods.filter((p) => p.enabled);
-  const branchPhysios = staff.filter((s) => s.position === "Physiotherapist" && s.status === "ACTIVE" && s.branchIds.includes(branchId));
+  const branchPhysios = staff.filter(
+    (s) =>
+      s.position === "Physiotherapist" &&
+      s.status === "ACTIVE" &&
+      s.branchIds.map(String).includes(String(branchId))
+  );
   // Anyone on shift can ring up a sale — the clinic has no dedicated front desk.
-  const branchSales = staff.filter((s) => s.status === "ACTIVE" && s.branchIds.includes(branchId));
+  const branchSales = staff.filter(
+    (s) => s.status === "ACTIVE" && s.branchIds.map(String).includes(String(branchId))
+  );
 
   const selectedService: Service | undefined = services.find((s) => s.id === serviceId);
   // Only resolve a course from the active list for the currently selected
@@ -210,7 +222,9 @@ function CheckoutContent() {
     paymentMethods.find((p) => p.id === paymentMethodId)?.code === "QR";
   const cashReceived = cashReceivedInput === "" ? null : Number(cashReceivedInput);
   const cashIsShort =
-    isCashPayment && (cashReceived === null || !Number.isFinite(cashReceived) || cashReceived < total);
+    isCashPayment &&
+    total > 0 &&
+    (cashReceived === null || !Number.isFinite(cashReceived) || cashReceived < total);
   const changeDue =
     isCashPayment && cashReceived !== null && Number.isFinite(cashReceived) && cashReceived >= total
       ? cashReceived - total
@@ -835,7 +849,7 @@ function CheckoutContent() {
                 </div>
               </div>
 
-              {isCashPayment && (
+              {isCashPayment && total > 0 && (
                 <div className="space-y-1.5">
                   <Label htmlFor="cash-received">Cash Received</Label>
                   <Input

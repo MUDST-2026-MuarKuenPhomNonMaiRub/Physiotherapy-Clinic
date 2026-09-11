@@ -109,6 +109,7 @@ export default function CommissionReportPage() {
                 <TableHead>Date</TableHead>
                 <TableHead>Treating / Sales</TableHead>
                 <TableHead>Rule</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Commission Amount</TableHead>
               </TableRow>
             </TableHeader>
@@ -126,6 +127,11 @@ export default function CommissionReportPage() {
                     <TableCell className="text-muted-foreground">{formatDate(r.date)}</TableCell>
                     <TableCell><Badge variant="outline" className="font-normal">{r.type === "TREATMENT" ? "Treating" : "Sales"}</Badge></TableCell>
                     <TableCell className="text-muted-foreground">{r.ruleName}</TableCell>
+                    <TableCell>
+                      <Badge variant={r.reversed ? "destructive" : "secondary"}>
+                        {r.reversed ? "Voided" : "Active"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className={`text-right font-medium ${r.reversed ? "text-muted-foreground line-through" : "text-foreground"}`}>
                       {formatCurrency(r.amount)}
                     </TableCell>
