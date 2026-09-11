@@ -16,9 +16,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CommissionAdjustmentService {
   private final JdbcTemplate db;
+  private final CommissionAuditService audit;
 
-  public CommissionAdjustmentService(JdbcTemplate db) {
+  public CommissionAdjustmentService(JdbcTemplate db, CommissionAuditService audit) {
     this.db = db;
+    this.audit = audit;
   }
 
   /**
@@ -136,6 +138,9 @@ public class CommissionAdjustmentService {
         patientCourseId);
 
     reduceOutstandingPool(patientCourseId, visitsToCancel, actorUserId, reason);
+    audit.record(actorUserId, branchId, "COURSE_REMAINING_REFUNDED", "patient_courses",
+        String.valueOf(patientCourseId), null,
+        Map.of("visits", visitsToCancel, "reason", reason), reason);
   }
 
   /**

@@ -1,9 +1,9 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRightLeft, Search } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, HandCoins, Search, UsersRound } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import type { LedgerEntryType } from "@/types";
+import { addSharedCourseMember, getCourseCommissionDetail, listSharedCourseMembers, refundRemainingVisits, removeSharedCourseMember } from "@/lib/api/clinic-api";
+import type { LedgerEntryType, SharedCourseMember } from "@/types";
 
 const ledgerTypeLabel: Record<LedgerEntryType, string> = {
   PURCHASE: "Purchase",
@@ -32,9 +33,16 @@ const ledgerTypeLabel: Record<LedgerEntryType, string> = {
   TRANSFER_OUT: "Transfer Out",
   TRANSFER_IN: "Transfer In",
   VOID_REVERSAL: "Void Reversal",
+  REFUND_REMAINING: "Refund Remaining",
 };
 
 type TransferStep = "closed" | "search" | "sessions" | "review";
+type CourseCommissionDetail = {
+  course?: Record<string, unknown>;
+  allocations?: unknown[];
+  usages?: unknown[];
+  adjustments?: unknown[];
+};
 
 export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -51,6 +59,15 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   const [toPatientId, setToPatientId] = useState("");
   const [sessions, setSessions] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [commissionDetail, setCommissionDetail] = useState<CourseCommissionDetail | null>(null);
+  const [members, setMembers] = useState<SharedCourseMember[]>([]);
+  const [memberOpen, setMemberOpen] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [memberPatientId, setMemberPatientId] = useState("");
+  const [memberVisits, setMemberVisits] = useState(1);
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundVisits, setRefundVisits] = useState(1);
+  const [refundReason, setRefundReason] = useState("");
 
   const found = patientCourses.find((p) => p.id === id);
   if (!found) notFound();
@@ -68,6 +85,13 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
 
   const matches = query ? searchPatients(query, patients).filter((p) => p.id !== pc.patientId).slice(0, 6) : [];
   const toPatient = patients.find((p) => p.id === toPatientId);
+  const memberMatches = memberQuery ? searchPatients(memberQuery, patients).filter((p) => p.id !== pc.patientId).slice(0, 6) : [];
+  const memberPatient = patients.find((p) => p.id === memberPatientId);
+
+  useEffect(() => {
+    void getCourseCommissionDetail(id).then((value) => setCommissionDetail(value as CourseCommissionDetail)).catch(() => setCommissionDetail(null));
+    void listSharedCourseMembers(id).then(setMembers).catch(() => setMembers([]));
+  }, [id]);
 
   function openTransfer() {
     setStep("search"); setQuery(""); setToPatientId(""); setSessions(1); setError(null);
@@ -79,6 +103,39 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     if (!result.ok) { setError(result.error ?? "Transfer failed"); return; }
     setStep("closed");
     toast.success(`Transferred ${sessions} session(s) to ${toPatient ? getPatientFullNameTh(toPatient) : "patient"}`);
+  }
+
+  async function confirmMember() {
+    if (!memberPatientId) return;
+    try {
+      await addSharedCourseMember(id, memberPatientId, memberVisits);
+      setMembers(await listSharedCourseMembers(id));
+      setMemberOpen(false);
+      toast.success("Shared course member added");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not add shared member");
+    }
+  }
+
+  async function removeMember(patientId: string) {
+    try {
+      await removeSharedCourseMember(id, patientId);
+      setMembers(await listSharedCourseMembers(id));
+      toast.success("Shared course member removed");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not remove shared member");
+    }
+  }
+
+  async function confirmRefund() {
+    if (!refundReason.trim()) { toast.error("Reason is required"); return; }
+    try {
+      await refundRemainingVisits(id, refundVisits, refundReason.trim());
+      setRefundOpen(false);
+      toast.success("Unused sessions refunded and history preserved");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not refund remaining sessions");
+    }
   }
 
   return (
@@ -98,6 +155,8 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 <ArrowRightLeft className="h-4 w-4" /> Transfer Course
               </Button>
             )}
+            {pc.status === "ACTIVE" && rem > 0 && can("course.transfer") && <Button variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Share</Button>}
+            {can("transaction.void") && rem > 0 && <Button variant="outline" onClick={() => { setRefundOpen(true); setRefundVisits(1); setRefundReason(""); }}><HandCoins className="h-4 w-4" /> Refund Unused</Button>}
           </div>
         }
       />
@@ -116,6 +175,21 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         <InfoRow label="Purchase Date" value={formatDate(pc.purchaseDate)} />
         <InfoRow label="Expiry" value={formatDate(pc.expiryDate)} />
         <InfoRow label="Branch" value={branch?.name ?? "—"} />
+      </div>
+
+      <div className="mb-5 rounded-xl border border-border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold text-foreground">Commission Pool</h3><p className="text-xs text-muted-foreground">Locked rate and released commission for this course</p></div><span className="text-xs text-muted-foreground">{commissionDetail?.allocations?.length ?? 0} allocations</span></div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <InfoRow label="Status" value={String(commissionDetail?.course?.commission_status ?? "PROVISIONAL")} />
+          <InfoRow label="Locked Rate" value={commissionDetail?.course?.locked_commission_rate == null ? "Pending close" : `${Number(commissionDetail.course.locked_commission_rate) * 100}%`} />
+          <InfoRow label="Pool" value={commissionDetail?.course?.total_course_commission_pool == null ? "—" : `฿${commissionDetail.course.total_course_commission_pool}`} />
+          <InfoRow label="Outstanding" value={commissionDetail?.course?.total_course_commission_pool == null ? "—" : `฿${Number(commissionDetail.course.total_course_commission_pool) - Number(commissionDetail.course.gross_commission_allocated_total ?? 0)}`} />
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-xl border border-border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold text-foreground">Shared Course Members</h3><p className="text-xs text-muted-foreground">Members share one course balance and one commission pool</p></div>{can("course.transfer") && <Button size="sm" variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Add Member</Button>}</div>
+        {members.length === 0 ? <p className="text-sm text-muted-foreground">No shared members</p> : <div className="space-y-2">{members.map((m) => { const p = patients.find((x) => x.id === m.patientId); return <div key={m.patientId} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm"><span>{p ? getPatientFullNameTh(p) : `Patient #${m.patientId}`} <span className="ml-2 text-xs text-muted-foreground">{m.allocatedVisits - m.usedVisits} remaining</span></span>{m.role === "SHARED_MEMBER" && can("course.transfer") && <Button variant="ghost" size="sm" onClick={() => void removeMember(m.patientId)}>Remove</Button>}</div>; })}</div>}
       </div>
 
       <div className="mb-2 flex items-center justify-between">
@@ -256,6 +330,23 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
               </>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={memberOpen} onOpenChange={setMemberOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Shared Course Member</DialogTitle></DialogHeader>
+          <div className="space-y-3"><p className="text-sm text-muted-foreground">Sessions moved to this member keep the same Course ID and commission pool.</p><div className="space-y-1.5"><Label>Search patient</Label><Input value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder="HN, name or phone..." />{memberMatches.length > 0 && <div className="rounded-lg border border-border">{memberMatches.map((p) => <button key={p.id} className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted ${memberPatientId === p.id ? "bg-primary/5" : ""}`} onClick={() => setMemberPatientId(p.id)}>{getPatientFullNameTh(p)} <span className="text-xs text-muted-foreground">{p.hn}</span></button>)}</div>}</div><div className="space-y-1.5"><Label>Sessions to allocate</Label><Input type="number" min={1} max={rem} value={memberVisits} onChange={(e) => setMemberVisits(Math.max(1, Math.min(rem, Number(e.target.value) || 1)))} /></div>{memberPatient && <p className="text-sm text-muted-foreground">Selected: {getPatientFullNameTh(memberPatient)}</p>}</div>
+          <DialogFooter><Button variant="outline" onClick={() => setMemberOpen(false)}>Cancel</Button><Button disabled={!memberPatientId} onClick={() => void confirmMember()}>Add Member</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={refundOpen} onOpenChange={setRefundOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Refund Unused Sessions</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Used visits and commission history stay unchanged. Only the unused remainder is reduced.</p>
+          <div className="space-y-3"><div className="space-y-1.5"><Label>Sessions to refund (max {rem})</Label><Input type="number" min={1} max={rem} value={refundVisits} onChange={(e) => setRefundVisits(Math.max(1, Math.min(rem, Number(e.target.value) || 1)))} /></div><div className="space-y-1.5"><Label>Reason</Label><Input value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Patient requested refund" /></div></div>
+          <DialogFooter><Button variant="outline" onClick={() => setRefundOpen(false)}>Cancel</Button><Button onClick={() => void confirmRefund()}>Confirm Refund</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>

@@ -158,7 +158,8 @@ export type LedgerEntryType =
   | "TREATMENT"
   | "TRANSFER_OUT"
   | "TRANSFER_IN"
-  | "VOID_REVERSAL";
+  | "VOID_REVERSAL"
+  | "REFUND_REMAINING";
 
 export interface CourseLedgerEntry {
   id: string;

@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react";
 import { CalendarCheck2, Lock } from "lucide-react";
 import { toast } from "sonner";
-import { closeMonth, listClosingHistory, previewClosing } from "@/lib/api/clinic-api";
+import { closeMonth, listClosingHistory, previewClosing, overrideClosing } from "@/lib/api/clinic-api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ClosingHistoryRow, ClosingPreviewRow } from "@/types";
 
@@ -30,6 +33,10 @@ export default function MonthlyClosingPage() {
   const [history, setHistory] = useState<ClosingHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [overrideRow, setOverrideRow] = useState<ClosingHistoryRow | null>(null);
+  const [overrideRate, setOverrideRate] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overriding, setOverriding] = useState(false);
 
   async function loadPreview() {
     setLoading(true);
@@ -70,6 +77,30 @@ export default function MonthlyClosingPage() {
       toast.error(error instanceof Error ? error.message : "Could not close the month");
     } finally {
       setClosing(false);
+    }
+  }
+
+  async function runOverride() {
+    if (!overrideRow) return;
+    const rate = Number(overrideRate);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      toast.error("Rate must be between 0 and 100 percent");
+      return;
+    }
+    if (!overrideReason.trim()) {
+      toast.error("A reason is required");
+      return;
+    }
+    setOverriding(true);
+    try {
+      await overrideClosing(overrideRow.id, rate / 100, overrideReason.trim());
+      toast.success("Locked rate overridden and recorded in audit");
+      setOverrideRow(null);
+      await loadHistory();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not override the locked rate");
+    } finally {
+      setOverriding(false);
     }
   }
 
@@ -136,6 +167,7 @@ export default function MonthlyClosingPage() {
               <TableHead className="text-right">Monthly Sales</TableHead>
               <TableHead className="text-right">Locked Rate</TableHead>
               <TableHead>Closed At</TableHead>
+              <TableHead>Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -146,11 +178,33 @@ export default function MonthlyClosingPage() {
                 <TableCell className="text-right">{formatCurrency(row.monthlyCourseSales)}</TableCell>
                 <TableCell className="text-right font-mono">{(row.lockedCommissionRate * 100).toFixed(2)}%</TableCell>
                 <TableCell className="text-muted-foreground">{row.closedAt ? formatDate(row.closedAt) : "-"}</TableCell>
+                <TableCell>
+                  <Button variant="outline" size="sm" onClick={() => { setOverrideRow(row); setOverrideRate(String((row.lockedCommissionRate * 100).toFixed(2))); setOverrideReason(""); }}>
+                    Override
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={overrideRow !== null} onOpenChange={(open) => !open && setOverrideRow(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Override Locked Rate</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This changes the locked rate for {overrideRow?.employeeName} in {overrideRow?.closingMonth}. The change is permanent and audited.
+          </p>
+          <div className="space-y-3">
+            <div className="space-y-1.5"><Label>New rate (%)</Label><Input type="number" min="0" max="100" step="0.01" value={overrideRate} onChange={(e) => setOverrideRate(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label>Reason</Label><Textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Explain why Finance is correcting this rate" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOverrideRow(null)}>Cancel</Button>
+            <Button onClick={() => void runOverride()} disabled={overriding}>{overriding ? "Saving..." : "Save Override"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

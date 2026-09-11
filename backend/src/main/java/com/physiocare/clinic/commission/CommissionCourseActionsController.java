@@ -47,7 +47,8 @@ public class CommissionCourseActionsController {
   public void addMember(
       @PathVariable long id, @RequestBody AddMemberRequest request, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);
-    sharedCourse.addMember(id, request.patientId(), request.visitsFromOwner());
+    sharedCourse.addMember(id, request.patientId(), request.visitsFromOwner(),
+        currentUser.id(authentication), "Shared course member added");
   }
 
   @DeleteMapping("/members/{patientId}")
@@ -55,7 +56,7 @@ public class CommissionCourseActionsController {
   public void removeMember(
       @PathVariable long id, @PathVariable long patientId, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);
-    sharedCourse.removeMember(id, patientId);
+    sharedCourse.removeMember(id, patientId, currentUser.id(authentication), "Shared course member removed");
   }
 
   @PostMapping("/refund-remaining")

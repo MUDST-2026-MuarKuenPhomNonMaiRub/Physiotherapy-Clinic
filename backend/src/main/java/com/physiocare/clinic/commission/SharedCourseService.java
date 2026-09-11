@@ -16,13 +16,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class SharedCourseService {
   private final JdbcTemplate db;
+  private final CommissionAuditService audit;
 
-  public SharedCourseService(JdbcTemplate db) {
+  public SharedCourseService(JdbcTemplate db, CommissionAuditService audit) {
     this.db = db;
+    this.audit = audit;
+  }
+
+  /** Compatibility overload for service-level callers that do not have an authenticated actor. */
+  public void addMember(long patientCourseId, long newPatientId, int visitsFromOwner) {
+    addMember(patientCourseId, newPatientId, visitsFromOwner, null, "Shared course member added");
   }
 
   @Transactional
-  public void addMember(long patientCourseId, long newPatientId, int visitsFromOwner) {
+  public void addMember(long patientCourseId, long newPatientId, int visitsFromOwner, Long actorUserId, String reason) {
     Map<String, Object> course =
         db.queryForMap("SELECT patient_id FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
     long ownerPatientId = ((Number) course.get("patient_id")).longValue();
@@ -59,11 +66,14 @@ public class SharedCourseService {
         patientCourseId,
         newPatientId,
         visitsFromOwner);
+    audit.record(actorUserId, null, "SHARED_COURSE_MEMBER_ADDED", "patient_courses",
+        String.valueOf(patientCourseId), null,
+        Map.of("patientId", newPatientId, "visitsFromOwner", visitsFromOwner), reason);
   }
 
   /** Unused sessions return to the owner's balance; used ones stay recorded against the member. */
   @Transactional
-  public void removeMember(long patientCourseId, long patientId) {
+  public void removeMember(long patientCourseId, long patientId, Long actorUserId, String reason) {
     Map<String, Object> course =
         db.queryForMap("SELECT patient_id FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
     long ownerPatientId = ((Number) course.get("patient_id")).longValue();
@@ -95,6 +105,14 @@ public class SharedCourseService {
         "UPDATE shared_course_members SET status='REMOVED' WHERE patient_course_id=? AND patient_id=?",
         patientCourseId,
         patientId);
+    audit.record(actorUserId, null, "SHARED_COURSE_MEMBER_REMOVED", "patient_courses",
+        String.valueOf(patientCourseId), null,
+        Map.of("patientId", patientId), reason);
+  }
+
+  /** Compatibility overload for service-level callers that do not have an authenticated actor. */
+  public void removeMember(long patientCourseId, long patientId) {
+    removeMember(patientCourseId, patientId, null, "Shared course member removed");
   }
 
   public List<Map<String, Object>> listMembers(long patientCourseId) {
