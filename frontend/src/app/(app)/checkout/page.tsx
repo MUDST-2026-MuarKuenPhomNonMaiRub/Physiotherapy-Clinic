@@ -188,7 +188,7 @@ function CheckoutContent() {
 
   const needsTreatingStaff =
     mode === "SINGLE" || (mode === "COURSE" && (subMode === "USE_EXISTING" ? !!useCourseId : useToday));
-  const needsSalesperson = mode === "SINGLE" || (mode === "COURSE" && subMode === "PURCHASE");
+  const needsSalesperson = mode === "COURSE" && subMode === "PURCHASE";
 
   // Cash is the one method where the sum handed over differs from the sum
   // billed, so it is the only one that asks for a figure and owes change back.
@@ -667,7 +667,7 @@ function CheckoutContent() {
             <Card>
               <CardHeader><CardTitle className="text-base">Staff</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
+                <div className={`space-y-1.5${needsSalesperson ? "" : " sm:col-span-2"}`}>
                   <Label>Treating Staff {needsTreatingStaff && <span className="text-destructive">*</span>}</Label>
                   <Select value={treatingStaffId} onValueChange={setTreatingStaffId}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Select physiotherapist" /></SelectTrigger>
@@ -676,16 +676,18 @@ function CheckoutContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Salesperson {needsSalesperson && <span className="text-destructive">*</span>}</Label>
-                  {needsSalesperson && <p className="text-xs text-muted-foreground">Required only when purchasing a course package.</p>}
-                  <Select value={salespersonId} onValueChange={setSalespersonId}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
-                    <SelectContent>
-                      {branchSales.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {needsSalesperson && (
+                  <div className="space-y-1.5">
+                    <Label>Salesperson <span className="text-destructive">*</span></Label>
+                    <p className="text-xs text-muted-foreground">Required only when purchasing a course package.</p>
+                    <Select value={salespersonId} onValueChange={setSalespersonId}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
+                      <SelectContent>
+                        {branchSales.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

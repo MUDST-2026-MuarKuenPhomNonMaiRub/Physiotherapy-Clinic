@@ -3,13 +3,12 @@
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarPlus, Plus, Search, ShoppingCart, Ticket, UserRound } from "lucide-react";
+import { CalendarPlus, Plus, Search, ShoppingCart, UserRound } from "lucide-react";
 import type { Patient } from "@/types";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { getPatientFullNameEn, getPatientFullNameTh, searchPatients } from "@/lib/domain";
-import { remainingSessions } from "@/lib/domain";
 import { formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageLoading } from "@/components/shared/page-loading";
@@ -19,14 +18,6 @@ import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import {
-  Popover,
-  PopoverContent,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -53,64 +44,6 @@ function initials(p: Patient) {
   const a = p.firstNameEn?.[0] ?? p.firstNameTh?.[0] ?? "";
   const b = p.lastNameEn?.[0] ?? p.lastNameTh?.[0] ?? "";
   return (a + b).toUpperCase() || "?";
-}
-
-function CourseQuickGlance({ patientId }: { patientId: string }) {
-  const patientCourses = useClinicStore((s) => s.patientCourses);
-  const courseTemplates = useClinicStore((s) => s.courseTemplates);
-  const mine = patientCourses.filter((pc) => pc.patientId === patientId);
-
-  if (mine.length === 0) {
-    return <span className="text-xs text-muted-foreground">No courses</span>;
-  }
-
-  const activeCount = mine.filter((pc) => pc.status === "ACTIVE").length;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
-        >
-          <Ticket className="h-3.5 w-3.5" />
-          {activeCount} active
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80" align="start">
-        <PopoverHeader>
-          <PopoverTitle>Course Balance</PopoverTitle>
-        </PopoverHeader>
-        <div className="space-y-2.5">
-          {mine.map((pc) => {
-            const tmpl = courseTemplates.find((c) => c.id === pc.courseId);
-            const purchased = pc.purchased + pc.bonus;
-            const remaining = remainingSessions(pc);
-            const pct = purchased > 0 ? Math.round((remaining / purchased) * 100) : 0;
-            return (
-              <div key={pc.id} className="rounded-lg border border-border p-2.5">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-foreground">{tmpl?.name ?? "Course"}</p>
-                  <Badge
-                    variant="outline"
-                    className={pc.status === "ACTIVE" ? "border-success/20 bg-success/10 text-success" : "font-normal"}
-                  >
-                    {pc.status === "ACTIVE" ? "Active" : pc.status === "EXPIRED" ? "Expired" : "Used Up"}
-                  </Badge>
-                </div>
-                <Progress value={pct} className="mt-2 h-1.5" />
-                <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
-                  <span>Purchased {purchased}</span>
-                  <span>Used {pc.used}</span>
-                  <span className="font-medium text-foreground">{remaining} left</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
 }
 
 function PatientsPageContent() {

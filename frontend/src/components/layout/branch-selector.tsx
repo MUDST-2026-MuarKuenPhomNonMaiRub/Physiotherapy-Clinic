@@ -14,9 +14,11 @@ export function BranchSelector() {
   const { user, activeBranchId, setActiveBranch } = useSession();
   const branches = useClinicStore((s) => s.branches);
 
-  if (!user || user.branchIds.length === 0) return null;
+  if (!user) return null;
 
-  const accessible = branches.filter((b) => user.branchIds.includes(b.id));
+  const accessible = branches.filter(
+    (branch) => branch.status === "ACTIVE" && user.branchIds.includes(branch.id)
+  );
   if (accessible.length <= 1) {
     const only = accessible[0];
     if (!only) return null;
@@ -28,7 +30,7 @@ export function BranchSelector() {
     );
   }
 
-  const current = branches.find((b) => b.id === activeBranchId) ?? accessible[0];
+  const current = accessible.find((b) => b.id === activeBranchId) ?? accessible[0];
 
   return (
     <DropdownMenu>

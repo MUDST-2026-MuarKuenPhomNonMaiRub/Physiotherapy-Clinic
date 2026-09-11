@@ -37,12 +37,9 @@ export const fieldRules = {
 
   phone(value: string): string | null {
     if (!value.trim()) return "Required";
-    const trimmed = value.trim();
-    // Kept apart so a number that is merely short does not get told off for
-    // characters it does not contain.
-    if (!/^[0-9+\-() ]+$/.test(trimmed)) return "Only digits and + - ( ) spaces";
-    if (trimmed.length > 25) return "That is too long for a phone number";
-    return trimmed.replace(/[^0-9]/g, "").length >= 6 ? null : "Not enough digits";
+    return /^\d{10}$/.test(value.trim())
+      ? null
+      : "A phone number must contain exactly 10 digits";
   },
 
   /**
@@ -72,7 +69,7 @@ export const fieldRules = {
  * someone finish a wrong entry and explaining afterwards.
  */
 export const fieldInput = {
-  phone: (value: string) => value.replace(/[^0-9+\-() ]/g, "").slice(0, 25),
+  phone: (value: string) => value.replace(/\D/g, "").slice(0, 10),
   passport: (value: string) => value.replace(/[^A-Za-z0-9]/g, "").slice(0, 20).toUpperCase(),
 };
 

@@ -332,6 +332,16 @@ export const useClinicStore = create<ClinicState>()(
         const branch = await api.createBranch(data);
         set((s) => {
           upsert(s.branches, branch);
+          // Admins can work at every active branch. Keep the persisted session
+          // in sync with the collection so a newly-created branch is available
+          // everywhere immediately, without waiting for a full refresh.
+          if (
+            s.session.user?.role === "ADMIN" &&
+            branch.status === "ACTIVE" &&
+            !s.session.user.branchIds.includes(branch.id)
+          ) {
+            s.session.user.branchIds.push(branch.id);
+          }
         });
       },
 
@@ -340,6 +350,17 @@ export const useClinicStore = create<ClinicState>()(
         const branch = await api.updateBranch({ ...current, ...data, id });
         set((s) => {
           upsert(s.branches, branch);
+          if (s.session.user?.role === "ADMIN") {
+            if (branch.status === "ACTIVE") {
+              if (!s.session.user.branchIds.includes(branch.id)) {
+                s.session.user.branchIds.push(branch.id);
+              }
+            } else {
+              s.session.user.branchIds = s.session.user.branchIds.filter(
+                (branchId) => branchId !== branch.id
+              );
+            }
+          }
         });
       },
 
@@ -348,6 +369,21 @@ export const useClinicStore = create<ClinicState>()(
         const branch = await api.setBranchActive(id, current.status !== "ACTIVE");
         set((s) => {
           upsert(s.branches, branch);
+          if (s.session.user?.role === "ADMIN") {
+            if (branch.status === "ACTIVE") {
+              if (!s.session.user.branchIds.includes(branch.id)) {
+                s.session.user.branchIds.push(branch.id);
+              }
+            } else {
+              s.session.user.branchIds = s.session.user.branchIds.filter(
+                (branchId) => branchId !== branch.id
+              );
+              if (s.session.activeBranchId === branch.id) {
+                s.session.activeBranchId =
+                  s.branches.find((candidate) => candidate.status === "ACTIVE")?.id ?? null;
+              }
+            }
+          }
         });
       },
 
