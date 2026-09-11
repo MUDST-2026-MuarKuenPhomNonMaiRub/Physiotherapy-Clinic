@@ -50,6 +50,10 @@ export interface Staff {
   status: "ACTIVE" | "INACTIVE";
   avatarColor: string;
   deletedAt?: string;
+  commissionEligible?: boolean;
+  terminationDate?: string;
+  /** CONTINUE_UNTIL_COURSE_END (default) keeps releasing course commission after termination; FORFEIT_AFTER_TERMINATION stops it. */
+  commissionAfterTerminationPolicy?: string;
 }
 
 export interface AppUser {
@@ -262,6 +266,84 @@ export interface CommissionRule {
   value: number;
   effectiveDate: string;
   status: "ACTIVE" | "INACTIVE";
+}
+
+// -------------------------------------------------------- course commission
+// The monthly-closing tier/pool model (LA Balance requirement). Deliberately
+// separate from CommissionRule above, which is the immediate per-receipt
+// incentive — a course's commission lives entirely here instead.
+
+export interface CommissionTier {
+  order: number;
+  min: number;
+  max: number | null;
+  rate: number; // 0.07 = 7%
+}
+
+export interface CommissionScheme {
+  code: string;
+  version: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  tiers: CommissionTier[];
+}
+
+export interface ClosingPreviewRow {
+  employeeId: string;
+  employeeName: string;
+  monthlySales: number;
+  schemeId: string | null;
+  schemeVersion: number | null;
+  suggestedRate: number;
+  suggestedPool: number;
+  alreadyClosed: boolean;
+}
+
+export interface ClosingHistoryRow {
+  id: string;
+  closingMonth: string;
+  employeeId: string;
+  employeeName: string;
+  monthlyCourseSales: number;
+  lockedCommissionRate: number;
+  status: string;
+  closedAt: string | null;
+}
+
+export interface CourseCommissionReportRow {
+  staffId: string;
+  staffName: string;
+  monthlyCourseSales: number;
+  commissionGenerated: number;
+  grossAllocated: number;
+  ownerNetReleased: number;
+  treatmentFeeEarned: number;
+  adjustments: number;
+  outstandingPool: number;
+  totalVariablePay: number;
+}
+
+export type TreatmentFeeType = "FIXED" | "PERCENTAGE";
+
+export interface TreatmentFeeRule {
+  id: string;
+  employeeId?: string;
+  employeeGroup?: string;
+  serviceId?: string;
+  feeType: TreatmentFeeType;
+  feeValue: number;
+  percentageBase?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  active: boolean;
+}
+
+export interface SharedCourseMember {
+  patientId: string;
+  role: "OWNER" | "SHARED_MEMBER";
+  status: string;
+  allocatedVisits: number;
+  usedVisits: number;
 }
 
 export interface PaymentMethod {

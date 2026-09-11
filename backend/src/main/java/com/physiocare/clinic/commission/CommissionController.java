@@ -25,32 +25,6 @@ public class CommissionController {
     service.createCourse(request);
   }
 
-  @PostMapping("/close")
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
-  public String close(@Valid @RequestBody CommissionDtos.CloseMonthRequest request) {
-    return "Closed employees: " + service.closeMonth(request.month());
-  }
-
-  @PostMapping("/courses/{id}/use")
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE','RECEPTIONIST','PHYSIO')")
-  public CommissionDtos.CourseView use(
-      @PathVariable long id,
-      @Valid @RequestBody CommissionDtos.UseCourseRequest request,
-      Authentication authentication) {
-    access.requireCourseAccess(authentication, id);
-    return service.useCourse(id, request);
-  }
-
-  @PostMapping("/courses/{id}/transfer")
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE','RECEPTIONIST')")
-  public CommissionDtos.CourseView transfer(
-      @PathVariable long id,
-      @Valid @RequestBody CommissionDtos.TransferRequest request,
-      Authentication authentication) {
-    access.requireCourseAccess(authentication, id);
-    return service.transfer(id, request);
-  }
-
   @GetMapping("/courses/{id}")
   public CommissionDtos.CourseView get(@PathVariable long id, Authentication authentication) {
     access.requireCourseAccess(authentication, id);

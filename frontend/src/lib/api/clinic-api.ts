@@ -7,7 +7,11 @@ import {
   toAppointment,
   toBranch,
   toBranchIdsJson,
+  toClosingHistoryRow,
+  toClosingPreviewRow,
   toCommissionRule,
+  toCommissionSchemes,
+  toCourseCommissionReportRow,
   toCourseTemplate,
   toInstant,
   toLedgerEntry,
@@ -19,15 +23,21 @@ import {
   toResource,
   toRoleCode,
   toService,
+  toSharedCourseMember,
   toStaff,
   toTransaction,
+  toTreatmentFeeRule,
   toUser,
 } from "./mappers";
 import type {
   Appointment,
   AppUser,
   Branch,
+  ClosingHistoryRow,
+  ClosingPreviewRow,
   CommissionRule,
+  CommissionScheme,
+  CourseCommissionReportRow,
   CourseLedgerEntry,
   CourseTemplate,
   MasterDataItem,
@@ -37,8 +47,10 @@ import type {
   ResourceRoom,
   Role,
   Service,
+  SharedCourseMember,
   Staff,
   Transaction,
+  TreatmentFeeRule,
 } from "@/types";
 
 type Row = Record<string, unknown>;
@@ -176,6 +188,9 @@ export const updateStaff = (id: string, staff: Partial<Staff> & { branchIds: str
       branchIds: toBranchIdsJson(staff.branchIds),
       status: staff.status,
       avatarColor: staff.avatarColor,
+      commissionEligible: staff.commissionEligible ?? null,
+      terminationDate: staff.terminationDate ?? null,
+      commissionAfterTerminationPolicy: staff.commissionAfterTerminationPolicy ?? null,
     },
   }).then(toStaff);
 
@@ -365,6 +380,115 @@ export const setCommissionRuleActive = (id: string, active: boolean) =>
     method: "PATCH",
     body: { active },
   }).then(toCommissionRule);
+
+// ------------------------------------------------------- course commission
+// The monthly-closing tier/pool model. See CommissionRule above for the
+// separate, immediate per-receipt incentive.
+
+export const listCommissionSchemes = (): Promise<CommissionScheme[]> =>
+  apiRequest<Row[]>("/api/v1/commission/settings").then(toCommissionSchemes);
+
+export const createCommissionScheme = (scheme: {
+  code: string;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  tiers: { order: number; min: number; max: number | null; rate: number }[];
+}) =>
+  apiRequest<Row>("/api/v1/commission/settings", {
+    method: "POST",
+    body: {
+      code: scheme.code,
+      effectiveFrom: scheme.effectiveFrom,
+      effectiveTo: scheme.effectiveTo ?? null,
+      tiers: scheme.tiers,
+    },
+  });
+
+export const previewClosing = (month: string): Promise<ClosingPreviewRow[]> =>
+  apiRequest<Row[]>(`/api/v1/commission/closing/preview${query({ month })}`).then((rows) =>
+    rows.map(toClosingPreviewRow)
+  );
+
+export const closeMonth = (month: string) =>
+  apiRequest<{ closedEmployees: number }>("/api/v1/commission/closing/close", {
+    method: "POST",
+    body: { month },
+  });
+
+export const listClosingHistory = (month?: string, employeeId?: string): Promise<ClosingHistoryRow[]> =>
+  apiRequest<Row[]>(`/api/v1/commission/closing/history${query({ month, employeeId })}`).then(
+    (rows) => rows.map(toClosingHistoryRow)
+  );
+
+export const overrideClosing = (closingId: string, newRate: number, reason: string) =>
+  apiRequest<void>(`/api/v1/commission/closing/${closingId}/override`, {
+    method: "POST",
+    body: { newRate, reason },
+  });
+
+export const getCourseCommissionReport = (from: string, to: string, staffId?: string): Promise<CourseCommissionReportRow[]> =>
+  apiRequest<Row[]>(`/api/v1/commission/report${query({ from, to, staffId })}`).then((rows) =>
+    rows.map(toCourseCommissionReportRow)
+  );
+
+export const getCourseCommissionDetail = (patientCourseId: string) =>
+  apiRequest<Record<string, unknown>>(`/api/v1/commission/courses/${patientCourseId}/detail`);
+
+export const listSharedCourseMembers = (patientCourseId: string): Promise<SharedCourseMember[]> =>
+  apiRequest<Row[]>(`/api/v1/commission/courses/${patientCourseId}/members`).then((rows) =>
+    rows.map(toSharedCourseMember)
+  );
+
+export const addSharedCourseMember = (patientCourseId: string, patientId: string, visitsFromOwner: number) =>
+  apiRequest<void>(`/api/v1/commission/courses/${patientCourseId}/members`, {
+    method: "POST",
+    body: { patientId: Number(patientId), visitsFromOwner },
+  });
+
+export const removeSharedCourseMember = (patientCourseId: string, patientId: string) =>
+  apiRequest<void>(`/api/v1/commission/courses/${patientCourseId}/members/${patientId}`, {
+    method: "DELETE",
+  });
+
+export const refundRemainingVisits = (patientCourseId: string, visits: number, reason: string) =>
+  apiRequest<void>(`/api/v1/commission/courses/${patientCourseId}/refund-remaining`, {
+    method: "POST",
+    body: { visits, reason },
+  });
+
+export const listTreatmentFeeRules = () =>
+  apiRequest<Row[]>("/api/v1/treatment-fee-rules").then((rows) => rows.map(toTreatmentFeeRule));
+
+export const createTreatmentFeeRule = (rule: {
+  employeeId?: string;
+  employeeGroup?: string;
+  serviceId?: string;
+  feeType: TreatmentFeeRule["feeType"];
+  feeValue: number;
+  percentageBase?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+}) =>
+  apiRequest<Row>("/api/v1/treatment-fee-rules", {
+    method: "POST",
+    body: {
+      employeeId: rule.employeeId ? Number(rule.employeeId) : null,
+      employeeGroup: rule.employeeGroup || null,
+      serviceId: rule.serviceId ? Number(rule.serviceId) : null,
+      feeType: rule.feeType,
+      feeValue: rule.feeValue,
+      percentageBase: rule.percentageBase || null,
+      effectiveFrom: rule.effectiveFrom,
+      effectiveTo: rule.effectiveTo || null,
+      active: true,
+    },
+  }).then(toTreatmentFeeRule);
+
+export const setTreatmentFeeRuleActive = (id: string, active: boolean) =>
+  apiRequest<Row>(`/api/v1/treatment-fee-rules/${id}/status`, {
+    method: "PATCH",
+    body: { active },
+  }).then(toTreatmentFeeRule);
 
 // ------------------------------------------------------------------- patients
 

@@ -1,5 +1,7 @@
 package com.physiocare.clinic.checkout;
 
+import com.physiocare.clinic.commission.CommissionAdjustmentService;
+import com.physiocare.clinic.commission.CourseUsageService;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.common.InputRules;
@@ -20,6 +22,13 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Everything that moves a course balance is written as a ledger entry, so the
  * balance is always the sum of its history rather than a number edited in place.
+ *
+ * <p>Course-pool commission (a course sale, and every session spent from one) no
+ * longer books anything into {@code transaction_commissions} here — that ledger
+ * now carries only the immediate single-visit service incentive. A course's
+ * commission lives entirely in {@code patient_courses}/{@code commission_allocations},
+ * released per visit through {@link CourseUsageService} once the month it was sold
+ * in has been closed.
  */
 @Service
 public class CheckoutService {
@@ -27,16 +36,22 @@ public class CheckoutService {
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
   private final TransactionReader reader;
+  private final CourseUsageService courseUsage;
+  private final CommissionAdjustmentService adjustments;
 
   public CheckoutService(
       JdbcTemplate db,
       BranchAccessService branches,
       CurrentUser currentUser,
-      TransactionReader reader) {
+      TransactionReader reader,
+      CourseUsageService courseUsage,
+      CommissionAdjustmentService adjustments) {
     this.db = db;
     this.branches = branches;
     this.currentUser = currentUser;
     this.reader = reader;
+    this.courseUsage = courseUsage;
+    this.adjustments = adjustments;
   }
 
   @Transactional
@@ -164,7 +179,8 @@ public class CheckoutService {
       purchasedCourseId =
           createPatientCourse(
               r.patientId(), r.branchId(), (Long) idOf(course), courseName, sessions, bonus,
-              coursePrice, validityDays, transactionId, r.salespersonId(), r.treatingStaffId(), today);
+              coursePrice, discountRatio, validityDays, transactionId, r.salespersonId(),
+              r.treatingStaffId(), today);
       patientCourseId = purchasedCourseId;
 
       addLedgerEntry(purchasedCourseId, "PURCHASE", sessions, sessions, r.branchId(),
@@ -173,9 +189,9 @@ public class CheckoutService {
         addLedgerEntry(purchasedCourseId, "BONUS", bonus, sessions + bonus, r.branchId(),
             transactionId, actor, actorUserId, null, null);
 
-      if (r.salespersonId() != null)
-        recordCommission(transactionId, "SALES", "COURSE", (Long) idOf(course),
-            r.salespersonId(), coursePrice.multiply(discountRatio), today);
+      // No immediate SALES commission here: a course's commission lives
+      // entirely in the pool this purchase just created, released per visit
+      // once the sale month is closed (see MonthlyCommissionClosingService).
     }
 
     // ---- course usage -----------------------------------------------------
@@ -184,24 +200,19 @@ public class CheckoutService {
     if (useId != null) {
       int quantity = r.useSessionsCount() == null ? 1 : r.useSessionsCount();
       if (quantity <= 0) throw new IllegalArgumentException("Sessions used must be at least one");
-      Map<String, Object> patientCourse = lockPatientCourse(useId);
-      if (((Number) patientCourse.get("patient_id")).longValue() != r.patientId())
-        throw new IllegalArgumentException("That course does not belong to this patient");
-      if (remaining(patientCourse) < quantity)
-        throw new IllegalArgumentException("Not enough sessions remaining on this course");
-
-      db.update("UPDATE patient_courses SET visits_used=visits_used+? WHERE id=?", quantity, useId);
-      Map<String, Object> updated = patientCourse(useId);
-      addLedgerEntry(useId, "TREATMENT", -quantity, remaining(updated), r.branchId(),
-          transactionId, treatingStaffName(r.treatingStaffId(), actor), actorUserId, null, null);
-      refreshCourseStatus(useId);
+      // Ownership (owner or an active shared member with balance) and the
+      // remaining-sessions check both live in CourseUsageService now, since
+      // a shared course member is not the patient_courses.patient_id.
+      courseUsage.recordCheckoutUsage(
+          useId, r.patientId(), quantity, r.branchId(), transactionId, r.treatingStaffId(),
+          treatingStaffName(r.treatingStaffId(), actor), actorUserId, today);
 
       patientCourseId = useId;
       type = (service != null || course != null) ? "MIXED" : "COURSE_USAGE";
-      if (r.treatingStaffId() != null)
-        recordCommission(transactionId, "TREATMENT", "COURSE",
-            ((Number) updated.get("package_id")).longValue(), r.treatingStaffId(),
-            subtotal.multiply(discountRatio), today);
+      // No immediate TREATMENT commission here either: the physiotherapist's
+      // earnings for this session are the course's owner-net release (or the
+      // Substitute Treatment Fee, if they are not the case owner) computed by
+      // CommissionAllocationService — not a separate line on this receipt.
     }
 
     // ---- adjustments ------------------------------------------------------
@@ -294,8 +305,21 @@ public class CheckoutService {
             "UPDATE patient_courses SET total_visits=total_visits-? WHERE id=?", quantity, patientCourseId);
         case "BONUS" -> db.update(
             "UPDATE patient_courses SET bonus_visits=bonus_visits-? WHERE id=?", quantity, patientCourseId);
-        case "TREATMENT" -> db.update(
-            "UPDATE patient_courses SET visits_used=visits_used+? WHERE id=?", quantity, patientCourseId);
+        case "TREATMENT" -> {
+          db.update(
+              "UPDATE patient_courses SET visits_used=visits_used+? WHERE id=?", quantity, patientCourseId);
+          // The member whose balance this session came from is only known
+          // through course_usages (the ledger entry itself carries no
+          // patient_id) — a ledger entry predating that table has none, and
+          // the balance/commission reversal below is then simply skipped.
+          long ledgerEntryId = ((Number) entry.get("id")).longValue();
+          db.update(
+              "UPDATE course_member_balances SET used_visits=used_visits+?,updated_at=now() WHERE"
+                  + " patient_course_id=? AND patient_id=(SELECT patient_id FROM course_usages WHERE"
+                  + " course_ledger_entry_id=? LIMIT 1)",
+              quantity, patientCourseId, ledgerEntryId);
+          adjustments.reverseUsageForLedgerEntry(ledgerEntryId, actorUserId, reason);
+        }
         default -> throw new IllegalArgumentException(
             "Cannot reverse a " + entryType + " entry automatically");
       }
@@ -367,17 +391,24 @@ public class CheckoutService {
 
   private long createPatientCourse(
       long patientId, long branchId, long packageId, String packageName, int sessions, int bonus,
-      BigDecimal price, Integer validityDays, Long salesTransactionId, Long sellerId,
-      Long caseOwnerId, LocalDate today) {
+      BigDecimal price, BigDecimal discountRatio, Integer validityDays, Long salesTransactionId,
+      Long sellerId, Long caseOwnerId, LocalDate today) {
     Long seller = sellerId != null ? sellerId : caseOwnerId;
+    Long owner = caseOwnerId != null ? caseOwnerId : seller;
     String sellerName = seller == null ? "" : staffName(seller);
+    String ownerName = owner == null ? sellerName : staffName(owner);
+    // The tier/pool base is the price actually collected, not the list
+    // price — a counter override or a discount both shrink it, the same way
+    // a percentage commission_rules line already follows what was earned.
+    BigDecimal netSaleAmount = price.multiply(discountRatio).setScale(2, RoundingMode.HALF_UP);
     long id =
         db.queryForObject(
             "INSERT INTO patient_courses(course_id,receipt_no,sales_transaction_id,patient_id,"
                 + "package_id,package_name_snapshot,sale_date,sale_month,seller_employee_id,"
-                + "case_owner_employee_id,seller_name_snapshot,course_price,total_visits,"
+                + "case_owner_employee_id,seller_name_snapshot,case_owner_name_snapshot,"
+                + "course_price,net_course_sale_amount,total_visits,commissionable_visit_count,"
                 + "bonus_visits,branch_id,valid_until,status)"
-                + " VALUES(?,?,?,?,?,?,?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,'ACTIVE')"
+                + " VALUES(?,?,?,?,?,?,?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
                 + " RETURNING id",
             Long.class,
             nextNumber("PC", "patient_courses", "course_id"),
@@ -393,9 +424,12 @@ public class CheckoutService {
             today,
             today,
             seller,
-            caseOwnerId != null ? caseOwnerId : seller,
+            owner,
             sellerName,
+            ownerName,
             price,
+            netSaleAmount,
+            sessions,
             sessions,
             bonus,
             branchId,
@@ -403,14 +437,15 @@ public class CheckoutService {
     return id;
   }
 
-  void addLedgerEntry(
+  public long addLedgerEntry(
       long patientCourseId, String entryType, int quantity, int balanceAfter, long branchId,
       Long transactionId, String performedBy, Long performedByUserId, String transferGroupId,
       Long reversalOfId) {
-    db.update(
+    return db.queryForObject(
         "INSERT INTO course_ledger_entries(patient_course_id,entry_type,quantity,balance_after,"
             + "branch_id,related_transaction_id,performed_by_name,created_by,transfer_group_id,"
-            + "reversal_of_id) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            + "reversal_of_id) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id",
+        Long.class,
         patientCourseId, entryType, quantity, balanceAfter, branchId, transactionId, performedBy,
         performedByUserId, transferGroupId, reversalOfId);
   }
@@ -458,15 +493,15 @@ public class CheckoutService {
         transactionId, rule.get("id"), rule.get("name"), staffId, appliesTo, amount);
   }
 
-  Map<String, Object> lockPatientCourse(long id) {
+  public Map<String, Object> lockPatientCourse(long id) {
     return row("SELECT * FROM patient_courses WHERE id=? FOR UPDATE", id, "Course");
   }
 
-  Map<String, Object> patientCourse(long id) {
+  public Map<String, Object> patientCourse(long id) {
     return row("SELECT * FROM patient_courses WHERE id=?", id, "Course");
   }
 
-  static int remaining(Map<String, Object> patientCourse) {
+  public static int remaining(Map<String, Object> patientCourse) {
     return intOf(patientCourse, "total_visits")
         + intOf(patientCourse, "bonus_visits")
         + intOf(patientCourse, "transfer_in_visits")
@@ -480,7 +515,7 @@ public class CheckoutService {
   }
 
   /** ACTIVE until it runs out of sessions or passes its expiry date. */
-  void refreshCourseStatus(long patientCourseId) {
+  public void refreshCourseStatus(long patientCourseId) {
     db.update(
         "UPDATE patient_courses SET status = CASE"
             + "  WHEN status='REFUNDED' THEN 'REFUNDED'"

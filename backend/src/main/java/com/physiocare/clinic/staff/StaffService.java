@@ -95,7 +95,10 @@ public class StaffService {
         person.getAvatarColor(),
         person.getUserId(),
         role,
-        user != null && user.isActive());
+        user != null && user.isActive(),
+        person.isCommissionEligible(),
+        person.getTerminationDate(),
+        person.getCommissionAfterTerminationPolicy());
   }
 
   /**
@@ -117,6 +120,10 @@ public class StaffService {
     if (r.status() != null && !r.status().isBlank()) person.setStatus(r.status().trim());
     if (r.avatarColor() != null && !r.avatarColor().isBlank())
       person.setAvatarColor(r.avatarColor());
+    if (r.commissionEligible() != null) person.setCommissionEligible(r.commissionEligible());
+    if (r.terminationDate() != null) person.setTerminationDate(r.terminationDate());
+    if (r.commissionAfterTerminationPolicy() != null && !r.commissionAfterTerminationPolicy().isBlank())
+      person.setCommissionAfterTerminationPolicy(r.commissionAfterTerminationPolicy());
     staff.save(person);
 
     db.update("DELETE FROM user_branches WHERE user_id=?", person.getUserId());

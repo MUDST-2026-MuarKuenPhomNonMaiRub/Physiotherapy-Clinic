@@ -41,10 +41,16 @@ const financeGroup: NavGroup = {
 const courseBalanceItem: NavItem = { label: "Course Balance", href: "/reports/course-balance", icon: "Package" };
 const staffSalesItem: NavItem = { label: "Staff Sales", href: "/reports/staff-sales", icon: "UserCog" };
 const commissionItem: NavItem = { label: "Commission", href: "/reports/commission", icon: "Banknote" };
+/** The tier/pool model (LA Balance requirement) — separate from the immediate per-receipt Commission report above. */
+const courseCommissionItem: NavItem = {
+  label: "Course Commission",
+  href: "/reports/course-commission",
+  icon: "PiggyBank",
+};
 
 const adminReportGroup: NavGroup = {
   title: "Report",
-  items: [courseBalanceItem, staffSalesItem, commissionItem],
+  items: [courseBalanceItem, staffSalesItem, commissionItem, courseCommissionItem],
 };
 
 /**
@@ -53,7 +59,7 @@ const adminReportGroup: NavGroup = {
  */
 const physioReportGroup: NavGroup = {
   title: "Report",
-  items: [courseBalanceItem, commissionItem],
+  items: [courseBalanceItem, commissionItem, courseCommissionItem],
 };
 
 const administrationGroup: NavGroup = {
@@ -65,6 +71,9 @@ const administrationGroup: NavGroup = {
     { label: "Treatments & Course", href: "/settings/services", icon: "Stethoscope" },
     { label: "Payment Methods", href: "/settings/payment-methods", icon: "Wallet" },
     { label: "Commission Rules", href: "/settings/commission", icon: "Percent" },
+    { label: "Commission Tiers", href: "/settings/commission-scheme", icon: "TrendingUp" },
+    { label: "Monthly Closing", href: "/settings/monthly-closing", icon: "CalendarCheck2" },
+    { label: "Treatment Fee Rules", href: "/settings/treatment-fee-rules", icon: "HandCoins" },
     { label: "Master Data", href: "/settings/master-data", icon: "Database" },
   ],
 };

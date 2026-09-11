@@ -39,6 +39,15 @@ public class Staff {
   @Column(name = "deleted_at")
   private java.time.OffsetDateTime deletedAt;
 
+  @Column(name = "commission_eligible", nullable = false)
+  private boolean commissionEligible = true;
+
+  @Column(name = "termination_date")
+  private java.time.LocalDate terminationDate;
+
+  @Column(name = "commission_after_termination_policy", nullable = false, length = 40)
+  private String commissionAfterTerminationPolicy = "CONTINUE_UNTIL_COURSE_END";
+
   protected Staff() {}
 
   public Long getId() {
@@ -83,6 +92,30 @@ public class Staff {
 
   public java.time.OffsetDateTime getDeletedAt() {
     return deletedAt;
+  }
+
+  public boolean isCommissionEligible() {
+    return commissionEligible;
+  }
+
+  public java.time.LocalDate getTerminationDate() {
+    return terminationDate;
+  }
+
+  public String getCommissionAfterTerminationPolicy() {
+    return commissionAfterTerminationPolicy;
+  }
+
+  public void setCommissionEligible(boolean v) {
+    commissionEligible = v;
+  }
+
+  public void setTerminationDate(java.time.LocalDate v) {
+    terminationDate = v;
+  }
+
+  public void setCommissionAfterTerminationPolicy(String v) {
+    commissionAfterTerminationPolicy = v;
   }
 
   public void setName(String v) {

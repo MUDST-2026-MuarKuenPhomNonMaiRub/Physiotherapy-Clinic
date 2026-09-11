@@ -7,7 +7,11 @@ import type {
   AppointmentStatus,
   AppUser,
   Branch,
+  ClosingHistoryRow,
+  ClosingPreviewRow,
   CommissionRule,
+  CommissionScheme,
+  CourseCommissionReportRow,
   CourseLedgerEntry,
   CourseTemplate,
   CustomerType,
@@ -21,9 +25,11 @@ import type {
   Role,
   Service,
   ServiceType,
+  SharedCourseMember,
   Staff,
   StaffPosition,
   Transaction,
+  TreatmentFeeRule,
 } from "@/types";
 
 type Row = Record<string, unknown>;
@@ -76,6 +82,10 @@ export function toStaff(row: Row): Staff {
     email: str(row.email),
     status: str(row.status) === "INACTIVE" ? "INACTIVE" : "ACTIVE",
     avatarColor: str(row.avatarColor) || "bg-[#1A4A2E]",
+    commissionEligible: row.commissionEligible == null ? undefined : bool(row.commissionEligible),
+    terminationDate: row.terminationDate == null ? undefined : str(row.terminationDate).slice(0, 10),
+    commissionAfterTerminationPolicy:
+      row.commissionAfterTerminationPolicy == null ? undefined : str(row.commissionAfterTerminationPolicy),
   };
 }
 
@@ -387,5 +397,103 @@ export function toTransaction(row: Row): Transaction {
           reason: str(voidInfo.reason),
         }
       : undefined,
+  };
+}
+
+// ---------------------------------------------------------- course commission
+// The rows below come from JdbcTemplate query results (snake_case column
+// names, unlike the camelCase Jackson records above) except where noted.
+
+/** Groups the flat tier-per-row settings response by scheme code+version. */
+export function toCommissionSchemes(rows: Row[]): CommissionScheme[] {
+  const byKey = new Map<string, CommissionScheme>();
+  for (const row of rows) {
+    const key = `${str(row.code)}::${num(row.version)}`;
+    let scheme = byKey.get(key);
+    if (!scheme) {
+      scheme = {
+        code: str(row.code),
+        version: num(row.version),
+        effectiveFrom: str(row.effective_from).slice(0, 10),
+        effectiveTo: row.effective_to == null ? null : str(row.effective_to).slice(0, 10),
+        tiers: [],
+      };
+      byKey.set(key, scheme);
+    }
+    scheme.tiers.push({
+      order: num(row.tier_order),
+      min: num(row.minimum_monthly_sales),
+      max: row.maximum_monthly_sales == null ? null : num(row.maximum_monthly_sales),
+      rate: num(row.commission_rate),
+    });
+  }
+  return [...byKey.values()];
+}
+
+/** From MonthlyCommissionClosingService.EmployeePreview — a Jackson record, camelCase. */
+export function toClosingPreviewRow(row: Row): ClosingPreviewRow {
+  return {
+    employeeId: id(row.employeeId),
+    employeeName: str(row.employeeName),
+    monthlySales: num(row.monthlySales),
+    schemeId: row.schemeId == null ? null : id(row.schemeId),
+    schemeVersion: row.schemeVersion == null ? null : num(row.schemeVersion),
+    suggestedRate: num(row.suggestedRate),
+    suggestedPool: num(row.suggestedPool),
+    alreadyClosed: bool(row.alreadyClosed),
+  };
+}
+
+export function toClosingHistoryRow(row: Row): ClosingHistoryRow {
+  return {
+    id: id(row.id),
+    closingMonth: str(row.closing_month).slice(0, 10),
+    employeeId: id(row.employee_id),
+    employeeName: str(row.employee_name),
+    monthlyCourseSales: num(row.monthly_course_sales),
+    lockedCommissionRate: num(row.locked_commission_rate),
+    status: str(row.status),
+    closedAt: row.closed_at == null ? null : str(row.closed_at),
+  };
+}
+
+/** From CommissionQueryService.ReportRow — a Jackson record, camelCase. */
+export function toCourseCommissionReportRow(row: Row): CourseCommissionReportRow {
+  return {
+    staffId: id(row.staffId),
+    staffName: str(row.staffName),
+    monthlyCourseSales: num(row.monthlyCourseSales),
+    commissionGenerated: num(row.commissionGenerated),
+    grossAllocated: num(row.grossAllocated),
+    ownerNetReleased: num(row.ownerNetReleased),
+    treatmentFeeEarned: num(row.treatmentFeeEarned),
+    adjustments: num(row.adjustments),
+    outstandingPool: num(row.outstandingPool),
+    totalVariablePay: num(row.totalVariablePay),
+  };
+}
+
+export function toTreatmentFeeRule(row: Row): TreatmentFeeRule {
+  return {
+    id: id(row.id),
+    employeeId: row.employee_id == null ? undefined : id(row.employee_id),
+    employeeGroup: row.employee_group == null ? undefined : str(row.employee_group),
+    serviceId: row.service_id == null ? undefined : id(row.service_id),
+    feeType: str(row.fee_type) as TreatmentFeeRule["feeType"],
+    feeValue: num(row.fee_value),
+    percentageBase: row.percentage_base == null ? undefined : str(row.percentage_base),
+    effectiveFrom: str(row.effective_from).slice(0, 10),
+    effectiveTo: row.effective_to == null ? undefined : str(row.effective_to).slice(0, 10),
+    active: bool(row.active),
+  };
+}
+
+export function toSharedCourseMember(row: Row): SharedCourseMember {
+  return {
+    patientId: id(row.patient_id),
+    role: str(row.role) as SharedCourseMember["role"],
+    status: str(row.status),
+    allocatedVisits: num(row.allocated_visits),
+    usedVisits: num(row.used_visits),
   };
 }

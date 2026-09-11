@@ -3,7 +3,6 @@ package com.physiocare.clinic.commission;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.YearMonth;
 
 public final class CommissionDtos {
   private CommissionDtos() {}
@@ -20,18 +19,6 @@ public final class CommissionDtos {
       @Positive int totalVisits,
       @NotNull LocalDate saleDate) {}
 
-  public record CloseMonthRequest(@NotNull YearMonth month) {}
-
-  public record UseCourseRequest(
-      @Positive long visitId,
-      @Positive long patientId,
-      @Positive long treatingEmployeeId,
-      @NotNull LocalDate visitDate,
-      Long treatmentFeeRuleId) {}
-
-  public record TransferRequest(
-      @Positive long toPatientId, @Positive int quantity, @NotBlank String reason) {}
-
   public record CourseView(
       String courseId,
       String receiptNo,
@@ -46,7 +33,4 @@ public final class CommissionDtos {
       BigDecimal treatmentFeeTotal,
       BigDecimal ownerNet,
       BigDecimal outstanding) {}
-
-  public record ClosingView(
-      YearMonth month, long employeeId, BigDecimal monthlySales, BigDecimal rate, String status) {}
 }

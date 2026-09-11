@@ -30,7 +30,10 @@ public final class StaffDtos {
       String phone,
       @NotBlank String branchIds,
       String status,
-      String avatarColor) {}
+      String avatarColor,
+      Boolean commissionEligible,
+      java.time.LocalDate terminationDate,
+      String commissionAfterTerminationPolicy) {}
 
   public record CreateResponse(Long staffId, Long userId) {}
 
@@ -46,5 +49,8 @@ public final class StaffDtos {
       String avatarColor,
       Long userId,
       String userRole,
-      boolean userActive) {}
+      boolean userActive,
+      boolean commissionEligible,
+      java.time.LocalDate terminationDate,
+      String commissionAfterTerminationPolicy) {}
 }

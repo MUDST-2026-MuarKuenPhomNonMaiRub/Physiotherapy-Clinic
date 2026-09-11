@@ -1,5 +1,6 @@
 package com.physiocare.clinic.common;
 
+import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -50,13 +51,19 @@ public class BranchAccessService {
   }
 
   public void requireCourseAccess(Authentication authentication, long courseId) {
-    Long branchId =
-        db.queryForObject(
-            "SELECT st.branch_id FROM patient_courses pc JOIN sales_transactions st "
-                + "ON st.id=pc.sales_transaction_id WHERE pc.id=?",
-            Long.class,
-            courseId);
-    if (branchId == null) throw new IllegalArgumentException("Course not found");
-    requireAccess(authentication, branchId);
+    // patient_courses has carried its own branch_id since V8 — a course with
+    // no sales_transaction (a transfer target, or one entered outside a
+    // checkout receipt) still has a branch, so the old join through
+    // sales_transactions denied access to exactly those courses.
+    List<Long> rows =
+        db.queryForList("SELECT branch_id FROM patient_courses WHERE id=?", Long.class, courseId);
+    if (rows.isEmpty() || rows.get(0) == null)
+      throw new IllegalArgumentException("Course not found or has no branch on record");
+    requireAccess(authentication, rows.get(0));
+  }
+
+  /** Call only after {@link #requireCourseAccess} has already confirmed the caller may see this course. */
+  public long branchIdOf(long courseId) {
+    return db.queryForObject("SELECT branch_id FROM patient_courses WHERE id=?", Long.class, courseId);
   }
 }

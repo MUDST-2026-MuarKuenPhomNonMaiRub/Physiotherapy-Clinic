@@ -88,7 +88,7 @@ export default function CommissionSettingsPage() {
     <>
       <PageHeader
         title="Commission Rules"
-        description="Define how treating staff and salespeople earn commission on services and courses"
+        description="Immediate, per-receipt commission on a single-visit service — paid the moment it's rung up. A course purchase and its per-visit release run on the tier/pool model instead: see Commission Tiers, Monthly Closing and Treatment Fee Rules."
         actions={<Button onClick={openCreate}><Plus className="h-4 w-4" /> Add Rule</Button>}
       />
 
