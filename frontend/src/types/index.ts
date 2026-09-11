@@ -36,7 +36,8 @@ export interface Branch {
 export type StaffPosition =
   | "Physiotherapist"
   | "Clinic Manager"
-  | "Assistant Therapist";
+  | "Assistant Therapist"
+  | "Salesperson";
 
 export interface Staff {
   id: string;

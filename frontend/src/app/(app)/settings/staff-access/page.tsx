@@ -34,7 +34,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { AppUser, Permission, Role, Staff, StaffPosition } from "@/types";
 import { toast } from "sonner";
 
-const positions: StaffPosition[] = ["Physiotherapist", "Clinic Manager", "Assistant Therapist"];
+const positions: StaffPosition[] = ["Physiotherapist", "Clinic Manager", "Assistant Therapist", "Salesperson"];
 
 /** Mirrors the policy the API enforces, so the form can say so before it posts. */
 const PASSWORD_RULE = "At least 12 characters with an upper case, a lower case, a number and a symbol.";
@@ -55,6 +55,7 @@ const suggestedRoleForPosition: Record<StaffPosition, Role> = {
   "Clinic Manager": "ADMIN",
   Physiotherapist: "PHYSIOTHERAPIST",
   "Assistant Therapist": "PHYSIOTHERAPIST",
+  Salesperson: "PHYSIOTHERAPIST",
 };
 
 const permissionGroups: { label: string; keys: { key: Permission; label: string }[] }[] = [
@@ -529,6 +530,10 @@ export default function StaffAccessPage() {
           <div className="space-y-6">
             <section className="space-y-4">
               <SectionLabel>Staff profile</SectionLabel>
+              <p className="text-xs text-muted-foreground">
+                Active staff assigned to a branch can be selected as the salesperson when checking out a service or course.
+                Their course sales will appear automatically in Staff Sales.
+              </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Name (TH)" required>
                   <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
@@ -545,7 +550,14 @@ export default function StaffAccessPage() {
                       const position = v as StaffPosition;
                       // Only pre-fill the access level while creating; on an existing
                       // person their assigned level is deliberate, so leave it alone.
-                      return editing ? { ...f, position } : { ...f, position, role: suggestedRoleForPosition[position] };
+                      return editing
+                        ? { ...f, position }
+                        : {
+                            ...f,
+                            position,
+                            role: suggestedRoleForPosition[position],
+                            hasAccount: position === "Salesperson" ? false : f.hasAccount,
+                          };
                     })
                   }
                 >

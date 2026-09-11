@@ -17,7 +17,7 @@ const dashboardItem: NavItem = { label: "Dashboard", href: "/dashboard", icon: "
 
 const overviewGroup: NavGroup = {
   title: "Overview",
-  items: [dashboardItem],
+  items: [calendarItem, dashboardItem],
 };
 
 const patientGroup: NavGroup = {
@@ -69,11 +69,6 @@ const administrationGroup: NavGroup = {
   ],
 };
 
-export const pinnedByRole: Record<Role, NavItem> = {
-  ADMIN: calendarItem,
-  PHYSIOTHERAPIST: calendarItem,
-};
-
 export const navigationByRole: Record<Role, NavGroup[]> = {
   ADMIN: [overviewGroup, patientGroup, financeGroup, adminReportGroup, administrationGroup],
   PHYSIOTHERAPIST: [overviewGroup, patientGroup, financeGroup, physioReportGroup],
@@ -89,7 +84,7 @@ export const defaultRouteByRole: Record<Role, string> = {
  * highlights Courses Transfer rather than its parent Patient Courses.
  */
 export function findActiveHref(role: Role, pathname: string): string | null {
-  const hrefs = [pinnedByRole[role].href, ...navigationByRole[role].flatMap((g) => g.items.map((i) => i.href))];
+  const hrefs = navigationByRole[role].flatMap((g) => g.items.map((i) => i.href));
   return (
     hrefs
       .filter((href) => pathname === href || pathname.startsWith(href + "/"))

@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import {
   findActiveHref,
   navigationByRole,
-  pinnedByRole,
   type NavItem,
 } from "@/lib/permissions/navigation";
 import type { Role } from "@/types";
@@ -47,13 +46,10 @@ function NavLink({
 export function NavContent({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
   const pathname = usePathname();
   const activeHref = findActiveHref(role, pathname);
-  const pinned = pinnedByRole[role];
   const groups = navigationByRole[role];
 
   return (
     <nav className="flex-1 overflow-y-auto px-4 py-4">
-      <NavLink item={pinned} active={activeHref === pinned.href} onNavigate={onNavigate} delay={0} />
-
       {groups.map((group, groupIndex) => (
         <div key={group.title} className="mt-5 first:mt-6">
           {group.title && (

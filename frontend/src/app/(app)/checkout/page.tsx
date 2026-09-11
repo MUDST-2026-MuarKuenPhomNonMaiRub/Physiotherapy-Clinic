@@ -678,6 +678,7 @@ function CheckoutContent() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Salesperson {needsSalesperson && <span className="text-destructive">*</span>}</Label>
+                  {needsSalesperson && <p className="text-xs text-muted-foreground">Required only when purchasing a course package.</p>}
                   <Select value={salespersonId} onValueChange={setSalespersonId}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
                     <SelectContent>
