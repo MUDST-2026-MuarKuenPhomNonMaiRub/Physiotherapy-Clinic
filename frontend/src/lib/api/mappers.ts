@@ -114,6 +114,7 @@ export function toService(row: Row): Service {
   const type = str(row.service_type) as ServiceType;
   return {
     id: id(row.id),
+    code: str(row.code).trim(),
     name: str(row.name_th),
     type: type === "ASSESSMENT" ? "ASSESSMENT" : "SINGLE_VISIT",
     price: num(row.base_price),
@@ -125,6 +126,7 @@ export function toService(row: Row): Service {
 export function toCourseTemplate(row: Row): CourseTemplate {
   return {
     id: id(row.id),
+    code: str(row.code).trim(),
     name: str(row.name_th),
     description: str(row.description),
     price: num(row.price),

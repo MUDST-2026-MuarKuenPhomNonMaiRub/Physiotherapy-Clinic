@@ -223,6 +223,7 @@ export const listServices = () =>
   apiRequest<Row[]>("/api/v1/services").then((rows) => rows.map(toService));
 
 const serviceBody = (service: Omit<Service, "id">) => ({
+  code: service.code || undefined,
   nameTh: service.name,
   nameEn: service.name,
   serviceType: service.type,
@@ -250,6 +251,7 @@ export const listCourseTemplates = () =>
   apiRequest<Row[]>("/api/v1/courses").then((rows) => rows.map(toCourseTemplate));
 
 const courseBody = (course: Omit<CourseTemplate, "id">) => ({
+  code: course.code || undefined,
   nameTh: course.name,
   nameEn: course.name,
   description: course.description,

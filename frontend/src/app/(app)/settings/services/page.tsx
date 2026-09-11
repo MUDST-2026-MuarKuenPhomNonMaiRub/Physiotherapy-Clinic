@@ -31,8 +31,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { CourseTemplate, Service, ServiceType } from "@/types";
 import { toast } from "sonner";
 
-const emptyServiceForm = { name: "", type: "SINGLE_VISIT" as ServiceType, price: 0, duration: 30 };
-const emptyCourseForm = { name: "", description: "", price: 0, sessions: 10, bonusSessions: 0, expiryDays: 180 };
+const emptyServiceForm = { name: "", type: "SINGLE_VISIT" as ServiceType, price: 0, duration: 60, code: "" };
+const emptyCourseForm = { code: "", name: "", description: "", price: 0, sessions: 10, bonusSessions: 0, expiryDays: 180 };
 
 export default function ServicesSettingsPage() {
   const services = useClinicStore((s) => s.services);
@@ -54,7 +54,7 @@ export default function ServicesSettingsPage() {
 
   function openCreateService() { setEditingService(null); setServiceForm(emptyServiceForm); setServiceOpen(true); }
   function openEditService(s: Service) {
-    setEditingService(s); setServiceForm({ name: s.name, type: s.type, price: s.price, duration: s.duration }); setServiceOpen(true);
+    setEditingService(s); setServiceForm({ name: s.name, type: s.type, price: s.price, duration: s.duration, code: s.code }); setServiceOpen(true);
   }
   async function saveService() {
     if (!serviceForm.name) return;
@@ -78,7 +78,7 @@ export default function ServicesSettingsPage() {
   function openCreateCourse() { setEditingCourse(null); setCourseForm(emptyCourseForm); setCourseOpen(true); }
   function openEditCourse(c: CourseTemplate) {
     setEditingCourse(c);
-    setCourseForm({ name: c.name, description: c.description, price: c.price, sessions: c.sessions, bonusSessions: c.bonusSessions, expiryDays: c.expiryDays });
+    setCourseForm({ code: c.code, name: c.name, description: c.description, price: c.price, sessions: c.sessions, bonusSessions: c.bonusSessions, expiryDays: c.expiryDays });
     setCourseOpen(true);
   }
   /**
@@ -112,11 +112,11 @@ export default function ServicesSettingsPage() {
 
   return (
     <>
-      <PageHeader title="Services / Courses" description="Configure billable services and course packages sold at checkout" />
+      <PageHeader title="Service" description="Configure billable services and course packages sold at checkout" />
 
       <Tabs defaultValue="services">
         <TabsList>
-          <TabsTrigger value="services">Services</TabsTrigger>
+          <TabsTrigger value="services">Treatment</TabsTrigger>
           <TabsTrigger value="courses">Courses</TabsTrigger>
         </TabsList>
 
@@ -132,10 +132,10 @@ export default function ServicesSettingsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Code</TableHead>
                     <TableHead>Service Name</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Price</TableHead>
-                    <TableHead>Duration</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -143,6 +143,7 @@ export default function ServicesSettingsPage() {
                 <TableBody>
                   {services.map((s) => (
                     <TableRow key={s.id} className="[&>td]:py-3.5">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{s.code || "—"}</TableCell>
                       <TableCell className="font-medium text-foreground">{s.name}</TableCell>
                       <TableCell>
                         <span
@@ -160,7 +161,6 @@ export default function ServicesSettingsPage() {
                           {formatCurrency(s.price)}
                         </span>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{s.duration} min</TableCell>
                       <TableCell><StatusBadge status={s.status} /></TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -191,11 +191,12 @@ export default function ServicesSettingsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Code</TableHead>
                     <TableHead>Course Name</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead>Sessions</TableHead>
                     <TableHead>Bonus</TableHead>
-                    <TableHead>Expiry</TableHead>
+                    <TableHead>Expiry (days)</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -203,6 +204,7 @@ export default function ServicesSettingsPage() {
                 <TableBody>
                   {courseTemplates.map((c) => (
                     <TableRow key={c.id} className="[&>td]:py-3.5">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{c.code || "—"}</TableCell>
                       <TableCell>
                         <p className="font-medium text-foreground">{c.name}</p>
                         <p className="text-xs text-muted-foreground">{c.description}</p>
@@ -239,6 +241,10 @@ export default function ServicesSettingsPage() {
           <DialogHeader><DialogTitle>{editingService ? "Edit Service" : "Add Service"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
+              <Label>Item Code</Label>
+              <Input value={serviceForm.code} placeholder="Auto-generated if blank" onChange={(e) => setServiceForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} maxLength={40} />
+            </div>
+            <div className="space-y-1.5">
               <Label>Service Name</Label>
               <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} />
             </div>
@@ -252,16 +258,10 @@ export default function ServicesSettingsPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Price (THB)</Label>
-                <Input type="number" value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: Number(e.target.value) }))} />
+            <div className="space-y-1.5">
+              <Label>Price (THB)</Label>
+              <Input type="number" value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: Number(e.target.value) }))} />
               </div>
-              <div className="space-y-1.5">
-                <Label>Duration (minutes)</Label>
-                <Input type="number" value={serviceForm.duration} onChange={(e) => setServiceForm((f) => ({ ...f, duration: Number(e.target.value) }))} />
-              </div>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setServiceOpen(false)}>Cancel</Button>
@@ -274,6 +274,10 @@ export default function ServicesSettingsPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>{editingCourse ? "Edit Course" : "Add Course"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Item Code</Label>
+              <Input value={courseForm.code} placeholder="Auto-generated if blank" onChange={(e) => setCourseForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} maxLength={40} />
+            </div>
             <div className="space-y-1.5">
               <Label>Course Name</Label>
               <Input value={courseForm.name} onChange={(e) => setCourseForm((f) => ({ ...f, name: e.target.value }))} />

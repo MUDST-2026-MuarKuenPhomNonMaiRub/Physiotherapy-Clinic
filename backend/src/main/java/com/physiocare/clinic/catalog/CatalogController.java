@@ -106,8 +106,9 @@ public class CatalogController {
     int rows =
         db.update(
             "UPDATE services SET"
-                + " name_th=?,name_en=?,service_type=?,duration_minutes=?,base_price=?,active=COALESCE(?,active),updated_at=now()"
+                + " code=COALESCE(NULLIF(?,''),code),name_th=?,name_en=?,service_type=?,duration_minutes=?,base_price=?,active=COALESCE(?,active),updated_at=now()"
                 + " WHERE id=? AND deleted_at IS NULL",
+            r.code(),
             r.nameTh(),
             r.nameEn() == null ? r.nameTh() : r.nameEn(),
             r.serviceType(),
@@ -179,8 +180,9 @@ public class CatalogController {
     int rows =
         db.update(
             "UPDATE courses SET"
-                + " name_th=?,name_en=?,description=?,total_sessions=?,bonus_sessions=?,validity_days=?,price=?,active=COALESCE(?,active),updated_at=now()"
+                + " code=COALESCE(NULLIF(?,''),code),name_th=?,name_en=?,description=?,total_sessions=?,bonus_sessions=?,validity_days=?,price=?,active=COALESCE(?,active),updated_at=now()"
                 + " WHERE id=? AND deleted_at IS NULL",
+            r.code(),
             r.nameTh(),
             r.nameEn() == null ? r.nameTh() : r.nameEn(),
             r.description() == null ? "" : r.description(),

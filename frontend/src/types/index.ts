@@ -96,6 +96,7 @@ export type ServiceType = "ASSESSMENT" | "SINGLE_VISIT";
 
 export interface Service {
   id: string;
+  code: string;
   name: string;
   type: ServiceType;
   price: number;
@@ -105,6 +106,7 @@ export interface Service {
 
 export interface CourseTemplate {
   id: string;
+  code: string;
   name: string;
   description: string;
   price: number;
