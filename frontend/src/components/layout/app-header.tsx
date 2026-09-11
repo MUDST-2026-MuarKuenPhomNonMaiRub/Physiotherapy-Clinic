@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, Bell, LogOut, RefreshCw, Search } from "lucide-react";
+import { Bell, LogOut, RefreshCw, Search } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { roleLabels } from "@/lib/permissions";
@@ -13,7 +13,6 @@ import { BranchSelector } from "@/components/layout/branch-selector";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -168,20 +167,6 @@ export function AppHeader() {
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-card px-4 lg:px-6">
       <MobileSidebar />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="h-9 w-9 shrink-0"
-        aria-label="Go back"
-        title="Go back"
-        onClick={() => {
-          if (window.history.length > 1) router.back();
-          else router.push("/dashboard");
-        }}
-      >
-        <ArrowLeft className="h-4.5 w-4.5" />
-      </Button>
       <div className="min-w-0 flex-1">
         <Breadcrumb>
           <BreadcrumbList>
