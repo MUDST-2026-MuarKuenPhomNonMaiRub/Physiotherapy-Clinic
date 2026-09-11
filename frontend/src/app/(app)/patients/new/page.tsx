@@ -378,11 +378,13 @@ export default function NewPatientPage() {
               <Label>Phone <span className="text-destructive">*</span></Label>
               <Input
                 type="tel"
-                inputMode="tel"
+                inputMode="numeric"
                 autoComplete="tel"
+                maxLength={10}
+                pattern="[0-9]{10}"
                 value={form.phone}
                 onChange={(e) => update("phone", fieldInput.phone(e.target.value))}
-                placeholder="08X-XXX-XXXX"
+                placeholder="0812345678"
               />
               {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
             </div>

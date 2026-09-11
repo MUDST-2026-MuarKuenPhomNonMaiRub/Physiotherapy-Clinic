@@ -207,7 +207,9 @@ export function AppointmentTimeGrid({
                     const start = toMinutes(a.startTime);
                     const end = toMinutes(a.endTime);
                     const top = (start - START_HOUR * 60) * PX_PER_MIN;
-                    const height = Math.max((end - start) * PX_PER_MIN, 34);
+                    // Leave a small visual gutter between back-to-back bookings
+                    // so their borders and text never appear to merge.
+                    const height = Math.max((end - start) * PX_PER_MIN - 2, 34);
                     const patient = patients.find((p) => p.id === a.patientId);
                     const svc = services.find((s) => s.id === a.serviceId);
                     const room = resources.find((r) => r.id === a.resourceId);
@@ -219,10 +221,9 @@ export function AppointmentTimeGrid({
                         key={a.id}
                         type="button"
                         onClick={() => onSelect(a.id)}
-                        title={`${a.startTime}–${a.endTime} · ${patientName} · ${meta.label}`}
                         aria-label={`${a.startTime} to ${a.endTime}, ${patientName}, ${svc?.name ?? "appointment"}, ${meta.label}`}
                         className={cn(
-                          "group absolute inset-x-1.5 flex flex-col overflow-hidden rounded-lg border pl-2.5 pr-2 py-1.5 text-left transition-colors",
+                          "group absolute inset-x-1.5 flex flex-col justify-start gap-0.5 overflow-hidden rounded-lg border py-1.5 pl-2.5 pr-2 text-left transition-colors",
                           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                           a.status === "CANCELLED" && "opacity-70",
                           meta.block
@@ -233,22 +234,22 @@ export function AppointmentTimeGrid({
                           className={cn("absolute inset-y-0 left-0 w-1 rounded-l-lg", meta.rail)}
                           aria-hidden="true"
                         />
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex h-3.5 shrink-0 items-center gap-1.5 leading-none">
                           <StatusIcon className="h-3 w-3 shrink-0 text-foreground/70" aria-hidden="true" />
-                          <span className="truncate text-[11px] font-semibold tabular-nums text-foreground/80">
+                          <span className="truncate text-[11px] font-semibold leading-none tabular-nums text-foreground/80">
                             {a.startTime}–{a.endTime}
                           </span>
                         </span>
                         <span
                           className={cn(
-                            "truncate text-[13px] font-medium text-foreground",
+                            "block shrink-0 truncate text-[13px] font-medium leading-4 text-foreground",
                             a.status === "CANCELLED" && "line-through"
                           )}
                         >
                           {patientName}
                         </span>
                         {height > 62 && (
-                          <span className="truncate text-[11px] text-muted-foreground">
+                          <span className="block shrink-0 truncate text-[11px] leading-4 text-muted-foreground">
                             {svc?.name}
                             {room ? ` · ${room.name}` : ""}
                           </span>
