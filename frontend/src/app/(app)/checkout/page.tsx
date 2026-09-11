@@ -161,15 +161,25 @@ function CheckoutContent() {
     .map((a) => {
       const magnitude = a.isPercent ? Math.round((subtotal * a.value) / 100) : Math.round(a.value);
       const amount = a.kind === "DISCOUNT" ? -magnitude : magnitude;
+      const plainLabel = a.label.trim() || DEFAULT_LABEL[a.kind];
       return {
         ...a,
-        resolvedLabel: a.label.trim() || DEFAULT_LABEL[a.kind],
+        // A course discount is recorded with the course context so the
+        // receipt and transaction history show exactly what was reduced.
+        resolvedLabel:
+          mode === "COURSE" && subMode === "PURCHASE" && a.kind === "DISCOUNT"
+            ? `Course discount: ${plainLabel}`
+            : plainLabel,
         amount: Number.isFinite(amount) ? amount : 0,
       };
     })
     .filter((a) => a.amount !== 0);
 
   const adjustmentTotal = resolvedAdjustments.reduce((sum, a) => sum + a.amount, 0);
+  const courseDiscountTotal = resolvedAdjustments
+    .filter((a) => a.kind === "DISCOUNT")
+    .reduce((sum, a) => sum + a.amount, 0);
+  const courseNetPrice = Math.max(0, basePrice + courseDiscountTotal);
   const total = Math.max(0, subtotal + adjustmentTotal);
   // Discounting past free is almost always a typo — block confirm rather than
   // silently clamping the patient's bill to zero.
@@ -252,6 +262,11 @@ function CheckoutContent() {
     const treatingStaff = staff.find((s) => s.id === result.treatingStaffId);
     const salesperson = staff.find((s) => s.id === result.salespersonId);
     const resultAdjustments = result.items.filter((i) => i.kind === "DISCOUNT" || i.kind === "SURCHARGE");
+    const resultCourseItem = mode === "COURSE" && subMode === "PURCHASE"
+      ? result.items.find((i) => i.kind === "BASE")
+      : undefined;
+    const resultCourseDiscounts = resultAdjustments.filter((i) => i.kind === "DISCOUNT");
+    const resultCourseDiscountTotal = resultCourseDiscounts.reduce((sum, item) => sum + item.amount, 0);
     return (
       <div className="mx-auto flex max-w-lg flex-1 flex-col items-center justify-center py-10 text-center">
         <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
@@ -269,6 +284,18 @@ function CheckoutContent() {
               {resultAdjustments.map((a, i) => (
                 <SummaryRow key={i} label={a.description} value={formatCurrencySigned(a.amount)} />
               ))}
+            </>
+          )}
+          {resultCourseItem && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Course Price Link</p>
+              <SummaryRow label="Course price before discount" value={formatCurrency(resultCourseItem.amount)} />
+              {resultCourseDiscounts.length > 0 && (
+                <SummaryRow label="Discount linked to this course" value={formatCurrencySigned(resultCourseDiscountTotal)} />
+              )}
+              <SummaryRow label="Course price after discount" value={formatCurrency(Math.max(0, resultCourseItem.amount + resultCourseDiscountTotal))} bold />
+              <p className="text-xs text-muted-foreground">ค่าคอร์สหลังลดนี้ถูกใช้เป็นฐานสร้าง Course และ Commission Pool</p>
             </>
           )}
           <SummaryRow label="Amount Paid" value={formatCurrency(result.total)} bold />
@@ -545,9 +572,14 @@ function CheckoutContent() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Price Adjustment</CardTitle>
+                <CardTitle className="text-base">{mode === "COURSE" && subMode === "PURCHASE" ? "Course Price Adjustment" : "Price Adjustment"}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && (
+                  <p className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                    ส่วนลดที่เพิ่มด้านล่างจะผูกกับคอร์สนี้โดยตรง และจะใช้ราคาหลังลดคำนวณ Commission Pool
+                  </p>
+                )}
                 {baseItem ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="base-price">Charged price</Label>
@@ -730,7 +762,7 @@ function CheckoutContent() {
                 )}
               </div>
 
-              {resolvedAdjustments.length > 0 && (
+                {resolvedAdjustments.length > 0 && (
                 <>
                   <Separator />
                   <div className="space-y-2 text-sm">
@@ -744,7 +776,17 @@ function CheckoutContent() {
                           {a.resolvedLabel}
                           {a.isPercent && a.kind === "DISCOUNT" && (
                             <span className="ml-1 text-xs">({a.value}%)</span>
-                          )}
+                )}
+
+                {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && courseDiscountTotal !== 0 && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">Course price after discount</span>
+                      <span className="font-semibold text-primary">{formatCurrency(courseNetPrice)}</span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">ราคานี้จะถูกบันทึกไว้กับ Course ที่สร้างหลัง Confirm Payment</p>
+                  </div>
+                )}
                         </span>
                         <span className={`shrink-0 ${a.amount < 0 ? "text-success" : "text-[#8A5A00]"}`}>
                           {formatCurrencySigned(a.amount)}
