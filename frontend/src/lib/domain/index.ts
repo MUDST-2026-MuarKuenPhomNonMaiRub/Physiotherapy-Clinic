@@ -42,6 +42,14 @@ export const fieldRules = {
       : "A phone number must contain exactly 10 digits";
   },
 
+  /** A staff phone number is optional, but if given must be ten digits. */
+  optionalPhone(value: string): string | null {
+    if (!value.trim()) return null;
+    return /^\d{10}$/.test(value.trim())
+      ? null
+      : "A phone number must contain exactly 10 digits";
+  },
+
   /**
    * A Thai patient's name is recorded in Thai, so the box takes Thai letters
    * and the spaces between names — nothing else. Only reached for a Thai

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, KeyRound, Minus, Pencil, Plus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
+import { fieldRules, fieldInput } from "@/lib/domain";
 import { allRoles, roleDescriptions, roleLabels, roleStyles, rolePermissions } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
@@ -233,9 +234,11 @@ export default function StaffAccessPage() {
   const existingAccount = editing ? accountByStaffId.get(editing.id) ?? null : null;
   const passwordRequired = form.hasAccount && !existingAccount;
   const passwordValid = !passwordRequired || isStrongPassword(form.password);
+  const phoneError = fieldRules.optionalPhone(form.phone);
   const canSave =
     form.name.trim().length > 0 &&
     form.branchIds.length > 0 &&
+    !phoneError &&
     (!form.hasAccount || (
       form.username.trim().length > 0 &&
       form.email.trim().length > 0 &&
@@ -569,7 +572,14 @@ export default function StaffAccessPage() {
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Phone">
-                  <Input type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
+                  <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: fieldInput.phone(e.target.value) }))}
+                  />
+                  {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
                 </Field>
                 <Field label="Email">
                   <Input type="email" autoComplete="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />

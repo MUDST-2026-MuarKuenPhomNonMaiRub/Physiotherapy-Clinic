@@ -80,6 +80,14 @@ public final class InputRules {
         "A phone number must contain exactly 10 digits");
   }
 
+  /** A staff phone number is optional, but if given must be ten digits. */
+  public static void optionalPhone(String value) {
+    if (isBlank(value)) return;
+    require(
+        value.trim().matches("\\d{10}"),
+        "A phone number must contain exactly 10 digits");
+  }
+
   public static void email(String value) {
     if (isBlank(value)) return;
     require(

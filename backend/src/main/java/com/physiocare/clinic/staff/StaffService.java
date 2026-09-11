@@ -1,6 +1,7 @@
 package com.physiocare.clinic.staff;
 
 import com.physiocare.clinic.auth.*;
+import com.physiocare.clinic.common.InputRules;
 import jakarta.transaction.Transactional;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -35,6 +36,7 @@ public class StaffService {
 
   @Transactional
   public StaffDtos.CreateResponse create(StaffDtos.CreateRequest r) {
+    InputRules.optionalPhone(r.phone());
     String email = r.email().trim().toLowerCase();
     if (users.existsByEmailIgnoreCase(email))
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already in use");
@@ -107,6 +109,7 @@ public class StaffService {
    */
   @Transactional
   public StaffDtos.Row update(long id, StaffDtos.UpdateRequest r) {
+    InputRules.optionalPhone(r.phone());
     Staff person =
         staff
             .findById(id)
