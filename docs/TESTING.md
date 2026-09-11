@@ -10,14 +10,14 @@
 - Frontend: Next.js 16.3.0
 - Test framework: JUnit 5 และ Spring Boot Test
 
-## Latest result — 11 September 2026
+## Latest result — 12 September 2026
 
 | Test suite | Scope | Passed | Failed | Errors | Skipped | Result |
 |---|---|---:|---:|---:|---:|---|
-| `InputRulesTest` | Unit validation rules | 19 | 0 | 0 | 0 | PASS |
+| `InputRulesTest` | Unit validation rules | 23 | 0 | 0 | 0 | PASS |
 | `RequestValidationTest` | Request validation for auth, patients, catalogue, appointments and checkout | 7 | 0 | 0 | 0 | PASS |
-| `CommissionFlowTest` | Commission flow with throwaway PostgreSQL | 22 | 0 | 0 | 0 | PASS |
-| **Total automated** |  | **48** | **0** | **0** | **0** | **PASS** |
+| `CommissionFlowTest` | Commission flow with temporary real PostgreSQL | 26 | 0 | 0 | 0 | PASS |
+| **Total automated** |  | **56** | **0** | **0** | **0** | **PASS** |
 
 ## Failure log
 
@@ -50,6 +50,7 @@ involved, expected value, actual result, and fix status in this section.
 - Appointment booking window: no past dates and no more than two years ahead
 - Thai-language patient names
 - Maximum text length
+- Branch code and branch phone number
 
 `RequestValidationTest` checks the required fields and basic constraints on:
 
@@ -89,11 +90,12 @@ To run all validation unit tests:
 ./mvnw -Dtest=InputRulesTest,RequestValidationTest test -B
 ```
 
-Latest successful result: `26 tests passed, 0 failed`.
+Latest successful result: `30 tests passed, 0 failed`.
 
 ## Integration test coverage
 
-`CommissionFlowTest` runs against a temporary PostgreSQL 16 database and checks:
+`CommissionFlowTest` is an integration test: it combines multiple application
+components and runs against a temporary real PostgreSQL 16 database. It checks:
 
 - Commission tier is frozen when a course is purchased
 - Old courses continue releasing commission when there is no new sale
@@ -104,6 +106,11 @@ Latest successful result: `26 tests passed, 0 failed`.
 - Shared course balance and member allocation
 - Commission rounding and total-pool invariants
 - Course usage lineage and adjustment behavior
+- Zero-price course usage without creating a payment
+- Course purchase, provisional pool, and frozen rate after monthly closing
+- Course transfer without creating a new sale or commission pool
+- Released course commission in the Commission report
+- Most-specific Treatment Fee Rule resolution
 
 The test database is disposable and is removed automatically after the run. It
 does not use the application's normal PostgreSQL database.
@@ -117,9 +124,17 @@ bash run-commission-tests.sh
 Expected result:
 
 ```text
-Tests run: 22, Failures: 0, Errors: 0, Skipped: 0
+Tests run: 26, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
+
+The 26 integration scenarios cover tier freezing, old-course release,
+appointment usage, balance limits, fixed and percentage treatment fees, owner
+treatment, overflow policies, shared courses, pool reconciliation, usage
+voids, refunds, termination policies, idempotent monthly closing, duplicate
+checkout protection, zero-price usage, course purchase and frozen rates,
+course transfers, released commission reporting, and treatment-fee rule
+resolution.
 
 ## Manual smoke checks
 
@@ -139,6 +154,21 @@ Docker health check during the same check:
 - Frontend container: running on port 3000
 - Backend health endpoint: `UP` on port 8080
 - PostgreSQL container: healthy on port 5432
+
+## Submission checklist
+
+- Include `InputRulesTest`, `RequestValidationTest`, and `CommissionFlowTest`.
+- Include an IntelliJ or terminal screenshot showing 56 passed and 0 failed.
+- Include the green `Clinic CI` GitHub Actions run.
+- Explain that `InputRulesTest` is a unit test, while `CommissionFlowTest` is an
+  integration test because it uses real PostgreSQL.
+
+## Not covered by automated tests
+
+- Browser end-to-end flows still require a manual smoke test: patient creation,
+  appointment, checkout, course usage, transfer, and report verification.
+- The frontend pipeline runs lint and build; it does not currently include UI
+  automation tests.
 
 ## Notes
 
