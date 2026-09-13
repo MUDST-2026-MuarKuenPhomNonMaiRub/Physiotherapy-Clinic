@@ -762,13 +762,13 @@ export const useClinicStore = create<ClinicState>()(
     })),
     {
       name: "clinic-erp-store",
-      version: 5,
+      version: 6,
       // Clinic data lives on the server now; only the session is worth keeping
       // between page loads.
-      // Keep branch preference only. The bearer token must remain in memory;
-      // persisting it in localStorage would make an XSS incident a session takeover.
+      // Keep the authenticated session across a normal browser refresh. The
+      // API still rejects expired tokens and clears the session on 401/403.
       partialize: (s) => ({
-        session: { user: s.session.user, activeBranchId: s.session.activeBranchId, accessToken: null },
+        session: { user: s.session.user, activeBranchId: s.session.activeBranchId, accessToken: s.session.accessToken },
       }),
       migrate: (persisted, version) => {
         // Versions below 5 persisted a whole mock database. Dropping it is the
@@ -780,7 +780,7 @@ export const useClinicStore = create<ClinicState>()(
         }
         const session = (persisted as { session?: Partial<Session> } | undefined)?.session;
         return {
-          session: { user: session?.user ?? null, activeBranchId: session?.activeBranchId ?? null, accessToken: null },
+          session: { user: session?.user ?? null, activeBranchId: session?.activeBranchId ?? null, accessToken: session?.accessToken ?? null },
         };
       },
       onRehydrateStorage: () => (state) => {
