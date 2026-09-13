@@ -773,12 +773,15 @@ export const useClinicStore = create<ClinicState>()(
       migrate: (persisted, version) => {
         // Versions below 5 persisted a whole mock database. Dropping it is the
         // migration: everything is re-read from the API on the next load.
-        if (version < 5) return {} as ClinicState;
-        const session = persisted?.session;
+        if (version < 5) {
+          return {
+            session: { user: null, activeBranchId: null, accessToken: null },
+          };
+        }
+        const session = (persisted as { session?: Partial<Session> } | undefined)?.session;
         return {
-          ...(persisted as ClinicState),
           session: { user: session?.user ?? null, activeBranchId: session?.activeBranchId ?? null, accessToken: null },
-        } as ClinicState;
+        };
       },
       onRehydrateStorage: () => (state) => {
         if (state?.session.user && !VALID_ROLES.includes(state.session.user.role)) {
