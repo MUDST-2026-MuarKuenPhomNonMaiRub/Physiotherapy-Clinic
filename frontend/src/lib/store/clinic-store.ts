@@ -765,12 +765,20 @@ export const useClinicStore = create<ClinicState>()(
       version: 5,
       // Clinic data lives on the server now; only the session is worth keeping
       // between page loads.
-      partialize: (s) => ({ session: s.session }),
+      // Keep branch preference only. The bearer token must remain in memory;
+      // persisting it in localStorage would make an XSS incident a session takeover.
+      partialize: (s) => ({
+        session: { user: s.session.user, activeBranchId: s.session.activeBranchId, accessToken: null },
+      }),
       migrate: (persisted, version) => {
         // Versions below 5 persisted a whole mock database. Dropping it is the
         // migration: everything is re-read from the API on the next load.
         if (version < 5) return {} as ClinicState;
-        return persisted as ClinicState;
+        const session = persisted?.session;
+        return {
+          ...(persisted as ClinicState),
+          session: { user: session?.user ?? null, activeBranchId: session?.activeBranchId ?? null, accessToken: null },
+        } as ClinicState;
       },
       onRehydrateStorage: () => (state) => {
         if (state?.session.user && !VALID_ROLES.includes(state.session.user.role)) {

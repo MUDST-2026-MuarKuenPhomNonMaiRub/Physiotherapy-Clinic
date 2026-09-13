@@ -9,6 +9,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class AuthService {
@@ -18,6 +21,11 @@ public class AuthService {
   private final RoleRepository roles;
   private final PasswordEncoder encoder;
   private final JdbcTemplate db;
+  private final ConcurrentHashMap<String, LoginAttempt> loginAttempts = new ConcurrentHashMap<>();
+  private static final int MAX_FAILED_ATTEMPTS = 5;
+  private static final Duration LOCKOUT = Duration.ofMinutes(10);
+
+  private record LoginAttempt(AtomicInteger failures, long blockedUntil) {}
 
   public AuthService(
       AuthenticationManager authenticationManager,
@@ -35,10 +43,25 @@ public class AuthService {
   }
 
   public AuthDtos.LoginResponse login(AuthDtos.LoginRequest request) {
-    authenticationManager.authenticate(
-        new UsernamePasswordAuthenticationToken(request.email(), request.password()));
+    String email = request.email().trim().toLowerCase();
+    LoginAttempt attempt = loginAttempts.get(email);
+    if (attempt != null && attempt.blockedUntil() > System.currentTimeMillis()) {
+      throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts");
+    }
+    try {
+      authenticationManager.authenticate(
+          new UsernamePasswordAuthenticationToken(email, request.password()));
+      loginAttempts.remove(email);
+    } catch (org.springframework.security.core.AuthenticationException e) {
+      LoginAttempt current = loginAttempts.computeIfAbsent(email, k -> new LoginAttempt(new AtomicInteger(), 0));
+      int failures = current.failures().incrementAndGet();
+      if (failures >= MAX_FAILED_ATTEMPTS) {
+        loginAttempts.put(email, new LoginAttempt(current.failures(), System.currentTimeMillis() + LOCKOUT.toMillis()));
+      }
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+    }
 
-    AppUser user = users.findByEmailIgnoreCaseAndDeletedAtIsNull(request.email()).orElseThrow();
+    AppUser user = users.findByEmailIgnoreCaseAndDeletedAtIsNull(email).orElseThrow();
     db.update("UPDATE users SET last_login=now() WHERE id=?", user.getId());
     return new AuthDtos.LoginResponse(
         jwt.generateToken(user), "Bearer", jwt.getExpirationMs() / 1000);
