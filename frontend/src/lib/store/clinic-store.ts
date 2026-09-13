@@ -762,7 +762,7 @@ export const useClinicStore = create<ClinicState>()(
     })),
     {
       name: "clinic-erp-store",
-      version: 6,
+      version: 7,
       // Clinic data lives on the server now; only the session is worth keeping
       // between page loads.
       // Keep the authenticated session across a normal browser refresh. The
@@ -781,6 +781,18 @@ export const useClinicStore = create<ClinicState>()(
         const session = (persisted as { session?: Partial<Session> } | undefined)?.session;
         return {
           session: { user: session?.user ?? null, activeBranchId: session?.activeBranchId ?? null, accessToken: session?.accessToken ?? null },
+        };
+      },
+      merge: (persisted, current) => {
+        const saved = persisted as { session?: Partial<Session> } | undefined;
+        const persistedState = (persisted ?? {}) as Partial<ClinicState>;
+        return {
+          ...current,
+          ...persistedState,
+          session: {
+            ...current.session,
+            ...saved?.session,
+          },
         };
       },
       onRehydrateStorage: () => (state) => {
