@@ -130,6 +130,7 @@ public class CheckoutRepository {
   }
 
   public String nextNumber(String prefix, String table, String column) {
+    db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))", Object.class, table + ":" + column);
     Long next = db.queryForObject("SELECT count(*)+1 FROM " + table, Long.class);
     String candidate = String.format("%s-%d-%06d", prefix, LocalDate.now().getYear(), next);
     while (Boolean.TRUE.equals(

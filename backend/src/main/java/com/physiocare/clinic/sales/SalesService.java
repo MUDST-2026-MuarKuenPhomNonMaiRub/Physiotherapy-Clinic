@@ -3,6 +3,7 @@ package com.physiocare.clinic.sales;
 import com.physiocare.clinic.commission.CommissionDtos;
 import com.physiocare.clinic.commission.CommissionService;
 import com.physiocare.clinic.common.BranchAccessService;
+import com.physiocare.clinic.common.DocumentNumberService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
@@ -20,12 +21,15 @@ public class SalesService {
   private final JdbcTemplate db;
   private final CommissionService commissions;
   private final BranchAccessService branches;
+  private final DocumentNumberService numbers;
 
   public SalesService(
-      JdbcTemplate db, CommissionService commissions, BranchAccessService branches) {
+      JdbcTemplate db, CommissionService commissions, BranchAccessService branches,
+      DocumentNumberService numbers) {
     this.db = db;
     this.commissions = commissions;
     this.branches = branches;
+    this.numbers = numbers;
   }
 
   public record SaleRequest(
@@ -50,7 +54,7 @@ public class SalesService {
   public Object createCourseSale(@Valid @RequestBody SaleRequest r, Authentication authentication) {
     branches.requireAccess(authentication, r.branchId());
     branches.requireActiveBranch(r.branchId());
-    String no = "RE-" + System.currentTimeMillis();
+    String no = numbers.next("RE", "sales_transactions", "transaction_no");
     long tx =
         db.queryForObject(
             "INSERT INTO"
@@ -106,7 +110,7 @@ public class SalesService {
     BigDecimal total = (BigDecimal) sale.get("total_amount");
     if (paid.add(r.amount()).compareTo(total) > 0)
       throw new IllegalArgumentException("Payment exceeds transaction total");
-    String no = "PM-" + System.currentTimeMillis();
+    String no = numbers.next("PM", "payments", "payment_no");
     long id =
         db.queryForObject(
             "INSERT INTO"

@@ -7,12 +7,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.*;
 
 /**
  * The Substitute Treatment Fee configuration a treating PT (who is not the
@@ -43,7 +41,6 @@ public class TreatmentFeeRuleService {
       LocalDate effectiveTo,
       Boolean active) {}
 
-  @GetMapping
   @PreAuthorize("isAuthenticated()")
   public List<Map<String, Object>> list() {
     return db.queryForList(
@@ -52,10 +49,8 @@ public class TreatmentFeeRuleService {
             + " id DESC");
   }
 
-  @PostMapping
-  @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasRole('ADMIN')")
-  public Map<String, Object> create(@Valid @RequestBody RuleRequest r, Authentication authentication) {
+  public Map<String, Object> create(@Valid RuleRequest r, Authentication authentication) {
     validate(r);
     long id =
         db.queryForObject(
@@ -78,10 +73,9 @@ public class TreatmentFeeRuleService {
     return created;
   }
 
-  @PatchMapping("/{id}")
   @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> update(
-      @PathVariable long id, @Valid @RequestBody RuleRequest r, Authentication authentication) {
+      long id, @Valid RuleRequest r, Authentication authentication) {
     validate(r);
     Map<String, Object> before = rule(id);
     int rows = db.update(
@@ -98,10 +92,9 @@ public class TreatmentFeeRuleService {
     return after;
   }
 
-  @PatchMapping("/{id}/status")
   @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> setStatus(
-      @PathVariable long id, @RequestBody Map<String, Boolean> body, Authentication authentication) {
+      long id, Map<String, Boolean> body, Authentication authentication) {
     Boolean active = body.get("active");
     Map<String, Object> before = rule(id);
     int rows = db.update("UPDATE treatment_fee_rules SET active=? WHERE id=?", active, id);

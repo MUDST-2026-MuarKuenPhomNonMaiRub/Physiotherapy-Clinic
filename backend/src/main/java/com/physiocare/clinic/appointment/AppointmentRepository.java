@@ -98,6 +98,7 @@ public class AppointmentRepository {
   }
 
   public Long nextAppointmentNumber() {
+    db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))", Object.class, "appointments:appointment_no");
     return db.queryForObject("SELECT count(*)+1 FROM appointments", Long.class);
   }
 
