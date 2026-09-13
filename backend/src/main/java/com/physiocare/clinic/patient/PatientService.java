@@ -116,7 +116,7 @@ public class PatientService {
                   + "passport_hash,birth_date,blood_group_code,"
                   + "nationality_code,phone,email,address_text,customer_group_code,"
                   + "referral_channel_code,insurance_company_code,created_by)"
-                  + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+                  + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
               Long.class,
               hn,
               r.registeredBranchId(),
