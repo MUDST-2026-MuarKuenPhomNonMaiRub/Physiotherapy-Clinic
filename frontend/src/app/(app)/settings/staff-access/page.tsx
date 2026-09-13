@@ -318,9 +318,14 @@ export default function StaffAccessPage() {
         description="One record per person — their clinic profile and the login that goes with it"
         actions={
           tab === "people" ? (
-            <Button onClick={openCreate}>
-              <UserPlus className="h-4 w-4" /> Add Person
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setTab("roles")}>
+                <ShieldCheck className="h-4 w-4" /> Manage Roles & Permissions
+              </Button>
+              <Button onClick={openCreate}>
+                <UserPlus className="h-4 w-4" /> Add Person
+              </Button>
+            </div>
           ) : undefined
         }
       />
