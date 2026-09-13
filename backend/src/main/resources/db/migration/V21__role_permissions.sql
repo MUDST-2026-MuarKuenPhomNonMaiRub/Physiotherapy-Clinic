@@ -1,13 +1,5 @@
-CREATE TABLE permissions (
-  id BIGSERIAL PRIMARY KEY,
-  code VARCHAR(60) NOT NULL UNIQUE,
-  name VARCHAR(150) NOT NULL
-);
-CREATE TABLE role_permissions (
-  role_id BIGINT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-  permission_id BIGINT NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
-  PRIMARY KEY (role_id, permission_id)
-);
+-- V5 already owns these tables; this migration only completes the catalogue.
+ALTER TABLE permissions ALTER COLUMN module SET DEFAULT 'GENERAL';
 INSERT INTO permissions(code,name) VALUES
  ('patient.view','View patient records'),('patient.create','Register new patient'),
  ('patient.edit','Edit patient details'),('appointment.view','View appointments'),
