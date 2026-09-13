@@ -23,17 +23,17 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/course-transfers")
 public class CourseTransferController {
   private final JdbcTemplate db;
-  private final CheckoutService checkout;
+  private final CheckoutRepository repository;
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
 
   public CourseTransferController(
       JdbcTemplate db,
-      CheckoutService checkout,
+      CheckoutRepository repository,
       BranchAccessService branches,
       CurrentUser currentUser) {
     this.db = db;
-    this.checkout = checkout;
+    this.repository = repository;
     this.branches = branches;
     this.currentUser = currentUser;
   }
@@ -60,7 +60,7 @@ public class CourseTransferController {
   @Transactional
   public Map<String, Object> transfer(
       @Valid @RequestBody TransferRequest r, Authentication authentication) {
-    Map<String, Object> source = checkout.lockPatientCourse(r.patientCourseId());
+    Map<String, Object> source = repository.lockPatientCourse(r.patientCourseId());
     long fromPatientId = ((Number) source.get("patient_id")).longValue();
     if (fromPatientId == r.toPatientId())
       throw new IllegalArgumentException("A course cannot be transferred to its own owner");
@@ -75,7 +75,7 @@ public class CourseTransferController {
     long packageId = ((Number) source.get("package_id")).longValue();
     String actor = currentUser.displayName(authentication);
     Long actorUserId = currentUser.id(authentication);
-    String transferGroupId = checkout.nextNumber("TRF", "course_transfers", "transfer_no");
+    String transferGroupId = repository.nextNumber("TRF", "course_transfers", "transfer_no");
 
     db.update(
         "UPDATE patient_courses SET transfer_out_visits=transfer_out_visits+? WHERE id=?",
@@ -88,15 +88,15 @@ public class CourseTransferController {
         "UPDATE course_member_balances SET allocated_visits=allocated_visits-?,updated_at=now()"
             + " WHERE patient_course_id=? AND patient_id=?",
         r.sessions(), r.patientCourseId(), fromPatientId);
-    checkout.addLedgerEntry(
+    repository.addLedgerEntry(
         r.patientCourseId(), "TRANSFER_OUT", -r.sessions(),
-        CheckoutService.remaining(checkout.patientCourse(r.patientCourseId())), branchId, null,
+        CheckoutService.remaining(repository.patientCourse(r.patientCourseId())), branchId, null,
         actor, actorUserId, transferGroupId, null);
     db.update(
         "UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=(SELECT max(id) FROM"
             + " course_ledger_entries WHERE patient_course_id=?)",
         r.toPatientId(), r.patientCourseId());
-    checkout.refreshCourseStatus(r.patientCourseId());
+    repository.refreshCourseStatus(r.patientCourseId());
 
     // Sessions land on the recipient's live course for the same package when
     // they already have one, so their balance stays in a single place.
@@ -117,7 +117,7 @@ public class CourseTransferController {
                   + " VALUES(?,?,?,?,?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
                   + " RETURNING id",
               Long.class,
-              checkout.nextNumber("PC", "patient_courses", "course_id"),
+              repository.nextNumber("PC", "patient_courses", "course_id"),
               r.toPatientId(),
               packageId,
               source.get("package_name_snapshot"),
@@ -135,7 +135,7 @@ public class CourseTransferController {
               source.get("valid_until"));
     } else {
       targetId = ((Number) existing.get(0).get("id")).longValue();
-      checkout.lockPatientCourse(targetId);
+      repository.lockPatientCourse(targetId);
       db.update(
           "UPDATE patient_courses SET transfer_in_visits=transfer_in_visits+? WHERE id=?",
           r.sessions(), targetId);
@@ -151,15 +151,15 @@ public class CourseTransferController {
             + " updated_at=now()",
         targetId, r.toPatientId(), r.sessions());
 
-    checkout.addLedgerEntry(
+    repository.addLedgerEntry(
         targetId, "TRANSFER_IN", r.sessions(),
-        CheckoutService.remaining(checkout.patientCourse(targetId)), branchId, null, actor,
+        CheckoutService.remaining(repository.patientCourse(targetId)), branchId, null, actor,
         actorUserId, transferGroupId, null);
     db.update(
         "UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=(SELECT max(id) FROM"
             + " course_ledger_entries WHERE patient_course_id=?)",
         fromPatientId, targetId);
-    checkout.refreshCourseStatus(targetId);
+    repository.refreshCourseStatus(targetId);
 
     long transferId =
         db.queryForObject(

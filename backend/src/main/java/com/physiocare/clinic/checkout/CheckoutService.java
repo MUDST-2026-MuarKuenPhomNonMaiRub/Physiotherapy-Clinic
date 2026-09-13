@@ -33,6 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class CheckoutService {
   private final JdbcTemplate db;
+  private final CheckoutRepository repository;
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
   private final TransactionReader reader;
@@ -41,12 +42,14 @@ public class CheckoutService {
 
   public CheckoutService(
       JdbcTemplate db,
+      CheckoutRepository repository,
       BranchAccessService branches,
       CurrentUser currentUser,
       TransactionReader reader,
       CourseUsageService courseUsage,
       CommissionAdjustmentService adjustments) {
     this.db = db;
+    this.repository = repository;
     this.branches = branches;
     this.currentUser = currentUser;
     this.reader = reader;
@@ -74,11 +77,11 @@ public class CheckoutService {
             .toList();
 
     Map<String, Object> service =
-        r.serviceId() == null ? null : row("SELECT * FROM services WHERE id=?", r.serviceId(), "Service");
+        r.serviceId() == null ? null : repository.row("SELECT * FROM services WHERE id=?", r.serviceId(), "Service");
     Map<String, Object> course =
         r.purchaseCourseId() == null
             ? null
-            : row("SELECT * FROM courses WHERE id=?", r.purchaseCourseId(), "Course");
+            : repository.row("SELECT * FROM courses WHERE id=?", r.purchaseCourseId(), "Course");
 
     BigDecimal servicePrice =
         service == null
@@ -133,7 +136,7 @@ public class CheckoutService {
                 + "appointment_id,payment_method_id,created_by)"
                 + " VALUES(?,?,?,'SINGLE_VISIT','PAID',0,?,?,?,?,?,?,?) RETURNING id",
             Long.class,
-            nextNumber("INV", "sales_transactions", "transaction_no"),
+            repository.nextNumber("INV", "sales_transactions", "transaction_no"),
             r.patientId(),
             r.branchId(),
             discountTotal.abs(),
@@ -151,7 +154,7 @@ public class CheckoutService {
 
     // ---- service line -----------------------------------------------------
     if (service != null) {
-      addItem(transactionId, "SERVICE", (Long) idOf(service), null,
+      repository.addItem(transactionId, "SERVICE", (Long) idOf(service), null,
           (String) service.get("name_th"), servicePrice, "BASE");
       subtotal = subtotal.add(servicePrice);
       type = "ASSESSMENT".equals(service.get("service_type")) ? "ASSESSMENT" : "SINGLE_VISIT";
@@ -175,7 +178,7 @@ public class CheckoutService {
       int sessions = ((Number) course.get("total_sessions")).intValue();
       int bonus = ((Number) course.get("bonus_sessions")).intValue();
       String courseName = (String) course.get("name_th");
-      addItem(transactionId, "COURSE", null, (Long) idOf(course),
+      repository.addItem(transactionId, "COURSE", null, (Long) idOf(course),
           courseName + " (" + sessions + " Sessions)", coursePrice, "BASE");
       subtotal = subtotal.add(coursePrice);
       type = service != null ? "MIXED" : "COURSE_PURCHASE";
@@ -183,16 +186,16 @@ public class CheckoutService {
       Integer validityDays =
           course.get("validity_days") == null ? null : ((Number) course.get("validity_days")).intValue();
       purchasedCourseId =
-          createPatientCourse(
+          repository.createPatientCourse(
               r.patientId(), r.branchId(), (Long) idOf(course), courseName, sessions, bonus,
               coursePrice, discountRatio, validityDays, transactionId, r.salespersonId(),
               r.treatingStaffId(), today);
       patientCourseId = purchasedCourseId;
 
-      addLedgerEntry(purchasedCourseId, "PURCHASE", sessions, sessions, r.branchId(),
+      repository.addLedgerEntry(purchasedCourseId, "PURCHASE", sessions, sessions, r.branchId(),
           transactionId, actor, actorUserId, null, null);
       if (bonus > 0)
-        addLedgerEntry(purchasedCourseId, "BONUS", bonus, sessions + bonus, r.branchId(),
+        repository.addLedgerEntry(purchasedCourseId, "BONUS", bonus, sessions + bonus, r.branchId(),
             transactionId, actor, actorUserId, null, null);
 
       // No immediate SALES commission here: a course's commission lives
@@ -223,7 +226,7 @@ public class CheckoutService {
 
     // ---- adjustments ------------------------------------------------------
     for (CheckoutDtos.Adjustment adjustment : adjustments) {
-      addItem(transactionId, "ADJUSTMENT", null, null, adjustment.label(), adjustment.amount(),
+      repository.addItem(transactionId, "ADJUSTMENT", null, null, adjustment.label(), adjustment.amount(),
           adjustment.amount().signum() < 0 ? "DISCOUNT" : "SURCHARGE");
     }
 
@@ -236,7 +239,7 @@ public class CheckoutService {
       // Cash is counted at the drawer, so the note handed over is recorded
       // alongside the change owed. Revenue stays the amount billed — the change
       // goes straight back and was never the clinic's.
-      BigDecimal cashReceived = isCash(r.paymentMethodId()) ? r.cashReceived() : null;
+      BigDecimal cashReceived = repository.isCash(r.paymentMethodId()) ? r.cashReceived() : null;
       if (cashReceived != null) {
         InputRules.money(cashReceived, "The cash received");
         InputRules.require(
@@ -246,7 +249,7 @@ public class CheckoutService {
       db.update(
           "INSERT INTO payments(payment_no,sales_transaction_id,payment_method_id,amount,"
               + "reference_no,received_by,cash_received,change_given) VALUES(?,?,?,?,?,?,?,?)",
-          nextNumber("PM", "payments", "payment_no"),
+          repository.nextNumber("PM", "payments", "payment_no"),
           transactionId,
           r.paymentMethodId(),
           netTotal,
@@ -256,23 +259,8 @@ public class CheckoutService {
           cashReceived == null ? null : cashReceived.subtract(netTotal));
     }
 
-    if (purchasedCourseId != null) refreshCourseStatus(purchasedCourseId);
+    if (purchasedCourseId != null) repository.refreshCourseStatus(purchasedCourseId);
     return reader.get(transactionId);
-  }
-
-  /**
-   * Cash is the one method where what changes hands is not the amount billed,
-   * so it is the one method that carries a tendered figure. Read from the
-   * method's own code rather than a hard-coded id, which differs per install.
-   */
-  private boolean isCash(long paymentMethodId) {
-    // EXISTS always yields a row, so an unknown id answers "not cash" here and
-    // is left to fail on the foreign key with a message that names it.
-    return Boolean.TRUE.equals(
-        db.queryForObject(
-            "SELECT EXISTS(SELECT 1 FROM payment_methods WHERE id=? AND code='CASH')",
-            Boolean.class,
-            paymentMethodId));
   }
 
   /**
@@ -284,7 +272,7 @@ public class CheckoutService {
   public CheckoutDtos.TransactionView voidTransaction(
       long transactionId, String reason, Authentication authentication) {
     Map<String, Object> transaction =
-        row("SELECT * FROM sales_transactions WHERE id=? FOR UPDATE", transactionId, "Transaction");
+        repository.row("SELECT * FROM sales_transactions WHERE id=? FOR UPDATE", transactionId, "Transaction");
     branches.requireAccess(authentication, ((Number) transaction.get("branch_id")).longValue());
     if ("CANCELLED".equals(transaction.get("status")))
       throw new IllegalArgumentException("This transaction has already been voided");
@@ -304,7 +292,7 @@ public class CheckoutService {
       long patientCourseId = ((Number) entry.get("patient_course_id")).longValue();
       int quantity = ((Number) entry.get("quantity")).intValue();
       String entryType = (String) entry.get("entry_type");
-      lockPatientCourse(patientCourseId);
+      repository.lockPatientCourse(patientCourseId);
 
       switch (entryType) {
         case "PURCHASE" -> db.update(
@@ -330,11 +318,11 @@ public class CheckoutService {
             "Cannot reverse a " + entryType + " entry automatically");
       }
 
-      addLedgerEntry(patientCourseId, "VOID_REVERSAL", -quantity,
-          remaining(patientCourse(patientCourseId)),
+      repository.addLedgerEntry(patientCourseId, "VOID_REVERSAL", -quantity,
+          remaining(repository.patientCourse(patientCourseId)),
           ((Number) transaction.get("branch_id")).longValue(), transactionId, actor, actorUserId,
           null, (Long) entry.get("id"));
-      refreshCourseStatus(patientCourseId);
+      repository.refreshCourseStatus(patientCourseId);
     }
 
     db.update(
@@ -376,7 +364,7 @@ public class CheckoutService {
     }
 
     for (Map.Entry<Long, int[]> pending : deltas.entrySet()) {
-      Map<String, Object> course = patientCourse(pending.getKey());
+      Map<String, Object> course = repository.patientCourse(pending.getKey());
       int[] delta = pending.getValue();
       int entitlement =
           intOf(course, "total_visits") + delta[0]
@@ -394,91 +382,6 @@ public class CheckoutService {
   }
 
   // ------------------------------------------------------------------ helpers
-
-  private long createPatientCourse(
-      long patientId, long branchId, long packageId, String packageName, int sessions, int bonus,
-      BigDecimal price, BigDecimal discountRatio, Integer validityDays, Long salesTransactionId,
-      Long sellerId, Long caseOwnerId, LocalDate today) {
-    Long seller = sellerId != null ? sellerId : caseOwnerId;
-    Long owner = caseOwnerId != null ? caseOwnerId : seller;
-    String sellerName = seller == null ? "" : staffName(seller);
-    String ownerName = owner == null ? sellerName : staffName(owner);
-    // The tier/pool base is the price actually collected, not the list
-    // price — a counter override or a discount both shrink it, the same way
-    // a percentage commission_rules line already follows what was earned.
-    BigDecimal netSaleAmount = price.multiply(discountRatio).setScale(2, RoundingMode.HALF_UP);
-    long id =
-        db.queryForObject(
-            "INSERT INTO patient_courses(course_id,receipt_no,sales_transaction_id,patient_id,"
-                + "package_id,package_name_snapshot,sale_date,sale_month,seller_employee_id,"
-                + "case_owner_employee_id,seller_name_snapshot,case_owner_name_snapshot,"
-                + "course_price,net_course_sale_amount,total_visits,commissionable_visit_count,"
-                + "bonus_visits,branch_id,valid_until,status)"
-                + " VALUES(?,?,?,?,?,?,?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
-                + " RETURNING id",
-            Long.class,
-            nextNumber("PC", "patient_courses", "course_id"),
-            salesTransactionId == null
-                ? null
-                : db.queryForObject(
-                    "SELECT transaction_no FROM sales_transactions WHERE id=?", String.class,
-                    salesTransactionId),
-            salesTransactionId,
-            patientId,
-            packageId,
-            packageName,
-            today,
-            today,
-            seller,
-            owner,
-            sellerName,
-            ownerName,
-            price,
-            netSaleAmount,
-            sessions,
-            sessions,
-            bonus,
-            branchId,
-            validityDays == null ? null : today.plusDays(validityDays));
-    // Keep the per-patient balance in sync with every newly purchased course.
-    // Checkout usage validates and decrements this row, including for shared
-    // courses, so creating only patient_courses is not sufficient.
-    db.update(
-        "INSERT INTO shared_course_members(patient_course_id,patient_id,role)"
-            + " VALUES(?,?,'OWNER') ON CONFLICT (patient_course_id,patient_id) DO NOTHING",
-        id,
-        patientId);
-    db.update(
-        "INSERT INTO course_member_balances(patient_course_id,patient_id,allocated_visits,used_visits)"
-            + " VALUES(?,?,?,0) ON CONFLICT (patient_course_id,patient_id) DO NOTHING",
-        id,
-        patientId,
-        sessions + bonus);
-    return id;
-  }
-
-  public long addLedgerEntry(
-      long patientCourseId, String entryType, int quantity, int balanceAfter, long branchId,
-      Long transactionId, String performedBy, Long performedByUserId, String transferGroupId,
-      Long reversalOfId) {
-    return db.queryForObject(
-        "INSERT INTO course_ledger_entries(patient_course_id,entry_type,quantity,balance_after,"
-            + "branch_id,related_transaction_id,performed_by_name,created_by,transfer_group_id,"
-            + "reversal_of_id) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id",
-        Long.class,
-        patientCourseId, entryType, quantity, balanceAfter, branchId, transactionId, performedBy,
-        performedByUserId, transferGroupId, reversalOfId);
-  }
-
-  private void addItem(
-      long transactionId, String itemType, Long serviceId, Long courseId, String description,
-      BigDecimal amount, String kind) {
-    db.update(
-        "INSERT INTO sales_items(sales_transaction_id,item_type,service_id,course_id,"
-            + "description_snapshot,quantity,unit_price,total_amount,item_kind)"
-            + " VALUES(?,?,?,?,?,1,?,?,?)",
-        transactionId, itemType, serviceId, courseId, description, amount, amount, kind);
-  }
 
   /**
    * The most specific live rule wins: one bound to this exact item, then one for
@@ -513,14 +416,6 @@ public class CheckoutService {
         transactionId, rule.get("id"), rule.get("name"), staffId, appliesTo, amount);
   }
 
-  public Map<String, Object> lockPatientCourse(long id) {
-    return row("SELECT * FROM patient_courses WHERE id=? FOR UPDATE", id, "Course");
-  }
-
-  public Map<String, Object> patientCourse(long id) {
-    return row("SELECT * FROM patient_courses WHERE id=?", id, "Course");
-  }
-
   public static int remaining(Map<String, Object> patientCourse) {
     return intOf(patientCourse, "total_visits")
         + intOf(patientCourse, "bonus_visits")
@@ -534,51 +429,14 @@ public class CheckoutService {
     return value == null ? 0 : ((Number) value).intValue();
   }
 
-  /** ACTIVE until it runs out of sessions or passes its expiry date. */
-  public void refreshCourseStatus(long patientCourseId) {
-    db.update(
-        "UPDATE patient_courses SET status = CASE"
-            + "  WHEN status='REFUNDED' THEN 'REFUNDED'"
-            + "  WHEN valid_until IS NOT NULL AND valid_until < CURRENT_DATE THEN 'EXPIRED'"
-            + "  WHEN (total_visits+bonus_visits+transfer_in_visits-visits_used-transfer_out_visits)"
-            + "       <= 0 THEN 'USED_UP'"
-            + "  ELSE 'ACTIVE' END WHERE id=?",
-        patientCourseId);
-  }
-
   private String treatingStaffName(Long staffId, String fallback) {
     if (staffId == null) return fallback;
-    String name = staffName(staffId);
+    String name = repository.staffName(staffId);
     return name == null || name.isBlank() ? fallback : name;
-  }
-
-  private String staffName(long staffId) {
-    List<String> names =
-        db.queryForList("SELECT name FROM staff WHERE id=?", String.class, staffId);
-    return names.isEmpty() ? "" : names.get(0);
-  }
-
-  Map<String, Object> row(String sql, Object argument, String label) {
-    List<Map<String, Object>> rows = db.queryForList(sql, argument);
-    if (rows.isEmpty()) throw new IllegalArgumentException(label + " not found");
-    return rows.get(0);
   }
 
   private static Object idOf(Map<String, Object> row) {
     return ((Number) row.get("id")).longValue();
   }
 
-  /** Human-readable document numbers that stay unique without a dedicated sequence. */
-  String nextNumber(String prefix, String table, String column) {
-    Long next = db.queryForObject("SELECT count(*)+1 FROM " + table, Long.class);
-    String candidate = String.format("%s-%d-%06d", prefix, LocalDate.now().getYear(), next);
-    while (Boolean.TRUE.equals(
-        db.queryForObject(
-            "SELECT EXISTS(SELECT 1 FROM " + table + " WHERE " + column + "=?)",
-            Boolean.class, candidate))) {
-      next++;
-      candidate = String.format("%s-%d-%06d", prefix, LocalDate.now().getYear(), next);
-    }
-    return candidate;
-  }
 }
