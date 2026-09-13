@@ -154,7 +154,9 @@ public class CourseUsageService {
         course.get("case_owner_employee_id") == null
             ? null
             : ((Number) course.get("case_owner_employee_id")).longValue();
-    long ownerId = caseOwnerId != null ? caseOwnerId : ((Number) course.get("patient_id")).longValue();
+    if (caseOwnerId == null)
+      throw new IllegalStateException("Course has no case owner staff; commission cannot be allocated");
+    long ownerId = caseOwnerId;
     long treatingId = treatingStaffId != null ? treatingStaffId : ownerId;
     Long visitId = resolveVisitId(transactionId, appointmentId);
 

@@ -37,7 +37,9 @@ public class PatientController {
   }
 
   @GetMapping("/{id}")
-  public Map<String, Object> get(@PathVariable long id) { return service.get(id); }
+  public Map<String, Object> get(@PathVariable long id, Authentication authentication) {
+    return service.get(id, authentication);
+  }
 
   @PatchMapping("/{id}")
   public Map<String, Object> update(@PathVariable long id, @Valid @RequestBody PatientRequest r,

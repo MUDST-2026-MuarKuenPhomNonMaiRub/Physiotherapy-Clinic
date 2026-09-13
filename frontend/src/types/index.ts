@@ -308,6 +308,9 @@ export interface CommissionTier {
   min: number;
   max: number | null;
   rate: number; // 0.07 = 7%
+  active?: boolean;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
 }
 
 export interface CommissionScheme {
@@ -316,6 +319,7 @@ export interface CommissionScheme {
   effectiveFrom: string;
   effectiveTo: string | null;
   tiers: CommissionTier[];
+  active?: boolean;
 }
 
 export interface ClosingPreviewRow {
@@ -336,6 +340,9 @@ export interface ClosingHistoryRow {
   employeeName: string;
   monthlyCourseSales: number;
   lockedCommissionRate: number;
+  schemeId: string | null;
+  schemeVersion: number | null;
+  calculatedCommissionRate: number;
   status: string;
   closedAt: string | null;
 }

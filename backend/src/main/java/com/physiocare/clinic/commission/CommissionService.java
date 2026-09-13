@@ -38,8 +38,8 @@ public class CommissionService {
             + "package_id,package_name_snapshot,sale_date,sale_month,seller_employee_id,"
             + "case_owner_employee_id,seller_name_snapshot,case_owner_name_snapshot,course_price,"
             + "net_course_sale_amount,total_visits,commissionable_visit_count,branch_id,valid_until)"
-            + " SELECT ?,?,?,?,?,name_th,?,?,?,?,?,?,?,?,?,?,?, CASE WHEN validity_days IS NULL THEN"
-            + " NULL ELSE ? + validity_days END FROM courses WHERE id=?",
+            + " SELECT ?,?,?,?,?,name_th,p.hn,trim(concat_ws(' ',p.prefix,p.first_name_th,p.last_name_th)),?,?,?,?,?,?,?,?,?,?,?, CASE WHEN validity_days IS NULL THEN"
+            + " NULL ELSE ? + validity_days END FROM courses c JOIN patients p ON p.id=? WHERE c.id=?",
         r.courseId(),
         r.receiptNo(),
         r.salesTransactionId(),
@@ -57,6 +57,7 @@ public class CommissionService {
         r.totalVisits(),
         branchId,
         r.saleDate(),
+        r.patientId(),
         r.packageId());
     db.update(
         "INSERT INTO shared_course_members(patient_course_id,patient_id,role) SELECT id,?,'OWNER'"

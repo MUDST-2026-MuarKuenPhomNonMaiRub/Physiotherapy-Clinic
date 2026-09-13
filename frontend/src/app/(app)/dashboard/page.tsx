@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Users, UserPlus, UserRound, Wallet } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
@@ -12,6 +12,8 @@ import { StatCard } from "@/components/shared/stat-card";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getCourseCommissionReport } from "@/lib/api/clinic-api";
+import type { CourseCommissionReportRow } from "@/types";
 
 type Period = "day" | "month" | "year";
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -43,8 +45,23 @@ export default function DashboardPage() {
   const [branchFilter, setBranchFilter] = useState("ALL");
   const years = yearOptions(transactions);
   const [comparisonYear, setComparisonYear] = useState(String(Number(currentYear) - 1));
+  const [commissionRows, setCommissionRows] = useState<CourseCommissionReportRow[]>([]);
   const selectedYear = period === "year" ? periodValue : periodValue.slice(0, 4);
   const selectedBounds = periodBounds(period, periodValue);
+
+  useEffect(() => {
+    void getCourseCommissionReport(selectedBounds.from, selectedBounds.to)
+      .then(setCommissionRows)
+      .catch(() => setCommissionRows([]));
+  }, [selectedBounds.from, selectedBounds.to]);
+  const commissionTotals = commissionRows.reduce((a, r) => ({
+    generated: a.generated + r.commissionGenerated,
+    gross: a.gross + r.grossAllocated,
+    ownerNet: a.ownerNet + r.ownerNetReleased,
+    fee: a.fee + r.treatmentFeeEarned,
+    outstanding: a.outstanding + r.outstandingPool,
+    variable: a.variable + r.totalVariablePay,
+  }), { generated: 0, gross: 0, ownerNet: 0, fee: 0, outstanding: 0, variable: 0 });
 
   const accessibleTransactions = useMemo(
     () => transactions.filter((t) => t.status === "COMPLETED" && (branchFilter === "ALL" ? isAccessible(t.branchId) : t.branchId === branchFilter)),
@@ -101,6 +118,19 @@ export default function DashboardPage() {
         <StatCard label={`${period === "day" ? "Daily" : period === "month" ? "Monthly" : "Yearly"} Sales`} value={formatCurrency(totalSales)} icon={Wallet} tone="primary" />
         <StatCard label="Customers" value={String(periodPatients.length)} icon={Users} tone="info" />
         <StatCard label="New Customers" value={String(newCustomers)} icon={UserPlus} tone="success" />
+      </div>
+
+      <div className="motion-rise-in motion-delay-2 mb-5 rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-1 text-sm font-semibold text-foreground">Course Commission</h2>
+        <p className="mb-4 text-xs text-muted-foreground">Commission generated and released from Course visits in the selected period</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Generated" value={formatCurrency(commissionTotals.generated)} icon={Wallet} tone="primary" />
+          <StatCard label="Gross Allocated" value={formatCurrency(commissionTotals.gross)} icon={Wallet} tone="info" />
+          <StatCard label="Owner Net" value={formatCurrency(commissionTotals.ownerNet)} icon={Wallet} tone="success" />
+          <StatCard label="Treatment Fee" value={formatCurrency(commissionTotals.fee)} icon={Wallet} tone="warning" />
+          <StatCard label="Outstanding" value={formatCurrency(commissionTotals.outstanding)} icon={Wallet} tone="warning" />
+          <StatCard label="Variable Pay" value={formatCurrency(commissionTotals.variable)} icon={Wallet} tone="success" />
+        </div>
       </div>
 
       <div className="motion-rise-in motion-delay-2 mb-5 rounded-xl border border-border bg-card p-5">

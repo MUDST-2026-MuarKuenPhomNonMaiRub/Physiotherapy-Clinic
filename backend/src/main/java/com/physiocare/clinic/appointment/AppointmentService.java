@@ -32,12 +32,16 @@ public class AppointmentService {
     this.courseUsage = courseUsage;
   }
 
-  public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId) {
+  public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId,
+      Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
     return appointments.list(branchId, date, patientId);
   }
 
-  public Map<String, Object> get(long id) {
-    return appointments.get(id);
+  public Map<String, Object> get(long id, Authentication authentication) {
+    Map<String, Object> appointment = appointments.get(id);
+    branches.requireAccess(authentication, ((Number) appointment.get("branch_id")).longValue());
+    return appointment;
   }
 
   @Transactional
@@ -49,13 +53,13 @@ public class AppointmentService {
     conflicts.requireFreeSlot(r, null);
     long id = appointments.insert(r, nextAppointmentNo(), currentUser.id(auth));
     appointments.addInitialEvent(id, currentUser.id(auth));
-    return get(id);
+    return get(id, auth);
   }
 
   @Transactional
   public Map<String, Object> reschedule(long id, AppointmentController.RescheduleRequest r,
       Authentication auth) {
-    Map<String, Object> original = get(id);
+    Map<String, Object> original = get(id, auth);
     long branchId = ((Number) original.get("branch_id")).longValue();
     branches.requireAccess(auth, branchId);
     validator.validateSlot(r.startsAt(), r.endsAt());
@@ -72,7 +76,7 @@ public class AppointmentService {
         ? "Rescheduled from " + originalStart : "Rescheduled from " + originalStart + " — " + r.reason();
     long newId = appointments.insertRescheduled(moved, nextAppointmentNo(), currentUser.id(auth), note);
     appointments.addEvent(newId, null, "CONFIRMED", note, currentUser.id(auth));
-    return get(newId);
+    return get(newId, auth);
   }
 
   @Transactional
@@ -88,7 +92,7 @@ public class AppointmentService {
       default -> throw new IllegalArgumentException("Invalid appointment action");
     };
     transitionTo(id, status, body == null ? null : body.reason(), auth);
-    return get(id);
+    return get(id, auth);
   }
 
   private void transitionTo(long id, String status, String reason, Authentication auth) {

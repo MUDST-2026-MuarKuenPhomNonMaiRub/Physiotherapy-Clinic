@@ -1,6 +1,6 @@
 package com.physiocare.clinic.commission;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.physiocare.clinic.common.AuditService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -12,12 +12,10 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class CommissionAuditService {
-  private final JdbcTemplate db;
-  private final ObjectMapper mapper;
+  private final AuditService audit;
 
-  public CommissionAuditService(JdbcTemplate db, ObjectMapper mapper) {
-    this.db = db;
-    this.mapper = mapper;
+  public CommissionAuditService(AuditService audit) {
+    this.audit = audit;
   }
 
   public void record(
@@ -29,25 +27,6 @@ public class CommissionAuditService {
       Object before,
       Object after,
       String reason) {
-    db.update(
-        "INSERT INTO audit_logs(actor_user_id,branch_id,action,entity_type,entity_id,before_data,"
-            + "after_data,reason) VALUES(?,?,?,?,?,?::jsonb,?::jsonb,?)",
-        actorUserId,
-        branchId,
-        action,
-        entityType,
-        entityId,
-        toJson(before),
-        toJson(after),
-        reason);
-  }
-
-  private String toJson(Object value) {
-    if (value == null) return null;
-    try {
-      return mapper.writeValueAsString(value);
-    } catch (Exception e) {
-      return "{\"error\":\"could not serialize\"}";
-    }
+    audit.record(actorUserId, branchId, action, entityType, entityId, before, after, reason);
   }
 }

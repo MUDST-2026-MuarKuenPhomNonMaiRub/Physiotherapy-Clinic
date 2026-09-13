@@ -99,7 +99,7 @@ public class AppointmentRepository {
 
   public Long nextAppointmentNumber() {
     db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))", Object.class, "appointments:appointment_no");
-    return db.queryForObject("SELECT count(*)+1 FROM appointments", Long.class);
+    return db.queryForObject("SELECT nextval('appointment_no_seq')", Long.class);
   }
 
   public int providerClashes(long providerId, Long excludeId, OffsetDateTime startsAt, OffsetDateTime endsAt) {

@@ -1,5 +1,6 @@
 package com.physiocare.clinic.room;
 
+import com.physiocare.clinic.common.BranchAccessService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -8,6 +9,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,9 +17,11 @@ import org.springframework.web.bind.annotation.*;
 @Service
 public class RoomService {
   private final JdbcTemplate db;
+  private final BranchAccessService branches;
 
-  public RoomService(JdbcTemplate db) {
+  public RoomService(JdbcTemplate db, BranchAccessService branches) {
     this.db = db;
+    this.branches = branches;
   }
 
   public record RoomRequest(
@@ -26,7 +30,8 @@ public class RoomService {
   public record ActiveRequest(boolean active) {}
 
   @GetMapping
-  public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId) {
+  public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId, Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
     return db.queryForList(
         "SELECT id,branch_id,code,name,room_type,active FROM rooms WHERE (?::bigint IS NULL OR branch_id=?)"
             + " ORDER BY branch_id,id",

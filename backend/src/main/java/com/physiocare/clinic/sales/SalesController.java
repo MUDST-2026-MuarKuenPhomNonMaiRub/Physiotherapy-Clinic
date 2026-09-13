@@ -28,9 +28,9 @@ public class SalesController {
         r.sellerEmployeeId(), r.caseOwnerEmployeeId(), r.amount(), r.visits()), authentication);
   }
   @PostMapping("/payments") @ResponseStatus(HttpStatus.CREATED)
-  public Object pay(@Valid @RequestBody PaymentRequest r) {
-    return service.pay(new SalesService.PaymentRequest(r.salesTransactionId(), r.paymentMethodId(), r.amount(), r.referenceNo()));
+  public Object pay(@Valid @RequestBody PaymentRequest r, Authentication authentication) {
+    return service.pay(new SalesService.PaymentRequest(r.salesTransactionId(), r.paymentMethodId(), r.amount(), r.referenceNo()), authentication);
   }
   @PostMapping("/{id}/cancel")
-  public Object cancel(@PathVariable long id, @RequestParam String reason) { return service.cancel(id, reason); }
+  public Object cancel(@PathVariable long id, @RequestParam String reason, Authentication authentication) { return service.cancel(id, reason, authentication); }
 }

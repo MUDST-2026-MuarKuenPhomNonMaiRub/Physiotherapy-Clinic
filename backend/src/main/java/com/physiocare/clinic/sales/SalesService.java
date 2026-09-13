@@ -94,11 +94,12 @@ public class SalesService {
   @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("hasAnyRole('ADMIN','RECEPTIONIST','FINANCE')")
   @Transactional
-  public Object pay(@Valid @RequestBody PaymentRequest r) {
+  public Object pay(@Valid @RequestBody PaymentRequest r, Authentication authentication) {
     Map<String, Object> sale =
         db.queryForMap(
-            "SELECT total_amount,status FROM sales_transactions WHERE id=? FOR UPDATE",
+            "SELECT total_amount,status,branch_id FROM sales_transactions WHERE id=? FOR UPDATE",
             r.salesTransactionId());
+    branches.requireAccess(authentication, ((Number) sale.get("branch_id")).longValue());
     if ("CANCELLED".equals(sale.get("status")))
       throw new IllegalArgumentException("Cannot pay a cancelled transaction");
     BigDecimal paid =
@@ -134,7 +135,10 @@ public class SalesService {
   @PostMapping("/{id}/cancel")
   @PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
   @Transactional
-  public Object cancel(@PathVariable long id, @RequestParam String reason) {
+  public Object cancel(@PathVariable long id, @RequestParam String reason, Authentication authentication) {
+    Map<String, Object> sale = db.queryForMap(
+        "SELECT branch_id FROM sales_transactions WHERE id=? FOR UPDATE", id);
+    branches.requireAccess(authentication, ((Number) sale.get("branch_id")).longValue());
     db.update(
         "UPDATE sales_transactions SET status='CANCELLED',cancelled_at=now() WHERE id=? AND"
             + " status<>'CANCELLED'",

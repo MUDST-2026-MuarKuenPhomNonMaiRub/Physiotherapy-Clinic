@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 /** HTTP adapter for rooms and bookable resources. */
@@ -12,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 public class RoomController {
   private final RoomService service;
   public RoomController(RoomService service) { this.service = service; }
-  @GetMapping public List<Map<String,Object>> list(@RequestParam(required=false) Long branchId) { return service.list(branchId); }
+  @GetMapping public List<Map<String,Object>> list(@RequestParam(required=false) Long branchId, Authentication authentication) { return service.list(branchId, authentication); }
   @PostMapping @ResponseStatus(HttpStatus.CREATED)
   public Map<String,Object> create(@Valid @RequestBody RoomService.RoomRequest r) { return service.create(r); }
   @PatchMapping("/{id}")

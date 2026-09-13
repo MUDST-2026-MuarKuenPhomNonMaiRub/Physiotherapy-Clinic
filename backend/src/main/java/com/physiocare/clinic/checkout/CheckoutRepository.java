@@ -42,11 +42,11 @@ public class CheckoutRepository {
     long id =
         db.queryForObject(
             "INSERT INTO patient_courses(course_id,receipt_no,sales_transaction_id,patient_id,"
-                + "package_id,package_name_snapshot,sale_date,sale_month,seller_employee_id,"
+                + "package_id,package_name_snapshot,patient_hn_snapshot,patient_name_snapshot,sale_date,sale_month,seller_employee_id,"
                 + "case_owner_employee_id,seller_name_snapshot,case_owner_name_snapshot,"
                 + "course_price,net_course_sale_amount,total_visits,commissionable_visit_count,"
                 + "bonus_visits,branch_id,valid_until,status)"
-                + " VALUES(?,?,?,?,?,?,?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
+                + " VALUES(?,?,?,?,?,?,(SELECT hn FROM patients WHERE id=?),(SELECT trim(concat_ws(' ',prefix,first_name_th,last_name_th)) FROM patients WHERE id=?),?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
                 + " RETURNING id",
             Long.class,
             nextNumber("PC", "patient_courses", "course_id"),
@@ -59,6 +59,8 @@ public class CheckoutRepository {
             patientId,
             packageId,
             packageName,
+            patientId,
+            patientId,
             today,
             today,
             seller,

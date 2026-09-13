@@ -36,7 +36,7 @@ public class CheckoutController {
       @RequestParam(required = false) Long branchId,
       @RequestParam(required = false) Long patientId,
       Authentication authentication) {
-    if (branchId != null) branches.requireAccess(authentication, branchId);
+    branches.requireFilter(authentication, branchId);
     return reader.list(branchId, patientId);
   }
 
@@ -62,7 +62,7 @@ public class CheckoutController {
       @RequestParam(required = false) Long patientId,
       @RequestParam(required = false) Long branchId,
       Authentication authentication) {
-    if (branchId != null) branches.requireAccess(authentication, branchId);
+    branches.requireFilter(authentication, branchId);
     return reader.courseLedger(patientId, branchId);
   }
 }

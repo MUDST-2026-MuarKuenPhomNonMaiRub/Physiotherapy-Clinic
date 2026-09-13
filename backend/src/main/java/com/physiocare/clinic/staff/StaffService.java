@@ -76,6 +76,7 @@ public class StaffService {
     // A newly added treating staff member participates in commission flows by
     // default. Admins can explicitly turn this off later from Staff & Access.
     p.setCommissionEligible(true);
+    p.setCommissionAfterTerminationPolicy("FORFEIT_AFTER_TERMINATION");
     Staff saved = staff.save(p);
     if (user != null) {
       db.update(
@@ -139,8 +140,12 @@ public class StaffService {
       person.setAvatarColor(r.avatarColor());
     if (r.commissionEligible() != null) person.setCommissionEligible(r.commissionEligible());
     if (r.terminationDate() != null) person.setTerminationDate(r.terminationDate());
-    if (r.commissionAfterTerminationPolicy() != null && !r.commissionAfterTerminationPolicy().isBlank())
-      person.setCommissionAfterTerminationPolicy(r.commissionAfterTerminationPolicy());
+    if (r.commissionAfterTerminationPolicy() != null && !r.commissionAfterTerminationPolicy().isBlank()) {
+      String policy = r.commissionAfterTerminationPolicy().trim();
+      InputRules.require(policy.equals("FORFEIT_AFTER_TERMINATION") || policy.equals("CONTINUE_UNTIL_COURSE_END"),
+          "Unsupported commission termination policy");
+      person.setCommissionAfterTerminationPolicy(policy);
+    }
     staff.save(person);
 
     if (person.getUserId() != null) {

@@ -7,7 +7,7 @@ import { ArrowLeft, ArrowRightLeft, HandCoins, Search, UsersRound } from "lucide
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { remainingSessions } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -131,6 +131,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     if (!refundReason.trim()) { toast.error("Reason is required"); return; }
     try {
       await refundRemainingVisits(id, refundVisits, refundReason.trim());
+      setCommissionDetail((await getCourseCommissionDetail(id)) as CourseCommissionDetail);
       setRefundOpen(false);
       toast.success("Unused sessions refunded and history preserved");
     } catch (e) {
@@ -178,12 +179,54 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
       </div>
 
       <div className="mb-5 rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-1 text-sm font-semibold text-foreground">Commission Adjustments</h3>
+        <p className="mb-3 text-xs text-muted-foreground">Refunds and corrections are recorded separately; original allocations are never deleted.</p>
+        <div className="overflow-x-auto"><Table className="min-w-[850px] text-sm"><TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Type</TableHead><TableHead>Reason</TableHead><TableHead className="text-right">Gross</TableHead><TableHead className="text-right">Treatment Fee</TableHead><TableHead className="text-right">Owner Net</TableHead></TableRow></TableHeader><TableBody>{(commissionDetail?.adjustments ?? []).map((raw, index) => { const a = raw as Record<string, unknown>; return <TableRow key={String(a.id ?? index)}><TableCell>{a.created_at ? formatDateTime(String(a.created_at)) : "—"}</TableCell><TableCell>{String(a.adjustment_type ?? "—")}</TableCell><TableCell>{String(a.reason ?? "—")}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.gross_amount ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.treatment_fee_amount ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.owner_net_amount ?? 0))}</TableCell></TableRow>; })}</TableBody></Table></div>
+        {(commissionDetail?.adjustments ?? []).length === 0 && <p className="py-4 text-center text-sm text-muted-foreground">No adjustments recorded</p>}
+      </div>
+
+      <div className="mb-5 rounded-xl border border-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold text-foreground">Commission Pool</h3><p className="text-xs text-muted-foreground">Locked rate and released commission for this course</p></div><span className="text-xs text-muted-foreground">{commissionDetail?.allocations?.length ?? 0} allocations</span></div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <InfoRow label="Status" value={String(commissionDetail?.course?.commission_status ?? "PROVISIONAL")} />
           <InfoRow label="Locked Rate" value={commissionDetail?.course?.locked_commission_rate == null ? "Pending close" : `${Number(commissionDetail.course.locked_commission_rate) * 100}%`} />
           <InfoRow label="Pool" value={commissionDetail?.course?.total_course_commission_pool == null ? "—" : `฿${commissionDetail.course.total_course_commission_pool}`} />
           <InfoRow label="Outstanding" value={commissionDetail?.course?.total_course_commission_pool == null ? "—" : `฿${Number(commissionDetail.course.total_course_commission_pool) - Number(commissionDetail.course.gross_commission_allocated_total ?? 0)}`} />
+        </div>
+      </div>
+
+      <div className="mb-5 rounded-xl border border-border bg-card p-4">
+        <div className="mb-1 flex items-center justify-between">
+          <div><h3 className="text-sm font-semibold text-foreground">Visit Commission Allocation</h3>
+            <p className="text-xs text-muted-foreground">Gross allocation is split from the same course pool; treatment fee is not an additional commission.</p></div>
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">Owner Net = Gross Allocation − Treatment Fee</p>
+        <div className="overflow-x-auto">
+          <Table className="min-w-[1250px] text-sm">
+            <TableHeader><TableRow>
+              <TableHead>Visit Date</TableHead><TableHead>Visit Qty</TableHead><TableHead>Case Owner</TableHead><TableHead>Treating PT</TableHead>
+              <TableHead>Treatment Fee Rule</TableHead><TableHead>Fee Recipient</TableHead><TableHead>Overflow Policy</TableHead>
+              <TableHead className="text-right">Gross</TableHead><TableHead className="text-right">Treatment Fee</TableHead><TableHead className="text-right">Company Top-up</TableHead><TableHead className="text-right">Owner Net</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {(commissionDetail?.allocations ?? []).map((raw, index) => {
+                const a = raw as Record<string, unknown>;
+                const ownerId = String(a.case_owner_employee_id ?? "");
+                const treatingId = String(a.treating_employee_id ?? "");
+                const owner = useClinicStore.getState().staff.find((s) => s.id === ownerId)?.name || ownerId || "—";
+                const treating = useClinicStore.getState().staff.find((s) => s.id === treatingId)?.name || treatingId || "—";
+                const fee = Number(a.treatment_fee_amount ?? 0);
+                const gross = Number(a.gross_commission_allocation ?? 0);
+                return <TableRow key={`${String(a.id ?? index)}`}>
+                  <TableCell>{String(a.visit_date ?? "—")}</TableCell><TableCell>{String(a.visit_qty ?? 1)}</TableCell><TableCell>{owner}</TableCell><TableCell>{treating}</TableCell>
+                  <TableCell>{a.treatment_fee_rule_id ? `${String(a.treatment_fee_type ?? "")} ${String(a.treatment_fee_rate_or_amount ?? "")}` : "None"}</TableCell>
+                  <TableCell>{fee > 0 ? treating : "—"}</TableCell><TableCell>{String(a.overflow_policy_used ?? "—")}</TableCell>
+                  <TableCell className="text-right">{formatCurrency(gross)}</TableCell><TableCell className="text-right">{formatCurrency(fee)}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.company_top_up_amount ?? 0))}</TableCell><TableCell className="text-right font-semibold text-success">{formatCurrency(Number(a.owner_net_commission ?? gross - fee))}</TableCell>
+                </TableRow>;
+              })}
+              {(commissionDetail?.allocations ?? []).length === 0 && <TableRow><TableCell colSpan={11} className="py-6 text-center text-muted-foreground">ยังไม่มีการ Allocate ตาม Visit</TableCell></TableRow>}
+            </TableBody>
+          </Table>
         </div>
       </div>
 

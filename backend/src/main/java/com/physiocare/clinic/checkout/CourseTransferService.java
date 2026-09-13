@@ -45,7 +45,9 @@ public class CourseTransferService {
       String reason) {}
 
   @GetMapping
-  public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId) {
+  public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId,
+      Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
     return db.queryForList(
         "SELECT t.id,t.transfer_no,t.patient_course_id,t.to_patient_course_id,t.from_patient_id,"
             + "t.to_patient_id,t.quantity,t.reason,t.created_at,pc.branch_id FROM course_transfers t"
@@ -68,6 +70,7 @@ public class CourseTransferService {
     Long branchId = source.get("branch_id") == null ? null : ((Number) source.get("branch_id")).longValue();
     if (branchId == null) throw new IllegalArgumentException("This course has no branch");
     branches.requireAccess(authentication, branchId);
+    branches.requirePatientExists(r.toPatientId());
 
     if (CheckoutService.remaining(source) < r.sessions())
       throw new IllegalArgumentException("Not enough sessions remaining to transfer");
@@ -103,7 +106,7 @@ public class CourseTransferService {
     List<Map<String, Object>> existing =
         db.queryForList(
             "SELECT id FROM patient_courses WHERE patient_id=? AND package_id=? AND"
-                + " status='ACTIVE' ORDER BY id LIMIT 1",
+                + " status='ACTIVE' ORDER BY id LIMIT 1 FOR UPDATE",
             r.toPatientId(), packageId);
 
     long targetId;
@@ -163,12 +166,12 @@ public class CourseTransferService {
 
     long transferId =
         db.queryForObject(
-            "INSERT INTO course_transfers(transfer_no,patient_course_id,to_patient_course_id,"
-                + "from_patient_id,to_patient_id,quantity,reason,created_by)"
-                + " VALUES(?,?,?,?,?,?,?,?) RETURNING id",
+        "INSERT INTO course_transfers(transfer_no,patient_course_id,to_patient_course_id,"
+            + "from_patient_id,to_patient_id,quantity,reason,created_by,from_branch_id,to_branch_id)"
+            + " VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id",
             Long.class,
             transferGroupId, r.patientCourseId(), targetId, fromPatientId, r.toPatientId(),
-            r.sessions(), r.reason(), actorUserId);
+            r.sessions(), r.reason(), actorUserId, branchId, branchId);
 
     return db.queryForMap(
         "SELECT id,transfer_no,patient_course_id,to_patient_course_id,from_patient_id,"

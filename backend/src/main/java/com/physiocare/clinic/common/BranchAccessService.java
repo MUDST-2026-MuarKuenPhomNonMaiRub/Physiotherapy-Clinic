@@ -50,6 +50,54 @@ public class BranchAccessService {
       throw new IllegalArgumentException("Invalid or inactive branch");
   }
 
+  public void requirePatientExists(long patientId) {
+    Integer count = db.queryForObject(
+        "SELECT count(*) FROM patients WHERE id=? AND deleted_at IS NULL", Integer.class, patientId);
+    if (count == null || count == 0) throw new IllegalArgumentException("Patient not found");
+  }
+
+  public void requireStaffInBranch(Long staffId, long branchId, String label) {
+    if (staffId == null) return;
+    Integer count = db.queryForObject(
+        "SELECT count(*) FROM staff s LEFT JOIN users u ON u.id=s.user_id "
+            + "JOIN LATERAL unnest(string_to_array(trim(both '[]' from s.branch_ids), ',')) x(value) ON true "
+            + "WHERE s.id=? AND s.deleted_at IS NULL AND s.status='ACTIVE' "
+            + "AND (s.user_id IS NULL OR (u.active AND u.deleted_at IS NULL)) "
+            + "AND x.value::bigint=?",
+        Integer.class, staffId, branchId);
+    if (count == null || count == 0) throw new IllegalArgumentException(label + " is not active in this branch");
+  }
+
+  /**
+   * Patients are clinic-wide records. A patient may register at one branch and
+   * later receive care, buy a course, or make a payment at another branch.
+   * Access is therefore based on any branch relationship, not only the
+   * registered branch.
+   */
+  public void requirePatientAccess(Authentication authentication, long patientId) {
+    if (authentication == null || !authentication.isAuthenticated())
+      throw new IllegalArgumentException("Authentication is required");
+    boolean admin = authentication.getAuthorities().stream()
+        .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+    if (admin) return;
+    Integer allowed = db.queryForObject(
+        "SELECT count(*) FROM patients p JOIN user_branches ub ON ub.branch_id=p.registered_branch_id"
+            + " JOIN users u ON u.id=ub.user_id WHERE p.id=? AND lower(u.email)=lower(?)"
+            + " AND u.active AND u.deleted_at IS NULL"
+            + " OR EXISTS (SELECT 1 FROM appointments a JOIN user_branches aub ON aub.branch_id=a.branch_id"
+            + " JOIN users au ON au.id=aub.user_id WHERE a.patient_id=p.id AND p.id=?"
+            + " AND lower(au.email)=lower(?) AND au.active AND au.deleted_at IS NULL)"
+            + " OR EXISTS (SELECT 1 FROM sales_transactions st JOIN user_branches sub ON sub.branch_id=st.branch_id"
+            + " JOIN users su ON su.id=sub.user_id WHERE st.patient_id=p.id AND p.id=?"
+            + " AND lower(su.email)=lower(?) AND su.active AND su.deleted_at IS NULL)"
+            + " OR EXISTS (SELECT 1 FROM patient_courses pc JOIN user_branches cub ON cub.branch_id=pc.branch_id"
+            + " JOIN users cu ON cu.id=cub.user_id WHERE pc.patient_id=p.id AND p.id=?"
+            + " AND lower(cu.email)=lower(?) AND cu.active AND cu.deleted_at IS NULL)",
+        Integer.class, patientId, authentication.getName(), patientId, authentication.getName(),
+        patientId, authentication.getName(), patientId, authentication.getName());
+    if (allowed == null || allowed == 0) throw new IllegalArgumentException("Patient access denied");
+  }
+
   public void requireCourseAccess(Authentication authentication, long courseId) {
     // patient_courses has carried its own branch_id since V8 — a course with
     // no sales_transaction (a transfer target, or one entered outside a

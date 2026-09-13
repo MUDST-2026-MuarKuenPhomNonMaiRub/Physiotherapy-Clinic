@@ -65,6 +65,9 @@ public class CheckoutService {
       CheckoutDtos.CheckoutRequest r, Authentication authentication) {
     branches.requireAccess(authentication, r.branchId());
     branches.requireActiveBranch(r.branchId());
+    branches.requirePatientExists(r.patientId());
+    branches.requireStaffInBranch(r.treatingStaffId(), r.branchId(), "Treating staff");
+    branches.requireStaffInBranch(r.salespersonId(), r.branchId(), "Salesperson");
     if (r.serviceId() == null && r.purchaseCourseId() == null && r.usePatientCourseId() == null
         && !r.useNewlyPurchasedSession()) {
       throw new IllegalArgumentException("Nothing to check out");

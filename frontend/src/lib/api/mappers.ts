@@ -418,6 +418,7 @@ export function toCommissionSchemes(rows: Row[]): CommissionScheme[] {
         effectiveFrom: str(row.effective_from).slice(0, 10),
         effectiveTo: row.effective_to == null ? null : str(row.effective_to).slice(0, 10),
         tiers: [],
+        active: row.scheme_active == null ? undefined : bool(row.scheme_active),
       };
       byKey.set(key, scheme);
     }
@@ -426,6 +427,9 @@ export function toCommissionSchemes(rows: Row[]): CommissionScheme[] {
       min: num(row.minimum_monthly_sales),
       max: row.maximum_monthly_sales == null ? null : num(row.maximum_monthly_sales),
       rate: num(row.commission_rate),
+      active: row.tier_active == null ? undefined : bool(row.tier_active),
+      effectiveFrom: row.tier_effective_from == null ? undefined : str(row.tier_effective_from).slice(0, 10),
+      effectiveTo: row.tier_effective_to == null ? null : str(row.tier_effective_to).slice(0, 10),
     });
   }
   return [...byKey.values()];
@@ -453,6 +457,9 @@ export function toClosingHistoryRow(row: Row): ClosingHistoryRow {
     employeeName: str(row.employee_name),
     monthlyCourseSales: num(row.monthly_course_sales),
     lockedCommissionRate: num(row.locked_commission_rate),
+    schemeId: row.scheme_id == null ? null : id(row.scheme_id),
+    schemeVersion: row.commission_scheme_version == null ? null : num(row.commission_scheme_version),
+    calculatedCommissionRate: num(row.calculated_commission_rate),
     status: str(row.status),
     closedAt: row.closed_at == null ? null : str(row.closed_at),
   };

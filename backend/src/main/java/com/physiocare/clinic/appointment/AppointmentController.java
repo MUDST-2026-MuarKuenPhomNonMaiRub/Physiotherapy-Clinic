@@ -40,13 +40,14 @@ public class AppointmentController {
   public List<Map<String, Object>> list(
       @RequestParam(required = false) Long branchId,
       @RequestParam(required = false) LocalDate date,
-      @RequestParam(required = false) Long patientId) {
-    return service.list(branchId, date, patientId);
+      @RequestParam(required = false) Long patientId,
+      Authentication authentication) {
+    return service.list(branchId, date, patientId, authentication);
   }
 
   @GetMapping("/{id}")
-  public Map<String, Object> get(@PathVariable long id) {
-    return service.get(id);
+  public Map<String, Object> get(@PathVariable long id, Authentication authentication) {
+    return service.get(id, authentication);
   }
 
   @PostMapping

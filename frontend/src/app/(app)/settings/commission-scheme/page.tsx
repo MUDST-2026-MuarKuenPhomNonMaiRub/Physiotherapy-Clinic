@@ -68,6 +68,10 @@ export default function CommissionSchemePage() {
   }
 
   async function save() {
+    if (!code.trim() || !effectiveFrom) {
+      toast.error("Scheme code and effective date are required");
+      return;
+    }
     const parsed = tiers.map((t) => ({
       order: t.order,
       min: Number(t.min || 0),
@@ -77,6 +81,33 @@ export default function CommissionSchemePage() {
     if (parsed.length === 0) {
       toast.error("Add at least one tier");
       return;
+    }
+    for (const tier of parsed) {
+      if (!Number.isFinite(tier.min) || tier.min < 0 || (tier.max !== null && (!Number.isFinite(tier.max) || tier.max < tier.min))) {
+        toast.error("Each tier must have valid sales bounds (max must be greater than or equal to min)");
+        return;
+      }
+      if (!Number.isFinite(tier.rate) || tier.rate < 0 || tier.rate > 1) {
+        toast.error("Commission rate must be between 0% and 100%");
+        return;
+      }
+    }
+    const ordered = [...parsed].sort((a, b) => a.min - b.min);
+    for (let i = 1; i < ordered.length; i += 1) {
+      const previous = ordered[i - 1];
+      const current = ordered[i];
+      if (previous.max === null) {
+        toast.error("An unlimited tier must be the final tier");
+        return;
+      }
+      if (current.min <= previous.max) {
+        toast.error("Tier sales ranges must not overlap");
+        return;
+      }
+      if (current.min > previous.max + 1) {
+        toast.error("Tier sales ranges must not contain gaps");
+        return;
+      }
     }
     try {
       await createCommissionScheme({ code, effectiveFrom, tiers: parsed });

@@ -125,6 +125,8 @@ interface FormState {
   username: string;
   password: string;
   role: Role;
+  terminationDate: string;
+  commissionAfterTerminationPolicy: "FORFEIT_AFTER_TERMINATION" | "CONTINUE_UNTIL_COURSE_END";
 }
 
 const emptyForm: FormState = {
@@ -138,6 +140,8 @@ const emptyForm: FormState = {
   username: "",
   password: "",
   role: "PHYSIOTHERAPIST",
+  terminationDate: "",
+  commissionAfterTerminationPolicy: "FORFEIT_AFTER_TERMINATION",
 };
 
 export default function StaffAccessPage() {
@@ -220,6 +224,10 @@ export default function StaffAccessPage() {
       username: account?.username ?? "",
       password: "",
       role: account?.role ?? suggestedRoleForPosition[s.position],
+      terminationDate: s.terminationDate ?? "",
+      commissionAfterTerminationPolicy: s.commissionAfterTerminationPolicy === "CONTINUE_UNTIL_COURSE_END"
+        ? "CONTINUE_UNTIL_COURSE_END"
+        : "FORFEIT_AFTER_TERMINATION",
     });
     setOpen(true);
   }
@@ -254,6 +262,8 @@ export default function StaffAccessPage() {
       phone: form.phone.trim(),
       email: form.email.trim(),
       branchIds: form.branchIds,
+      terminationDate: form.terminationDate || undefined,
+      commissionAfterTerminationPolicy: form.commissionAfterTerminationPolicy,
     };
 
     setSaving(true);
@@ -656,6 +666,31 @@ export default function StaffAccessPage() {
                 </div>
               )}
             </section>
+
+            {editing && (
+              <section className="space-y-4 rounded-xl border border-border bg-muted/40 p-4">
+                <div>
+                  <SectionLabel>Commission after termination</SectionLabel>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Requirement 21: choose whether outstanding course commission is forfeited or continues until the course ends.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Termination date">
+                    <Input type="date" value={form.terminationDate} onChange={(e) => setForm((f) => ({ ...f, terminationDate: e.target.value }))} />
+                  </Field>
+                  <Field label="Policy">
+                    <Select value={form.commissionAfterTerminationPolicy} onValueChange={(v) => setForm((f) => ({ ...f, commissionAfterTerminationPolicy: v as FormState["commissionAfterTerminationPolicy"] }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FORFEIT_AFTER_TERMINATION">Forfeit after termination</SelectItem>
+                        <SelectItem value="CONTINUE_UNTIL_COURSE_END">Continue until course ends</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+              </section>
+            )}
           </div>
 
           <DialogFooter>

@@ -46,7 +46,7 @@ public class Staff {
   private java.time.LocalDate terminationDate;
 
   @Column(name = "commission_after_termination_policy", nullable = false, length = 40)
-  private String commissionAfterTerminationPolicy = "CONTINUE_UNTIL_COURSE_END";
+  private String commissionAfterTerminationPolicy = "FORFEIT_AFTER_TERMINATION";
 
   protected Staff() {}
 

@@ -19,8 +19,9 @@ public class CourseTransferController {
       @Positive int sessions, String reason) {}
 
   @GetMapping
-  public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId) {
-    return service.list(branchId);
+  public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId,
+      Authentication authentication) {
+    return service.list(branchId, authentication);
   }
 
   @PostMapping

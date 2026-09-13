@@ -133,6 +133,7 @@ export default function MonthlyClosingPage() {
                 <TableHead className="text-right">Monthly Course Sales</TableHead>
                 <TableHead className="text-right">Suggested Rate</TableHead>
                 <TableHead className="text-right">Suggested Pool</TableHead>
+                <TableHead>Scheme</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -143,6 +144,7 @@ export default function MonthlyClosingPage() {
                   <TableCell className="text-right">{formatCurrency(row.monthlySales)}</TableCell>
                   <TableCell className="text-right font-mono">{(row.suggestedRate * 100).toFixed(2)}%</TableCell>
                   <TableCell className="text-right">{formatCurrency(row.suggestedPool)}</TableCell>
+                  <TableCell className="font-mono text-xs">{row.schemeId ? `${row.schemeId} / v${row.schemeVersion ?? "-"}` : "-"}</TableCell>
                   <TableCell>
                     {row.alreadyClosed ? (
                       <Badge variant="outline" className="bg-muted">Closed</Badge>
@@ -166,6 +168,8 @@ export default function MonthlyClosingPage() {
               <TableHead>Employee</TableHead>
               <TableHead className="text-right">Monthly Sales</TableHead>
               <TableHead className="text-right">Locked Rate</TableHead>
+              <TableHead>Scheme</TableHead>
+              <TableHead className="text-right">Calculated Rate</TableHead>
               <TableHead>Closed At</TableHead>
               <TableHead>Action</TableHead>
             </TableRow>
@@ -177,6 +181,8 @@ export default function MonthlyClosingPage() {
                 <TableCell className="font-medium text-foreground">{row.employeeName}</TableCell>
                 <TableCell className="text-right">{formatCurrency(row.monthlyCourseSales)}</TableCell>
                 <TableCell className="text-right font-mono">{(row.lockedCommissionRate * 100).toFixed(2)}%</TableCell>
+                <TableCell className="font-mono text-xs">{row.schemeId ? `${row.schemeId} / v${row.schemeVersion ?? "-"}` : "-"}</TableCell>
+                <TableCell className="text-right font-mono">{(row.calculatedCommissionRate * 100).toFixed(2)}%</TableCell>
                 <TableCell className="text-muted-foreground">{row.closedAt ? formatDate(row.closedAt) : "-"}</TableCell>
                 <TableCell>
                   <Button variant="outline" size="sm" onClick={() => { setOverrideRow(row); setOverrideRate(String((row.lockedCommissionRate * 100).toFixed(2))); setOverrideReason(""); }}>

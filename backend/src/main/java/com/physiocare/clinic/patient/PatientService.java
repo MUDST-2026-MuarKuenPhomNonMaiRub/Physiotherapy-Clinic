@@ -37,7 +37,7 @@ public class PatientService {
 
   private static final String COLUMNS =
       "id,hn,customer_type,prefix,first_name_th,last_name_th,first_name_en,last_name_en,nickname,"
-          + "gender_code,national_id,passport_no,birth_date,blood_group_code,nationality_code,"
+          + "gender_code,NULL AS national_id,NULL AS passport_no,birth_date,blood_group_code,nationality_code,"
           + "phone,email,address_text,customer_group_code,referral_channel_code,"
           + "insurance_company_code,registered_branch_id,registered_at,active";
 
@@ -112,8 +112,8 @@ public class PatientService {
       long id =
           db.queryForObject(
               "INSERT INTO patients(hn,registered_branch_id,customer_type,prefix,first_name_th,"
-                  + "last_name_th,first_name_en,last_name_en,nickname,gender_code,national_id,"
-                  + "national_id_hash,passport_no,passport_hash,birth_date,blood_group_code,"
+                  + "last_name_th,first_name_en,last_name_en,nickname,gender_code,national_id_hash,"
+                  + "passport_hash,birth_date,blood_group_code,"
                   + "nationality_code,phone,email,address_text,customer_group_code,"
                   + "referral_channel_code,insurance_company_code,created_by)"
                   + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
@@ -128,9 +128,7 @@ public class PatientService {
               blankToNull(r.lastNameEn()),
               blankToNull(r.nickname()),
               r.genderCode(),
-              blankToNull(r.nationalId()),
               sha256(r.nationalId()),
-              blankToNull(r.passportNo()),
               sha256(r.passportNo()),
               r.birthDate(),
               blankToNull(r.bloodGroupCode()),
@@ -159,7 +157,10 @@ public class PatientService {
         "SELECT " + COLUMNS
             + " FROM patients WHERE deleted_at IS NULL AND (?='' OR hn ILIKE ? OR first_name_th"
             + " ILIKE ? OR last_name_th ILIKE ? OR nickname ILIKE ? OR phone ILIKE ?) AND"
-            + " (?::bigint IS NULL OR registered_branch_id=?) ORDER BY id DESC",
+            + " (?::bigint IS NULL OR registered_branch_id=? OR EXISTS (SELECT 1 FROM appointments a"
+            + " WHERE a.patient_id=patients.id AND a.branch_id=?) OR EXISTS (SELECT 1 FROM sales_transactions st"
+            + " WHERE st.patient_id=patients.id AND st.branch_id=?) OR EXISTS (SELECT 1 FROM patient_courses pc"
+            + " WHERE pc.patient_id=patients.id AND pc.branch_id=?)) ORDER BY id DESC",
         search,
         like,
         like,
@@ -167,16 +168,21 @@ public class PatientService {
         like,
         like,
         branchId,
+        branchId,
+        branchId,
+        branchId,
         branchId);
   }
 
   @GetMapping("/{id}")
-  public Map<String, Object> get(@PathVariable long id) {
+  public Map<String, Object> get(@PathVariable long id, Authentication authentication) {
     List<Map<String, Object>> rows =
         db.queryForList(
             "SELECT " + COLUMNS + " FROM patients WHERE id=? AND deleted_at IS NULL", id);
     if (rows.isEmpty()) throw new IllegalArgumentException("Patient not found");
-    return rows.get(0);
+    Map<String, Object> patient = rows.get(0);
+    branches.requirePatientAccess(authentication, id);
+    return patient;
   }
 
   @PatchMapping("/{id}")
@@ -185,14 +191,14 @@ public class PatientService {
   public Map<String, Object> update(
       @PathVariable long id, @Valid @RequestBody PatientRequest r, Authentication authentication) {
     validate(r);
-    Map<String, Object> existing = get(id);
+    Map<String, Object> existing = get(id, authentication);
     branches.requireAccess(
         authentication, ((Number) existing.get("registered_branch_id")).longValue());
     try {
       db.update(
           "UPDATE patients SET customer_type=?,prefix=?,first_name_th=?,last_name_th=?,"
-              + "first_name_en=?,last_name_en=?,nickname=?,gender_code=?,national_id=?,"
-              + "national_id_hash=?,passport_no=?,passport_hash=?,birth_date=?,blood_group_code=?,"
+              + "first_name_en=?,last_name_en=?,nickname=?,gender_code=?,national_id_hash=?,"
+              + "passport_hash=?,birth_date=?,blood_group_code=?,"
               + "nationality_code=?,phone=?,email=?,address_text=?,customer_group_code=?,"
               + "referral_channel_code=?,insurance_company_code=?,updated_at=now()"
               + " WHERE id=? AND deleted_at IS NULL",
@@ -204,9 +210,7 @@ public class PatientService {
           blankToNull(r.lastNameEn()),
           blankToNull(r.nickname()),
           r.genderCode(),
-          blankToNull(r.nationalId()),
           sha256(r.nationalId()),
-          blankToNull(r.passportNo()),
           sha256(r.passportNo()),
           r.birthDate(),
           blankToNull(r.bloodGroupCode()),
@@ -221,7 +225,7 @@ public class PatientService {
     } catch (DuplicateKeyException e) {
       throw new IllegalArgumentException("A patient with this national ID is already registered");
     }
-    return get(id);
+    return get(id, authentication);
   }
 
   /**

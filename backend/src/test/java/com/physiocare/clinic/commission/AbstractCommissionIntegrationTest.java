@@ -63,12 +63,15 @@ public abstract class AbstractCommissionIntegrationTest {
   protected long seedStaff(String name) {
     long userId = nextId();
     long staffId = nextId();
+    long branchId = db.queryForObject(
+        "SELECT id FROM branches WHERE active AND deleted_at IS NULL ORDER BY id LIMIT 1", Long.class);
     db.update(
         "INSERT INTO users(id,email,password_hash,first_name,last_name,active) VALUES(?,?,'x',?,?,true)",
         userId, "staff" + staffId + "@test.local", name, "T");
     db.update(
-        "INSERT INTO staff(id,name,position,email,user_id,branch_ids) VALUES(?,?,?,?,?, '[1]')",
-        staffId, name, "Physiotherapist", "staff" + staffId + "@test.local", userId);
+        "INSERT INTO staff(id,name,position,email,user_id,branch_ids) VALUES(?,?,?,?,?,?)",
+        staffId, name, "Physiotherapist", "staff" + staffId + "@test.local", userId,
+        "[" + branchId + "]");
     return staffId;
   }
 

@@ -41,7 +41,7 @@ public class CommissionSettingsService {
   public Object list() {
     return db.queryForList(
         "SELECT"
-            + " s.code,s.version,s.effective_from,s.effective_to,t.tier_order,t.minimum_monthly_sales,t.maximum_monthly_sales,t.commission_rate"
+            + " s.code,s.version,s.effective_from,s.effective_to,s.active AS scheme_active,t.tier_order,t.minimum_monthly_sales,t.maximum_monthly_sales,t.commission_rate,t.active AS tier_active"
             + " FROM commission_schemes s JOIN commission_tiers t ON t.scheme_id=s.id ORDER BY"
             + " s.version DESC,t.tier_order");
   }
