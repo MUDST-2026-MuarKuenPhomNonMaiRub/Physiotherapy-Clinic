@@ -2,13 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut, RefreshCw, Search } from "lucide-react";
+import { Bell, LogOut, Search } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { roleLabels } from "@/lib/permissions";
 import { getPatientFullNameTh, today } from "@/lib/domain";
 import { daysUntil } from "@/lib/format";
-import { toast } from "sonner";
 import { BranchSelector } from "@/components/layout/branch-selector";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { Input } from "@/components/ui/input";
@@ -150,8 +149,6 @@ export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout, can, activeBranchId } = useSession();
-  const refresh = useClinicStore((s) => s.refresh);
-  const loading = useClinicStore((s) => s.loading);
   const [query, setQuery] = useState("");
   const notifications = useNotifications(activeBranchId, can("transaction.void"));
 
@@ -254,16 +251,6 @@ export function AppHeader() {
             <p className="text-xs font-normal text-muted-foreground">{roleLabels[user.role]}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            disabled={loading}
-            onClick={async () => {
-              await refresh();
-              toast.success("Clinic data reloaded");
-            }}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Reload data
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={logout} className="flex items-center gap-2 text-destructive focus:text-destructive">
             <LogOut className="h-4 w-4" /> Log out
           </DropdownMenuItem>

@@ -5,6 +5,7 @@ import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,14 +24,17 @@ public class SalesController {
       @NotNull @DecimalMin("0.01") BigDecimal amount, String referenceNo) {}
 
   @PostMapping("/courses") @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
   public Object createCourseSale(@Valid @RequestBody SaleRequest r, Authentication authentication) {
     return service.createCourseSale(new SalesService.SaleRequest(r.patientId(), r.branchId(), r.packageId(),
         r.sellerEmployeeId(), r.caseOwnerEmployeeId(), r.amount(), r.visits()), authentication);
   }
   @PostMapping("/payments") @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
   public Object pay(@Valid @RequestBody PaymentRequest r, Authentication authentication) {
     return service.pay(new SalesService.PaymentRequest(r.salesTransactionId(), r.paymentMethodId(), r.amount(), r.referenceNo()), authentication);
   }
   @PostMapping("/{id}/cancel")
+  @PreAuthorize("hasRole('ADMIN')")
   public Object cancel(@PathVariable long id, @RequestParam String reason, Authentication authentication) { return service.cancel(id, reason, authentication); }
 }

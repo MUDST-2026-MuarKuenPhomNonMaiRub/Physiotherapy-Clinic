@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /** HTTP adapter for catalogue management. Business and persistence logic live in CatalogService. */
@@ -29,24 +30,31 @@ public class CatalogController {
   @GetMapping("/services")
   public List<Map<String, Object>> services() { return service.services(); }
   @PostMapping("/services") @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> addService(@Valid @RequestBody ServiceRequest r) { return service.addService(toService(r)); }
   @PatchMapping("/services/{id}")
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> updateService(@PathVariable long id, @Valid @RequestBody ServiceRequest r) { return service.updateService(id, toService(r)); }
   @PatchMapping("/services/{id}/status")
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> setServiceStatus(@PathVariable long id, @RequestBody ActiveRequest r) { return service.setServiceStatus(id, new CatalogService.ActiveRequest(r.active())); }
 
   @GetMapping("/courses")
   public List<Map<String, Object>> courses() { return service.courses(); }
   @PostMapping("/courses") @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> addCourse(@Valid @RequestBody CourseRequest r) { return service.addCourse(toCourse(r)); }
   @PatchMapping("/courses/{id}")
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> updateCourse(@PathVariable long id, @Valid @RequestBody CourseRequest r) { return service.updateCourse(id, toCourse(r)); }
   @PatchMapping("/courses/{id}/status")
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> setCourseStatus(@PathVariable long id, @RequestBody ActiveRequest r) { return service.setCourseStatus(id, new CatalogService.ActiveRequest(r.active())); }
 
   @GetMapping("/payment-methods")
   public List<Map<String, Object>> payments() { return service.payments(); }
   @PatchMapping("/payment-methods/{id}/status")
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> setPaymentMethodStatus(@PathVariable long id, @RequestBody ActiveRequest r) { return service.setPaymentMethodStatus(id, new CatalogService.ActiveRequest(r.active())); }
 
   @GetMapping("/master-data")
@@ -54,10 +62,13 @@ public class CatalogController {
   @GetMapping("/master-data/{type}")
   public List<Map<String, Object>> master(@PathVariable String type) { return service.master(type); }
   @PostMapping("/master-data") @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> addMasterData(@Valid @RequestBody MasterDataRequest r) { return service.addMasterData(new CatalogService.MasterDataRequest(r.dataType(), r.nameTh(), r.nameEn(), r.active())); }
   @PatchMapping("/master-data/{id}")
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> updateMasterData(@PathVariable long id, @RequestBody MasterDataRequest r) { return service.updateMasterData(id, new CatalogService.MasterDataRequest(r.dataType(), r.nameTh(), r.nameEn(), r.active())); }
   @PatchMapping("/master-data/{id}/status")
+  @PreAuthorize("hasRole('ADMIN')")
   public Map<String, Object> setMasterDataStatus(@PathVariable long id, @RequestBody ActiveRequest r) { return service.setMasterDataStatus(id, new CatalogService.ActiveRequest(r.active())); }
 
   private static CatalogService.ServiceRequest toService(ServiceRequest r) {

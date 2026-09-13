@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +27,7 @@ public class PatientController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
   public Map<String, Object> create(@Valid @RequestBody PatientRequest r, Authentication authentication) {
     return service.create(toPatient(r), authentication);
   }
@@ -42,6 +44,7 @@ public class PatientController {
   }
 
   @PatchMapping("/{id}")
+  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
   public Map<String, Object> update(@PathVariable long id, @Valid @RequestBody PatientRequest r,
       Authentication authentication) { return service.update(id, toPatient(r), authentication); }
 

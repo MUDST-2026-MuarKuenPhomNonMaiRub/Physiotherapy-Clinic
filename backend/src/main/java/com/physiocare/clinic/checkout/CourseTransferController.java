@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Positive;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +27,7 @@ public class CourseTransferController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
   public Map<String, Object> transfer(@Valid @RequestBody TransferRequest r,
       Authentication authentication) {
     return service.transfer(new CourseTransferService.TransferRequest(r.patientCourseId(),

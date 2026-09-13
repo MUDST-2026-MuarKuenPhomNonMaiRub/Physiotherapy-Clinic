@@ -365,7 +365,7 @@ function CheckoutContent() {
       <PageHeader title="Checkout" description="Bill services, courses and record payment" />
 
       {!patient ? (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
           <Card className="lg:col-span-2">
             <CardHeader><CardTitle className="text-base">Select Patient</CardTitle></CardHeader>
             <CardContent>
@@ -450,7 +450,7 @@ function CheckoutContent() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
           <div className="space-y-5 lg:col-span-2">
             <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
               <div>
@@ -751,7 +751,7 @@ function CheckoutContent() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="sticky top-4 space-y-4 rounded-xl border border-border bg-card p-5">
+            <div className="sticky top-20 space-y-4 rounded-xl border border-border bg-card p-5">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                 <ShoppingCart className="h-4 w-4" /> Order Summary
               </h3>
