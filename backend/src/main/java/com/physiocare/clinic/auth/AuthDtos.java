@@ -33,6 +33,7 @@ public final class AuthDtos {
       String lastName,
       boolean active,
       Set<String> roles,
+      Set<String> permissions,
       Long staffId,
       java.util.List<Long> branchIds) {}
 }

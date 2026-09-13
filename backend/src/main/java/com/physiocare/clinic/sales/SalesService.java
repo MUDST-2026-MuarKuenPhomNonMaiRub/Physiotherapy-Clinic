@@ -49,7 +49,7 @@ public class SalesService {
 
   @PostMapping("/courses")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','RECEPTIONIST','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'checkout.create')")
   @Transactional
   public Object createCourseSale(@Valid @RequestBody SaleRequest r, Authentication authentication) {
     branches.requireAccess(authentication, r.branchId());
@@ -92,7 +92,7 @@ public class SalesService {
 
   @PostMapping("/payments")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','RECEPTIONIST','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.view')")
   @Transactional
   public Object pay(@Valid @RequestBody PaymentRequest r, Authentication authentication) {
     Map<String, Object> sale =
@@ -133,7 +133,7 @@ public class SalesService {
   }
 
   @PostMapping("/{id}/cancel")
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.void')")
   @Transactional
   public Object cancel(@PathVariable long id, @RequestParam String reason, Authentication authentication) {
     Map<String, Object> sale = db.queryForMap(

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @Service
 // A physiotherapist may read reports, but requireFilter/requireAccess keeps them
 // to the branches they actually work at.
-@PreAuthorize("hasAnyRole('ADMIN','PHYSIO','FINANCE','REPORT_VIEWER')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'report.view')")
 public class ReportService {
   private final JdbcTemplate db;
   private final BranchAccessService branches;

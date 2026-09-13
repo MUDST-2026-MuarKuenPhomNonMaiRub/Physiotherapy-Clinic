@@ -82,7 +82,7 @@ export async function login(email: string, password: string): Promise<LoginResul
   // The profile is fetched with the token login just issued, before the store
   // has had a chance to record it.
   const profile = await fetchMe(session.accessToken);
-  const role: Role = profile.roles.includes("ADMIN") ? "ADMIN" : "PHYSIOTHERAPIST";
+  const role: Role = profile.roles[0] ?? "PHYSIOTHERAPIST";
   return {
     accessToken: session.accessToken,
     user: {
@@ -90,6 +90,7 @@ export async function login(email: string, password: string): Promise<LoginResul
       username: profile.email,
       password: "",
       role,
+      permissions: profile.permissions ?? [],
       staffId: profile.staffId == null ? undefined : String(profile.staffId),
       displayName: `${profile.firstName} ${profile.lastName}`.trim() || profile.email,
       branchIds: (profile.branchIds ?? []).map(String),
@@ -106,6 +107,7 @@ interface MeResponse {
   lastName: string;
   active: boolean;
   roles: string[];
+  permissions: string[];
   staffId: number | null;
   branchIds: number[];
 }
@@ -127,6 +129,10 @@ export const listConfiguredRoles = () => apiRequest<ConfiguredRole[]>("/api/v1/r
 export const listConfiguredPermissions = () => apiRequest<ConfiguredPermission[]>("/api/v1/roles/permissions");
 export const createConfiguredRole = (body: { code: string; name: string; permissionCodes: string[] }) =>
   apiRequest<ConfiguredRole>("/api/v1/roles", { method: "POST", body });
+export const updateConfiguredRole = (id: number, body: { name: string; permissionCodes: string[] }) =>
+  apiRequest<ConfiguredRole>(`/api/v1/roles/${id}`, { method: "PUT", body });
+export const deleteConfiguredRole = (id: number) =>
+  apiRequest<void>(`/api/v1/roles/${id}`, { method: "DELETE" });
 
 // ------------------------------------------------------------------- branches
 

@@ -22,7 +22,6 @@ import type {
 import * as api from "@/lib/api/clinic-api";
 import { setTokenReader, setUnauthenticatedHandler } from "@/lib/api/client";
 
-const VALID_ROLES: Role[] = ["ADMIN", "PHYSIOTHERAPIST"];
 
 export interface Session {
   user: AppUser | null;
@@ -266,7 +265,7 @@ export const useClinicStore = create<ClinicState>()(
           // The saved token may be older than the account behind it, so the
           // profile is re-read before anything is loaded with it.
           const profile = await api.me();
-          const role: Role = profile.roles.includes("ADMIN") ? "ADMIN" : "PHYSIOTHERAPIST";
+          const role: Role = profile.roles[0] ?? "PHYSIOTHERAPIST";
           const snapshot = await api.loadSnapshot(role === "ADMIN");
 
           set((s) => {
@@ -288,6 +287,7 @@ export const useClinicStore = create<ClinicState>()(
               username: profile.email,
               password: "",
               role,
+              permissions: profile.permissions ?? [],
               staffId: profile.staffId == null ? undefined : String(profile.staffId),
               displayName:
                 `${profile.firstName} ${profile.lastName}`.trim() || profile.email,
@@ -784,9 +784,6 @@ export const useClinicStore = create<ClinicState>()(
         };
       },
       onRehydrateStorage: () => (state) => {
-        if (state?.session.user && !VALID_ROLES.includes(state.session.user.role)) {
-          state.session = { user: null, activeBranchId: null, accessToken: null };
-        }
         state?.setHasHydrated(true);
       },
     }

@@ -2,7 +2,7 @@
 
 import { LogOut } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
-import { roleLabels } from "@/lib/permissions";
+import { getRoleLabel } from "@/lib/permissions";
 import { NavContent } from "@/components/layout/nav-content";
 import { ClinicLogo } from "@/components/layout/clinic-logo";
 
@@ -36,7 +36,7 @@ export function SidebarUserFooter() {
           </svg>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-white">{roleLabels[user.role]}</p>
+          <p className="truncate text-[13px] font-semibold text-white">{getRoleLabel(user.role)}</p>
           <p className="truncate text-[11px] text-white/55">{user.displayName}</p>
         </div>
         <button

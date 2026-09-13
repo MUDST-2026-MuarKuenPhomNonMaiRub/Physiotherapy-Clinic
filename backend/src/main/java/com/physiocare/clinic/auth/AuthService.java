@@ -85,6 +85,7 @@ public class AuthService {
         user.getLastName(),
         user.isActive(),
         user.getRoles().stream().map(Role::getCode).collect(Collectors.toSet()),
+        new java.util.HashSet<>(db.queryForList("SELECT DISTINCT p.code FROM permissions p JOIN role_permissions rp ON rp.permission_id=p.id JOIN user_roles ur ON ur.role_id=rp.role_id WHERE ur.user_id=? AND p.active=true ORDER BY p.code", String.class, user.getId())),
         staffIds.isEmpty() ? null : staffIds.get(0),
         branchIds);
   }

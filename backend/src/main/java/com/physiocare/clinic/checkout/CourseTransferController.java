@@ -27,7 +27,7 @@ public class CourseTransferController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.transfer')")
   public Map<String, Object> transfer(@Valid @RequestBody TransferRequest r,
       Authentication authentication) {
     return service.transfer(new CourseTransferService.TransferRequest(r.patientCourseId(),

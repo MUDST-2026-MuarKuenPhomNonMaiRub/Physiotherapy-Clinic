@@ -14,7 +14,7 @@ public class StaffController {
   }
 
   @PostMapping
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public StaffDtos.CreateResponse create(@Valid @RequestBody StaffDtos.CreateRequest r) {
     return service.create(r);
   }
@@ -26,19 +26,19 @@ public class StaffController {
   }
 
   @PatchMapping("/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public StaffDtos.Row update(@PathVariable long id, @Valid @RequestBody StaffDtos.UpdateRequest r) {
     return service.update(id, r);
   }
 
   @DeleteMapping("/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public void softDelete(@PathVariable long id) {
     service.softDelete(id);
   }
 
   @DeleteMapping("/by-email/{email}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public void softDeleteByEmail(@PathVariable String email) {
     service.softDeleteByEmail(email);
   }

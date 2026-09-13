@@ -94,7 +94,7 @@ export const defaultRouteByRole: Record<Role, string> = {
  * highlights Courses Transfer rather than its parent Patient Courses.
  */
 export function findActiveHref(role: Role, pathname: string): string | null {
-  const hrefs = navigationByRole[role].flatMap((g) => g.items.map((i) => i.href));
+  const hrefs = (navigationByRole[role] ?? []).flatMap((g) => g.items.map((i) => i.href));
   return (
     hrefs
       .filter((href) => pathname === href || pathname.startsWith(href + "/"))

@@ -61,6 +61,10 @@ export const roleLabels: Record<Role, string> = {
   PHYSIOTHERAPIST: "Physiotherapist",
 };
 
+export function getRoleLabel(role: Role): string {
+  return roleLabels[role] ?? role.replaceAll("_", " ");
+}
+
 export const roleDescriptions: Record<Role, string> = {
   ADMIN:
     "Full clinic access — day-to-day operations plus reports across every branch and all administration settings.",

@@ -165,21 +165,29 @@ export default function StaffAccessPage() {
   const [saving, setSaving] = useState(false);
   const [roleDialog, setRoleDialog] = useState(false);
   const [roleCode, setRoleCode] = useState("");
+  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
   const [roleName, setRoleName] = useState("");
   const [rolePermissionsDraft, setRolePermissionsDraft] = useState<string[]>([]);
   const [configuredPermissions, setConfiguredPermissions] = useState<api.ConfiguredPermission[]>([]);
+  const [configuredRoles, setConfiguredRoles] = useState<api.ConfiguredRole[]>([]);
 
   useEffect(() => {
     if (!roleDialog) return;
     void api.listConfiguredPermissions().then(setConfiguredPermissions).catch(() => toast.error("Unable to load permissions"));
   }, [roleDialog]);
 
+  useEffect(() => {
+    void api.listConfiguredRoles().then(setConfiguredRoles).catch(() => toast.error("Unable to load roles"));
+  }, []);
+
   async function createRole() {
     if (!roleCode.trim() || !roleName.trim()) return;
     try {
-      await api.createConfiguredRole({ code: roleCode, name: roleName, permissionCodes: rolePermissionsDraft });
-      toast.success("Role created");
-      setRoleDialog(false); setRoleCode(""); setRoleName(""); setRolePermissionsDraft([]);
+      if (editingRoleId == null) await api.createConfiguredRole({ code: roleCode, name: roleName, permissionCodes: rolePermissionsDraft });
+      else await api.updateConfiguredRole(editingRoleId, { name: roleName, permissionCodes: rolePermissionsDraft });
+      setConfiguredRoles(await api.listConfiguredRoles());
+      toast.success(editingRoleId == null ? "Role created" : "Role updated");
+      setRoleDialog(false); setRoleCode(""); setRoleName(""); setRolePermissionsDraft([]); setEditingRoleId(null);
     } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to create role"); }
   }
 
@@ -552,9 +560,22 @@ export default function StaffAccessPage() {
             </div>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            The matrix is fixed for this clinic — navigation, buttons and report scope throughout the
-            system are filtered from it. Assign a person to a level on the People tab.
+            Select a role to edit its permissions. Built-in roles cannot be removed. Assign a person to a level on the People tab.
           </p>
+          <div className="mt-5 rounded-xl border border-border bg-card p-4">
+            <p className="mb-3 text-sm font-semibold">Configured roles</p>
+            <div className="space-y-2">
+              {configuredRoles.map((configured) => (
+                <div key={configured.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <div><p className="text-sm font-medium">{configured.name}</p><p className="text-xs text-muted-foreground">{configured.code} · {configured.permissions?.length ?? 0} permissions</p></div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => { setEditingRoleId(configured.id); setRoleCode(configured.code); setRoleName(configured.name); setRolePermissionsDraft(configured.permissions ?? []); setRoleDialog(true); }}>Edit</Button>
+                    {!['ADMIN', 'PHYSIO'].includes(configured.code) && <Button size="sm" variant="outline" className="text-destructive" onClick={() => void (async () => { try { await api.deleteConfiguredRole(configured.id); setConfiguredRoles(await api.listConfiguredRoles()); toast.success('Role deleted'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to delete role'); } })()}>Delete</Button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -731,15 +752,26 @@ export default function StaffAccessPage() {
 
       <Dialog open={roleDialog} onOpenChange={setRoleDialog}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader><DialogTitle>New Role</DialogTitle><DialogDescription>Create a reusable access level. New roles start with only the permissions you select.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editingRoleId == null ? "New Role" : "Edit Role"}</DialogTitle><DialogDescription>Choose exactly which sidebar capabilities this role can use.</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Role code" required><Input placeholder="FINANCE" value={roleCode} onChange={(e) => setRoleCode(e.target.value.toUpperCase())} maxLength={30} /></Field>
               <Field label="Display name" required><Input placeholder="Finance" value={roleName} onChange={(e) => setRoleName(e.target.value)} maxLength={100} /></Field>
             </div>
-            <div className="rounded-xl border border-border p-3"><p className="mb-2 text-sm font-medium">Permissions</p><div className="grid gap-2 sm:grid-cols-2">{configuredPermissions.map((p) => <label key={p.code} className="flex items-center gap-2 text-sm"><Checkbox checked={rolePermissionsDraft.includes(p.code)} onCheckedChange={(v) => setRolePermissionsDraft((current) => v ? [...current, p.code] : current.filter((x) => x !== p.code))} />{p.name}</label>)}</div></div>
+            <div className="rounded-xl border border-border p-3">
+              <p className="mb-3 text-sm font-medium">Permissions</p>
+              <div className="space-y-4">
+                {permissionGroups.map((group) => {
+                  const items = group.keys
+                    .map((key) => configuredPermissions.find((permission) => permission.code === key.key))
+                    .filter((permission): permission is api.ConfiguredPermission => Boolean(permission));
+                  if (items.length === 0) return null;
+                  return <div key={group.label}><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p><div className="grid gap-2 sm:grid-cols-2">{items.map((p) => <label key={p.code} className="flex items-center gap-2 text-sm"><Checkbox checked={rolePermissionsDraft.includes(p.code)} onCheckedChange={(v) => setRolePermissionsDraft((current) => v ? [...current, p.code] : current.filter((x) => x !== p.code))} />{p.name}</label>)}</div></div>;
+                })}
+              </div>
+            </div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => setRoleDialog(false)}>Cancel</Button><Button disabled={!roleCode.trim() || !roleName.trim()} onClick={() => void createRole()}>Create Role</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => { setRoleDialog(false); setEditingRoleId(null); }}>Cancel</Button><Button disabled={!roleCode.trim() || !roleName.trim()} onClick={() => void createRole()}>{editingRoleId == null ? "Create Role" : "Save Changes"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>

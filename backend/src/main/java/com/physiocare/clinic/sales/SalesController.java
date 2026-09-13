@@ -24,17 +24,17 @@ public class SalesController {
       @NotNull @DecimalMin("0.01") BigDecimal amount, String referenceNo) {}
 
   @PostMapping("/courses") @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'checkout.create')")
   public Object createCourseSale(@Valid @RequestBody SaleRequest r, Authentication authentication) {
     return service.createCourseSale(new SalesService.SaleRequest(r.patientId(), r.branchId(), r.packageId(),
         r.sellerEmployeeId(), r.caseOwnerEmployeeId(), r.amount(), r.visits()), authentication);
   }
   @PostMapping("/payments") @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.view')")
   public Object pay(@Valid @RequestBody PaymentRequest r, Authentication authentication) {
     return service.pay(new SalesService.PaymentRequest(r.salesTransactionId(), r.paymentMethodId(), r.amount(), r.referenceNo()), authentication);
   }
   @PostMapping("/{id}/cancel")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.void')")
   public Object cancel(@PathVariable long id, @RequestParam String reason, Authentication authentication) { return service.cancel(id, reason, authentication); }
 }

@@ -1,7 +1,7 @@
 // Core domain types for the Clinic ERP, mirroring what the API returns.
 
 // The clinic is staff-operated and runs on two access levels only.
-export type Role = "ADMIN" | "PHYSIOTHERAPIST";
+export type Role = "ADMIN" | "PHYSIOTHERAPIST" | (string & {});
 
 export type Permission =
   | "patient.view"
@@ -75,6 +75,7 @@ export interface AppUser {
   username: string;
   password: string;
   role: Role;
+  permissions?: string[];
   staffId?: string;
   displayName: string;
   branchIds: string[]; // accessible branches (staff)

@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 /** HTTP adapter for report queries. */
 @RestController
 @RequestMapping("/api/v1/reports")
-@PreAuthorize("hasAnyRole('ADMIN','PHYSIO','FINANCE','REPORT_VIEWER')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'report.view')")
 public class ReportController {
   private final ReportService service;
   public ReportController(ReportService service) { this.service = service; }

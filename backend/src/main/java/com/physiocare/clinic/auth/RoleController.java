@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/roles")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
 public class RoleController {
   private final JdbcTemplate db;
   public RoleController(JdbcTemplate db) { this.db = db; }
@@ -30,6 +30,24 @@ public class RoleController {
     Long id = db.queryForObject("INSERT INTO roles(code,name) VALUES(?,?) RETURNING id", Long.class, code, request.name().trim());
     if (request.permissionCodes() != null) for (String permission : request.permissionCodes()) db.update("INSERT INTO role_permissions(role_id,permission_id) SELECT ?,id FROM permissions WHERE code=? ON CONFLICT DO NOTHING", id, permission);
     return db.queryForMap("SELECT id,code,name FROM roles WHERE id=?", id);
+  }
+
+  @PutMapping("/{id}")
+  public Map<String,Object> update(@PathVariable Long id, @RequestBody RoleRequest request) {
+    if (request.name() == null || request.name().isBlank()) throw new IllegalArgumentException("Role name is required");
+    db.update("UPDATE roles SET name=? WHERE id=?", request.name().trim(), id);
+    db.update("DELETE FROM role_permissions WHERE role_id=?", id);
+    if (request.permissionCodes() != null) for (String permission : request.permissionCodes()) db.update("INSERT INTO role_permissions(role_id,permission_id) SELECT ?,id FROM permissions WHERE code=? ON CONFLICT DO NOTHING", id, permission);
+    return db.queryForMap("SELECT id,code,name FROM roles WHERE id=?", id);
+  }
+
+  @DeleteMapping("/{id}")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void delete(@PathVariable Long id) {
+    Integer users = db.queryForObject("SELECT count(*) FROM user_roles WHERE role_id=?", Integer.class, id);
+    if (users != null && users > 0) throw new IllegalStateException("Cannot delete a role assigned to users");
+    db.update("DELETE FROM role_permissions WHERE role_id=?", id);
+    db.update("DELETE FROM roles WHERE id=? AND code NOT IN ('ADMIN','PHYSIO')", id);
   }
   public record RoleRequest(String code, String name, List<String> permissionCodes) {}
 }

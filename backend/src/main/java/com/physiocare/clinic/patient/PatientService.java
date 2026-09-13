@@ -98,7 +98,7 @@ public class PatientService {
   }
 
   @PostMapping
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
   @ResponseStatus(HttpStatus.CREATED)
   @Transactional
   public Map<String, Object> create(
@@ -186,7 +186,7 @@ public class PatientService {
   }
 
   @PatchMapping("/{id}")
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.edit')")
   @Transactional
   public Map<String, Object> update(
       @PathVariable long id, @Valid @RequestBody PatientRequest r, Authentication authentication) {
@@ -240,7 +240,7 @@ public class PatientService {
    * instead of the patient list.
    */
   @GetMapping("/hn-preview")
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.create')")
   public Map<String, Object> hnPreview(
       @RequestParam long branchId, Authentication authentication) {
     branches.requireAccess(authentication, branchId);

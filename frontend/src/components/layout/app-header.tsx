@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Bell, LogOut, Search } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
 import { useClinicStore } from "@/lib/store/clinic-store";
-import { roleLabels } from "@/lib/permissions";
+import { getRoleLabel } from "@/lib/permissions";
 import { getPatientFullNameTh, today } from "@/lib/domain";
 import { daysUntil } from "@/lib/format";
 import { BranchSelector } from "@/components/layout/branch-selector";
@@ -241,14 +241,14 @@ export function AppHeader() {
               <p className="text-[13px] font-medium text-foreground">{user.displayName}</p>
             </div>
             <Badge variant="secondary" className="hidden text-[10px] sm:inline-flex">
-              {roleLabels[user.role]}
+              {getRoleLabel(user.role)}
             </Badge>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel>
             <p className="text-sm font-medium">{user.displayName}</p>
-            <p className="text-xs font-normal text-muted-foreground">{roleLabels[user.role]}</p>
+            <p className="text-xs font-normal text-muted-foreground">{getRoleLabel(user.role)}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout} className="flex items-center gap-2 text-destructive focus:text-destructive">

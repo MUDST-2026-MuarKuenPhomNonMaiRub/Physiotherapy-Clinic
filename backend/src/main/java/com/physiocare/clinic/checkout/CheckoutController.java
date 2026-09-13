@@ -25,7 +25,7 @@ public class CheckoutController {
 
   @PostMapping("/checkout")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'checkout.create')")
   public CheckoutDtos.TransactionView checkout(
       @Valid @RequestBody CheckoutDtos.CheckoutRequest request, Authentication authentication) {
     return checkout.checkout(request, authentication);
@@ -49,7 +49,7 @@ public class CheckoutController {
 
   /** Voiding reverses money and course balances, so it stays with the admins. */
   @PostMapping("/transactions/{id}/void")
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.void')")
   public CheckoutDtos.TransactionView voidTransaction(
       @PathVariable long id,
       @Valid @RequestBody CheckoutDtos.VoidRequest request,

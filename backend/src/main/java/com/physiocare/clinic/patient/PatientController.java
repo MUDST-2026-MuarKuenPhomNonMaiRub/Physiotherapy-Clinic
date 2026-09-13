@@ -27,7 +27,7 @@ public class PatientController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
   public Map<String, Object> create(@Valid @RequestBody PatientRequest r, Authentication authentication) {
     return service.create(toPatient(r), authentication);
   }
@@ -44,7 +44,7 @@ public class PatientController {
   }
 
   @PatchMapping("/{id}")
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.create')")
   public Map<String, Object> update(@PathVariable long id, @Valid @RequestBody PatientRequest r,
       Authentication authentication) { return service.update(id, toPatient(r), authentication); }
 

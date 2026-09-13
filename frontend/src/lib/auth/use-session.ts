@@ -11,7 +11,7 @@ export function useSession() {
   const setActiveBranch = useClinicStore((s) => s.setActiveBranch);
   const logout = useClinicStore((s) => s.logout);
 
-  const can = (permission: Permission) => (user ? hasPermission(user.role, permission) : false);
+  const can = (permission: Permission) => user ? (user.permissions?.includes(permission) ?? hasPermission(user.role, permission)) : false;
 
   return { user, activeBranchId, accessToken, setActiveBranch, logout, can, isAuthenticated: !!user && !!accessToken };
 }

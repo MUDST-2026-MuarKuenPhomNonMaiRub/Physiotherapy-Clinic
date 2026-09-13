@@ -14,12 +14,12 @@ public class BranchController {
   public BranchController(BranchService service) { this.service = service; }
   @GetMapping public List<Branch> list() { return service.list(); }
   @PostMapping @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Branch create(@Valid @RequestBody BranchRequest r) { return service.create(r); }
   @PatchMapping("/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Branch update(@PathVariable long id, @Valid @RequestBody BranchRequest r) { return service.update(id,r); }
   @PatchMapping("/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Branch updateStatus(@PathVariable long id, @RequestBody BranchService.StatusRequest r) { return service.updateStatus(id,r); }
 }

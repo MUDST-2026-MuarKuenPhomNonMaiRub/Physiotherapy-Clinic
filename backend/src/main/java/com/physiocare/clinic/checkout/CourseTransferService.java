@@ -58,7 +58,7 @@ public class CourseTransferService {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.transfer')")
   @Transactional
   public Map<String, Object> transfer(
       @Valid @RequestBody TransferRequest r, Authentication authentication) {

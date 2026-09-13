@@ -46,7 +46,7 @@ function NavLink({
 export function NavContent({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
   const pathname = usePathname();
   const activeHref = findActiveHref(role, pathname);
-  const groups = navigationByRole[role];
+  const groups = navigationByRole[role] ?? [];
 
   return (
     <nav className="flex-1 overflow-y-auto px-4 py-4">

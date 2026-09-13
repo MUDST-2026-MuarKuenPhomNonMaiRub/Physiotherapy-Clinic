@@ -52,21 +52,21 @@ public class AppointmentController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.view')")
   public Map<String, Object> create(
       @Valid @RequestBody AppointmentRequest r, Authentication authentication) {
     return service.create(r, authentication);
   }
 
   @PostMapping("/{id}/reschedule")
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.create')")
   public Map<String, Object> reschedule(
       @PathVariable long id, @Valid @RequestBody RescheduleRequest r, Authentication authentication) {
     return service.reschedule(id, r, authentication);
   }
 
   @PostMapping("/{id}/{action}")
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.edit')")
   public Map<String, Object> transition(
       @PathVariable long id,
       @PathVariable String action,
