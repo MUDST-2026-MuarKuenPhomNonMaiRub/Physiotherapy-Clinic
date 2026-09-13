@@ -68,6 +68,9 @@ public class CheckoutService {
     branches.requirePatientExists(r.patientId());
     branches.requireStaffInBranch(r.treatingStaffId(), r.branchId(), "Treating staff");
     branches.requireStaffInBranch(r.salespersonId(), r.branchId(), "Salesperson");
+    if (r.caseOwnerEmployeeId() != null) {
+      branches.requireStaffInBranch(r.caseOwnerEmployeeId(), r.branchId(), "Case owner");
+    }
     if (r.serviceId() == null && r.purchaseCourseId() == null && r.usePatientCourseId() == null
         && !r.useNewlyPurchasedSession()) {
       throw new IllegalArgumentException("Nothing to check out");
@@ -195,7 +198,7 @@ public class CheckoutService {
           repository.createPatientCourse(
               r.patientId(), r.branchId(), (Long) idOf(course), courseName, sessions, bonus,
               coursePrice, discountRatio, validityDays, transactionId, r.salespersonId(),
-              r.treatingStaffId(), today);
+              r.caseOwnerEmployeeId() != null ? r.caseOwnerEmployeeId() : r.salespersonId(), today);
       patientCourseId = purchasedCourseId;
 
       repository.addLedgerEntry(purchasedCourseId, "PURCHASE", sessions, sessions, r.branchId(),

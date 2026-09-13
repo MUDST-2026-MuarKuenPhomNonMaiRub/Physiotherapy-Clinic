@@ -97,6 +97,10 @@ public class MonthlyCommissionClosingService {
 
   /** @return false when this employee/month was already closed (idempotent, not an error). */
   private boolean closeEmployee(YearMonth month, long employee, Long actorUserId) {
+    db.queryForList(
+        "SELECT pg_advisory_xact_lock(hashtext(?))",
+        Object.class,
+        "monthly-commission:" + employee + ":" + month.atDay(1));
     Map<String, Object> scheme = resolveScheme(month);
     if (scheme == null)
       throw new IllegalStateException("No commission scheme covers " + month + " — configure one first");

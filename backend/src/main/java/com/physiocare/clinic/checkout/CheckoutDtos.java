@@ -27,7 +27,20 @@ public final class CheckoutDtos {
       BigDecimal cashReceived,
       BigDecimal servicePrice,
       BigDecimal coursePurchasePrice,
-      List<Adjustment> adjustments) {}
+      List<Adjustment> adjustments,
+      Long caseOwnerEmployeeId) {
+    /** Backward-compatible constructor: salesperson remains the course owner when no separate owner is sent. */
+    public CheckoutRequest(
+        long patientId, long branchId, Long appointmentId, Long serviceId, Long purchaseCourseId,
+        Long usePatientCourseId, Integer useSessionsCount, boolean useNewlyPurchasedSession,
+        Long treatingStaffId, Long salespersonId, long paymentMethodId, String paymentReferenceNo,
+        BigDecimal cashReceived, BigDecimal servicePrice, BigDecimal coursePurchasePrice,
+        List<Adjustment> adjustments) {
+      this(patientId, branchId, appointmentId, serviceId, purchaseCourseId, usePatientCourseId,
+          useSessionsCount, useNewlyPurchasedSession, treatingStaffId, salespersonId, paymentMethodId,
+          paymentReferenceNo, cashReceived, servicePrice, coursePurchasePrice, adjustments, null);
+    }
+  }
 
   public record VoidRequest(@NotBlank String reason) {}
 

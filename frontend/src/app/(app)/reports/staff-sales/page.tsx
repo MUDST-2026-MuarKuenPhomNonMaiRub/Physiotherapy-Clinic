@@ -54,9 +54,13 @@ export default function StaffSalesReportPage() {
   const filtered = useMemo(
     () =>
       transactions
-        .filter((t) => t.status === "COMPLETED" && t.salespersonId)
+        .filter((t) => t.status === "COMPLETED")
         .filter((t) => (branchFilter === "ALL" ? isAccessible(t.branchId) : t.branchId === branchFilter))
-        .filter((t) => effectiveStaffFilter === "ALL" || t.salespersonId === effectiveStaffFilter)
+        // Single-visit sales belong to the treating staff when no salesperson was recorded.
+        .filter((t) => {
+          const attributedStaffId = t.salespersonId ?? ((t.type === "SINGLE_VISIT" || t.type === "ASSESSMENT") ? t.treatingStaffId : undefined);
+          return effectiveStaffFilter === "ALL" || attributedStaffId === effectiveStaffFilter;
+        })
         .filter((t) => t.date.slice(0, 10) >= dateFrom && t.date.slice(0, 10) <= dateTo),
     [transactions, branchFilter, effectiveStaffFilter, dateFrom, dateTo, isAccessible]
   );
@@ -64,7 +68,10 @@ export default function StaffSalesReportPage() {
   const rows = useMemo(() => {
     const map = new Map<string, { staffId: string; transactions: number; courseSales: number; singleVisitSales: number }>();
     for (const t of filtered) {
-      const id = t.salespersonId!;
+      // Do not double-count: course/MIXED transactions still require a recorded salesperson;
+      // only single-visit transactions fall back to the treating staff.
+      const id = t.salespersonId ?? ((t.type === "SINGLE_VISIT" || t.type === "ASSESSMENT") ? t.treatingStaffId : undefined);
+      if (!id) continue;
       if (!map.has(id)) map.set(id, { staffId: id, transactions: 0, courseSales: 0, singleVisitSales: 0 });
       const row = map.get(id)!;
       row.transactions += 1;

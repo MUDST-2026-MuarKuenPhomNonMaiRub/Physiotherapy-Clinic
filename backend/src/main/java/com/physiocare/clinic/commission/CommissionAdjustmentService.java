@@ -117,6 +117,17 @@ public class CommissionAdjustmentService {
     if (visitsToCancel > remaining)
       throw new IllegalArgumentException("Cannot cancel more sessions than remain unused on this course");
 
+    long ownerPatientId = ((Number) course.get("patient_id")).longValue();
+    int balanceRows = db.update(
+        "UPDATE course_member_balances SET allocated_visits=allocated_visits-?,updated_at=now()"
+            + " WHERE patient_course_id=? AND patient_id=? AND allocated_visits-used_visits>=?",
+        visitsToCancel,
+        patientCourseId,
+        ownerPatientId,
+        visitsToCancel);
+    if (balanceRows != 1)
+      throw new IllegalArgumentException("Cannot cancel visits already used by the course member");
+
     db.update("UPDATE patient_courses SET total_visits=total_visits-? WHERE id=?", visitsToCancel, patientCourseId);
     db.update(
         "INSERT INTO course_ledger_entries(patient_course_id,entry_type,quantity,balance_after,"

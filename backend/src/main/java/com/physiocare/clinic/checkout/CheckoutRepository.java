@@ -36,6 +36,19 @@ public class CheckoutRepository {
       Long sellerId, Long caseOwnerId, LocalDate today) {
     Long seller = sellerId != null ? sellerId : caseOwnerId;
     Long owner = caseOwnerId != null ? caseOwnerId : seller;
+    if (seller != null) {
+      String saleMonth = today.withDayOfMonth(1).toString();
+      db.queryForList(
+          "SELECT pg_advisory_xact_lock(hashtext(?))",
+          Object.class,
+          "monthly-commission:" + seller + ":" + saleMonth);
+      if (Boolean.TRUE.equals(db.queryForObject(
+          "SELECT EXISTS(SELECT 1 FROM monthly_commission_closings WHERE closing_month=? AND employee_id=? AND status='CLOSED')",
+          Boolean.class, today.withDayOfMonth(1), seller))) {
+        throw new IllegalArgumentException(
+            "Cannot create a course sale: commission month " + saleMonth + " is closed for this seller");
+      }
+    }
     String sellerName = seller == null ? "" : staffName(seller);
     String ownerName = owner == null ? sellerName : staffName(owner);
     BigDecimal netSaleAmount = price.multiply(discountRatio).setScale(2, java.math.RoundingMode.HALF_UP);

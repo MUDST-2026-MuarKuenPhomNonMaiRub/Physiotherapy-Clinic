@@ -4,7 +4,6 @@ import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
@@ -75,7 +74,6 @@ public class CourseTransferService {
     if (CheckoutService.remaining(source) < r.sessions())
       throw new IllegalArgumentException("Not enough sessions remaining to transfer");
 
-    long packageId = ((Number) source.get("package_id")).longValue();
     String actor = currentUser.displayName(authentication);
     Long actorUserId = currentUser.id(authentication);
     String transferGroupId = repository.nextNumber("TRF", "course_transfers", "transfer_no");
@@ -101,59 +99,22 @@ public class CourseTransferService {
         r.toPatientId(), r.patientCourseId());
     repository.refreshCourseStatus(r.patientCourseId());
 
-    // Sessions land on the recipient's live course for the same package when
-    // they already have one, so their balance stays in a single place.
-    List<Map<String, Object>> existing =
-        db.queryForList(
-            "SELECT id FROM patient_courses WHERE patient_id=? AND package_id=? AND"
-                + " status='ACTIVE' ORDER BY id LIMIT 1 FOR UPDATE",
-            r.toPatientId(), packageId);
-
-    long targetId;
-    if (existing.isEmpty()) {
-      targetId =
-          db.queryForObject(
-              "INSERT INTO patient_courses(course_id,patient_id,package_id,"
-                  + "package_name_snapshot,sale_date,sale_month,seller_employee_id,"
-                  + "case_owner_employee_id,seller_name_snapshot,case_owner_name_snapshot,"
-                  + "course_price,total_visits,bonus_visits,transfer_in_visits,branch_id,valid_until,status)"
-                  + " VALUES(?,?,?,?,?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
-                  + " RETURNING id",
-              Long.class,
-              repository.nextNumber("PC", "patient_courses", "course_id"),
-              r.toPatientId(),
-              packageId,
-              source.get("package_name_snapshot"),
-              LocalDate.now(),
-              LocalDate.now(),
-              source.get("seller_employee_id"),
-              source.get("case_owner_employee_id"),
-              source.get("seller_name_snapshot"),
-              source.get("case_owner_name_snapshot"),
-              source.get("course_price"),
-              0,
-              0,
-              r.sessions(),
-              branchId,
-              source.get("valid_until"));
-    } else {
-      targetId = ((Number) existing.get(0).get("id")).longValue();
-      repository.lockPatientCourse(targetId);
-      db.update(
-          "UPDATE patient_courses SET transfer_in_visits=transfer_in_visits+? WHERE id=?",
-          r.sessions(), targetId);
-    }
-
-    // A transferred course is still one course/pool, but the recipient needs
-    // their own spendable balance row. Upsert also covers adding more visits
-    // to a recipient who already has the same package.
+    // Keep the entitlement on the locked source course. This preserves its
+    // commission scheme/rate/pool and prevents a transfer from becoming a sale.
+    long targetId = r.patientCourseId();
+    db.update(
+        "INSERT INTO shared_course_members(patient_course_id,patient_id,role) VALUES(?,?, 'MEMBER') "
+            + "ON CONFLICT (patient_course_id,patient_id) DO NOTHING",
+        targetId, r.toPatientId());
+    db.update(
+        "UPDATE patient_courses SET transfer_in_visits=transfer_in_visits+? WHERE id=?",
+        r.sessions(), targetId);
     db.update(
         "INSERT INTO course_member_balances(patient_course_id,patient_id,allocated_visits,used_visits)"
             + " VALUES(?,?,?,0) ON CONFLICT(patient_course_id,patient_id) DO UPDATE SET"
             + " allocated_visits=course_member_balances.allocated_visits+EXCLUDED.allocated_visits,"
             + " updated_at=now()",
         targetId, r.toPatientId(), r.sessions());
-
     repository.addLedgerEntry(
         targetId, "TRANSFER_IN", r.sessions(),
         CheckoutService.remaining(repository.patientCourse(targetId)), branchId, null, actor,

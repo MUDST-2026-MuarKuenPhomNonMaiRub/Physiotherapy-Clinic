@@ -151,7 +151,9 @@ public class PatientService {
       @RequestParam(defaultValue = "") String search,
       @RequestParam(required = false) Long branchId,
       Authentication authentication) {
-    if (branchId != null) branches.requireAccess(authentication, branchId);
+    // A non-admin must always select one of their branches.  Omitting the
+    // filter must not turn the patient directory into a clinic-wide export.
+    branches.requireFilter(authentication, branchId);
     String like = "%" + search + "%";
     return db.queryForList(
         "SELECT " + COLUMNS

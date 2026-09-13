@@ -79,7 +79,7 @@ public class CatalogService {
 
   @PostMapping("/services")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> addService(@Valid @RequestBody ServiceRequest r) {
     validate(r);
     long id =
@@ -99,7 +99,7 @@ public class CatalogService {
   }
 
   @PatchMapping("/services/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> updateService(
       @PathVariable long id, @Valid @RequestBody ServiceRequest r) {
     validate(r);
@@ -121,7 +121,7 @@ public class CatalogService {
   }
 
   @PatchMapping("/services/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setServiceStatus(
       @PathVariable long id, @RequestBody ActiveRequest r) {
     int rows =
@@ -151,7 +151,7 @@ public class CatalogService {
 
   @PostMapping("/courses")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> addCourse(@Valid @RequestBody CourseRequest r) {
     validate(r);
     long id =
@@ -173,7 +173,7 @@ public class CatalogService {
   }
 
   @PatchMapping("/courses/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> updateCourse(
       @PathVariable long id, @Valid @RequestBody CourseRequest r) {
     validate(r);
@@ -197,7 +197,7 @@ public class CatalogService {
   }
 
   @PatchMapping("/courses/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setCourseStatus(@PathVariable long id, @RequestBody ActiveRequest r) {
     int rows =
         db.update(
@@ -225,7 +225,7 @@ public class CatalogService {
   }
 
   @PatchMapping("/payment-methods/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setPaymentMethodStatus(
       @PathVariable long id, @RequestBody ActiveRequest r) {
     int rows = db.update("UPDATE payment_methods SET active=? WHERE id=?", r.active(), id);
@@ -256,7 +256,7 @@ public class CatalogService {
 
   @PostMapping("/master-data")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> addMasterData(@Valid @RequestBody MasterDataRequest r) {
     InputRules.text(r.nameTh(), 200, "The value");
     String type = r.dataType().toUpperCase();
@@ -280,7 +280,7 @@ public class CatalogService {
   }
 
   @PatchMapping("/master-data/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> updateMasterData(
       @PathVariable long id, @RequestBody MasterDataRequest r) {
     int rows =
@@ -296,7 +296,7 @@ public class CatalogService {
   }
 
   @PatchMapping("/master-data/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setMasterDataStatus(
       @PathVariable long id, @RequestBody ActiveRequest r) {
     int rows = db.update("UPDATE master_data_values SET active=? WHERE id=?", r.active(), id);

@@ -39,7 +39,7 @@ public class BranchService {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Branch create(@Valid @RequestBody BranchRequest r) {
     validate(r);
     long id;
@@ -60,7 +60,7 @@ public class BranchService {
   }
 
   @PatchMapping("/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Branch update(@PathVariable long id, @Valid @RequestBody BranchRequest r) {
     validate(r);
     int rows;
@@ -90,7 +90,7 @@ public class BranchService {
   }
 
   @PatchMapping("/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Branch updateStatus(@PathVariable long id, @RequestBody StatusRequest r) {
     int rows =
         db.update(

@@ -37,6 +37,7 @@ public class AppointmentController {
   public record ReasonRequest(String reason) {}
 
   @GetMapping
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.view')")
   public List<Map<String, Object>> list(
       @RequestParam(required = false) Long branchId,
       @RequestParam(required = false) LocalDate date,
@@ -46,13 +47,14 @@ public class AppointmentController {
   }
 
   @GetMapping("/{id}")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.view')")
   public Map<String, Object> get(@PathVariable long id, Authentication authentication) {
     return service.get(id, authentication);
   }
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.view')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.create')")
   public Map<String, Object> create(
       @Valid @RequestBody AppointmentRequest r, Authentication authentication) {
     return service.create(r, authentication);
@@ -66,7 +68,7 @@ public class AppointmentController {
   }
 
   @PostMapping("/{id}/{action}")
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.edit')")
+  @PreAuthorize("#action == 'cancel' or #action == 'noshow' ? @permissionGuard.hasAny(authentication, 'appointment.cancel') : @permissionGuard.hasAny(authentication, 'appointment.edit')")
   public Map<String, Object> transition(
       @PathVariable long id,
       @PathVariable String action,

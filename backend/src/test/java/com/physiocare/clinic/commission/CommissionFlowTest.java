@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.physiocare.clinic.checkout.CheckoutDtos;
 import com.physiocare.clinic.checkout.CheckoutService;
 import com.physiocare.clinic.checkout.CourseTransferController;
+import com.physiocare.clinic.report.ReportService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -33,9 +34,39 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
   @Autowired private CheckoutService checkout;
   @Autowired private CourseTransferController transfers;
 
+  @Autowired private ReportService legacyReports;
+
   private long use(long courseId, long patientId, int qty, LocalDate date, Long treatingId) {
     return courseUsage.recordCheckoutUsage(
         courseId, patientId, qty, 1L, null, treatingId, "Tester", null, date);
+  }
+
+  @Test
+  void legacyCommissionReportAttributesOwnerAndTreatingAndKeepsCheckoutOnlyAllocation() {
+    long owner = seedStaff("Legacy Owner");
+    long treating = seedStaff("Legacy Treating");
+    long patient = seedPatient("Legacy Report Patient");
+    long course = seedCourse(owner, owner, patient, new BigDecimal("10000"), 10, LocalDate.of(2026, 9, 1));
+    db.update(
+        "INSERT INTO commission_allocations(visit_id,patient_course_id,patient_id,case_owner_employee_id,"
+            + "treating_employee_id,visit_date,gross_commission_allocation,treatment_fee_amount,owner_net_commission,"
+            + "course_usage_id,visit_qty,allocation_status) VALUES(NULL,?,?,?,?,?,100,30,70,NULL,1,'ALLOCATED')",
+        course, patient, owner, treating, LocalDate.of(2026, 9, 10));
+
+    Authentication admin = new UsernamePasswordAuthenticationToken("admin", "n/a",
+        List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("report.view")));
+    SecurityContextHolder.getContext().setAuthentication(admin);
+    List<Map<String, Object>> rows = (List<Map<String, Object>>) legacyReports.commissions(
+        LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), 1L, admin);
+
+    assertThat(rows).extracting(r -> ((Number) r.get("treating_employee_id")).longValue())
+        .containsExactlyInAnyOrder(owner, treating);
+    Map<String, Object> ownerRow = rows.stream().filter(r -> ((Number) r.get("treating_employee_id")).longValue() == owner).findFirst().orElseThrow();
+    Map<String, Object> treatingRow = rows.stream().filter(r -> ((Number) r.get("treating_employee_id")).longValue() == treating).findFirst().orElseThrow();
+    assertThat((BigDecimal) ownerRow.get("owner_net")).isEqualByComparingTo("70");
+    assertThat((BigDecimal) ownerRow.get("treatment_fee")).isEqualByComparingTo("0");
+    assertThat((BigDecimal) treatingRow.get("owner_net")).isEqualByComparingTo("0");
+    assertThat((BigDecimal) treatingRow.get("treatment_fee")).isEqualByComparingTo("30");
   }
 
   // ---- Case 1: Original Tier Must Persist ----------------------------------
@@ -338,6 +369,9 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     assertThat((BigDecimal) after.get("owner_net_commission_released_total")).isEqualByComparingTo(ownerNetBefore);
     assertThat((BigDecimal) after.get("total_course_commission_pool")).isEqualByComparingTo("210.00"); // 700 - 7*70
     assertThat(((Number) after.get("total_visits")).intValue()).isEqualTo(3);
+    assertThat(db.queryForObject(
+        "SELECT allocated_visits FROM course_member_balances WHERE patient_course_id=? AND patient_id=?",
+        Integer.class, course, patient)).isEqualTo(3);
 
     assertThatThrownBy(() -> adjustments.refundRemainingVisits(course, 1, 1L, seedActorUserId(), "Tester", "too many"))
         .isInstanceOf(IllegalArgumentException.class);
@@ -477,17 +511,43 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
 
     long patientCourse = sale.patientCourseId();
     Map<String, Object> provisional = db.queryForMap(
-        "SELECT commission_status,total_course_commission_pool,seller_employee_id FROM patient_courses WHERE id=?",
+        "SELECT commission_status,total_course_commission_pool,seller_employee_id,case_owner_employee_id FROM patient_courses WHERE id=?",
         patientCourse);
     assertThat(provisional.get("commission_status")).isEqualTo("PROVISIONAL");
     assertThat(provisional.get("total_course_commission_pool")).isNull();
     assertThat(((Number) provisional.get("seller_employee_id")).longValue()).isEqualTo(seller);
+    assertThat(((Number) provisional.get("case_owner_employee_id")).longValue()).isEqualTo(seller);
 
     assertThat(closing.close(YearMonth.now(), seedActorUserId())).isEqualTo(1);
     Map<String, Object> locked = db.queryForMap(
         "SELECT commission_status,locked_commission_rate FROM patient_courses WHERE id=?", patientCourse);
     assertThat(locked.get("commission_status")).isEqualTo("LOCKED");
     assertThat((BigDecimal) locked.get("locked_commission_rate")).isEqualByComparingTo("0.07");
+  }
+
+  @Test
+  void coursePurchaseIsRejectedAfterSellerMonthIsClosed() {
+    long seller = seedStaff("Closed Month Seller");
+    long patient = seedPatient("Closed Month Patient");
+    long branch = activeBranchId();
+    seedFlatScheme("T_CLOSED_MONTH", new BigDecimal("0.07"), null);
+    long courseTemplate = db.queryForObject("SELECT id FROM courses LIMIT 1", Long.class);
+    BigDecimal price = db.queryForObject("SELECT price FROM courses WHERE id=?", BigDecimal.class, courseTemplate);
+    long cash = db.queryForObject("SELECT id FROM payment_methods WHERE code='CASH'", Long.class);
+    seedCourse(seller, seller, patient, new BigDecimal("10000"), 10, LocalDate.now());
+    YearMonth month = YearMonth.now();
+    assertThat(closing.close(month, seedActorUserId())).isEqualTo(1);
+
+    assertThatThrownBy(() -> checkout.checkout(
+        new CheckoutDtos.CheckoutRequest(
+            patient, branch, null, null, courseTemplate, null, null, false, seller, seller, cash,
+            null, price, null, null, List.of()),
+        adminAuthentication()))
+        .hasRootCauseInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("closed");
+    assertThat(db.queryForObject(
+        "SELECT count(*) FROM patient_courses WHERE seller_employee_id=? AND sale_month=?",
+        Long.class, seller, month.atDay(1))).isEqualTo(1);
   }
 
   // ---- Transfer integration: transferred balance remains spendable ----------
@@ -497,6 +557,12 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     long sourcePatient = seedPatient("Transfer Source");
     long recipient = seedPatient("Transfer Recipient");
     long course = seedCourse(owner, owner, sourcePatient, new BigDecimal("10000"), 10, LocalDate.of(2026, 8, 1));
+    closing.close(YearMonth.of(2026, 8), null);
+    Map<String, Object> original = db.queryForMap(
+        "SELECT commission_scheme_id,locked_commission_rate,total_course_commission_pool,sales_transaction_id "
+            + "FROM patient_courses WHERE id=?", course);
+    long salesBefore = db.queryForObject("SELECT count(*) FROM sales_transactions", Long.class);
+    long poolsBefore = db.queryForObject("SELECT count(*) FROM commission_allocations", Long.class);
 
     Authentication authentication = adminAuthentication();
     SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -511,15 +577,20 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     assertThat(db.queryForObject(
         "SELECT allocated_visits FROM course_member_balances WHERE patient_course_id=? AND patient_id=?",
         Integer.class, course, sourcePatient)).isEqualTo(6);
-    long recipientCourse = db.queryForObject(
-        "SELECT id FROM patient_courses WHERE patient_id=? AND package_id=(SELECT package_id FROM patient_courses WHERE id=?)",
-        Long.class, recipient, course);
+    assertThat(db.queryForObject(
+        "SELECT count(*) FROM patient_courses WHERE patient_id=?", Long.class, recipient)).isZero();
     assertThat(db.queryForObject(
         "SELECT allocated_visits FROM course_member_balances WHERE patient_course_id=? AND patient_id=?",
-        Integer.class, recipientCourse, recipient)).isEqualTo(4);
+        Integer.class, course, recipient)).isEqualTo(4);
+    Map<String, Object> transferred = db.queryForMap(
+        "SELECT commission_scheme_id,locked_commission_rate,total_course_commission_pool,sales_transaction_id "
+            + "FROM patient_courses WHERE id=?", course);
+    assertThat(transferred).containsAllEntriesOf(original);
+    assertThat(db.queryForObject("SELECT count(*) FROM sales_transactions", Long.class)).isEqualTo(salesBefore);
+    assertThat(db.queryForObject("SELECT count(*) FROM commission_allocations", Long.class)).isEqualTo(poolsBefore);
 
     assertThatCode(() -> courseUsage.recordCheckoutUsage(
-        recipientCourse, recipient, 1, 1L, null, owner, "Transfer Owner", null, LocalDate.of(2026, 9, 12)))
+        course, recipient, 1, 1L, null, owner, "Transfer Owner", null, LocalDate.of(2026, 9, 12)))
         .doesNotThrowAnyException();
   }
 

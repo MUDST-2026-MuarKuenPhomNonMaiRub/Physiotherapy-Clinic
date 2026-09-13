@@ -27,24 +27,26 @@ public class PatientController {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.create')")
   public Map<String, Object> create(@Valid @RequestBody PatientRequest r, Authentication authentication) {
     return service.create(toPatient(r), authentication);
   }
 
   @GetMapping
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
   public List<Map<String, Object>> list(@RequestParam(defaultValue = "") String search,
       @RequestParam(required = false) Long branchId, Authentication authentication) {
     return service.list(search, branchId, authentication);
   }
 
   @GetMapping("/{id}")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
   public Map<String, Object> get(@PathVariable long id, Authentication authentication) {
     return service.get(id, authentication);
   }
 
   @PatchMapping("/{id}")
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.create')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.edit')")
   public Map<String, Object> update(@PathVariable long id, @Valid @RequestBody PatientRequest r,
       Authentication authentication) { return service.update(id, toPatient(r), authentication); }
 

@@ -86,7 +86,9 @@ export default function CommissionReportPage() {
   const active = allRecords.filter((r) => !r.reversed);
   const treatmentTotal = active.filter((r) => r.type === "TREATMENT").reduce((s, r) => s + r.amount, 0);
   const salesTotal = active.filter((r) => r.type === "SALES").reduce((s, r) => s + r.amount, 0);
-  const activeTotal = treatmentTotal + salesTotal;
+  const courseOwnerTotal = active.filter((r) => r.type === "COURSE_OWNER").reduce((s, r) => s + r.amount, 0);
+  const courseTreatingTotal = active.filter((r) => r.type === "COURSE_TREATING").reduce((s, r) => s + r.amount, 0);
+  const activeTotal = treatmentTotal + salesTotal + courseOwnerTotal + courseTreatingTotal;
 
   return (
     <>
@@ -117,9 +119,11 @@ export default function CommissionReportPage() {
         )}
       </div>
 
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Treatment Commission" value={formatCurrency(treatmentTotal)} icon={Stethoscope} tone="success" />
         <StatCard label="Sales Commission" value={formatCurrency(salesTotal)} icon={Wallet} tone="info" />
+        <StatCard label="Course Owner" value={formatCurrency(courseOwnerTotal)} icon={Wallet} tone="warning" />
+        <StatCard label="Course Treating" value={formatCurrency(courseTreatingTotal)} icon={Stethoscope} tone="warning" />
         <StatCard label="Total Commission (active)" value={formatCurrency(activeTotal)} icon={Percent} tone="primary" />
       </div>
 

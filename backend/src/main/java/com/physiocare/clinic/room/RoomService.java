@@ -41,7 +41,7 @@ public class RoomService {
 
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> create(@Valid @RequestBody RoomRequest r) {
     long id =
         db.queryForObject(
@@ -57,7 +57,7 @@ public class RoomService {
   }
 
   @PatchMapping("/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> update(@PathVariable long id, @Valid @RequestBody RoomRequest r) {
     int rows =
         db.update(
@@ -72,7 +72,7 @@ public class RoomService {
   }
 
   @PatchMapping("/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setStatus(@PathVariable long id, @RequestBody ActiveRequest r) {
     int rows = db.update("UPDATE rooms SET active=? WHERE id=?", r.active(), id);
     if (rows == 0) throw new IllegalArgumentException("Room not found");
