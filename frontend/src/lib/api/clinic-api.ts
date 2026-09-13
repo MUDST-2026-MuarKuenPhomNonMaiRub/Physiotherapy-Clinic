@@ -121,6 +121,13 @@ async function fetchMe(accessToken: string): Promise<MeResponse> {
 /** Re-reads the signed-in account, used after a refresh restores a saved token. */
 export const me = () => apiRequest<MeResponse>("/api/v1/auth/me");
 
+export interface ConfiguredRole { id: number; code: string; name: string; permissions: string[] }
+export interface ConfiguredPermission { id: number; code: string; name: string }
+export const listConfiguredRoles = () => apiRequest<ConfiguredRole[]>("/api/v1/roles");
+export const listConfiguredPermissions = () => apiRequest<ConfiguredPermission[]>("/api/v1/roles/permissions");
+export const createConfiguredRole = (body: { code: string; name: string; permissionCodes: string[] }) =>
+  apiRequest<ConfiguredRole>("/api/v1/roles", { method: "POST", body });
+
 // ------------------------------------------------------------------- branches
 
 export const listBranches = () =>

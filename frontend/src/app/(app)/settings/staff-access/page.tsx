@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, KeyRound, Minus, Pencil, Plus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { fieldRules, fieldInput } from "@/lib/domain";
@@ -34,6 +34,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { AppUser, Permission, Role, Staff, StaffPosition } from "@/types";
 import { toast } from "sonner";
+import * as api from "@/lib/api/clinic-api";
 
 const positions: StaffPosition[] = ["Physiotherapist", "Clinic Manager", "Assistant Therapist", "Salesperson"];
 
@@ -162,6 +163,25 @@ export default function StaffAccessPage() {
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<Role | "ALL" | "NO_ACCOUNT">("ALL");
   const [saving, setSaving] = useState(false);
+  const [roleDialog, setRoleDialog] = useState(false);
+  const [roleCode, setRoleCode] = useState("");
+  const [roleName, setRoleName] = useState("");
+  const [rolePermissionsDraft, setRolePermissionsDraft] = useState<string[]>([]);
+  const [configuredPermissions, setConfiguredPermissions] = useState<api.ConfiguredPermission[]>([]);
+
+  useEffect(() => {
+    if (!roleDialog) return;
+    void api.listConfiguredPermissions().then(setConfiguredPermissions).catch(() => toast.error("Unable to load permissions"));
+  }, [roleDialog]);
+
+  async function createRole() {
+    if (!roleCode.trim() || !roleName.trim()) return;
+    try {
+      await api.createConfiguredRole({ code: roleCode, name: roleName, permissionCodes: rolePermissionsDraft });
+      toast.success("Role created");
+      setRoleDialog(false); setRoleCode(""); setRoleName(""); setRolePermissionsDraft([]);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to create role"); }
+  }
 
   const visibleStaff = staff;
 
@@ -326,7 +346,9 @@ export default function StaffAccessPage() {
                 <UserPlus className="h-4 w-4" /> Add Person
               </Button>
             </div>
-          ) : undefined
+          ) : (
+            <Button onClick={() => setRoleDialog(true)}><Plus className="h-4 w-4" /> New Role</Button>
+          )
         }
       />
 
@@ -704,6 +726,20 @@ export default function StaffAccessPage() {
               {saving ? "Saving…" : editing ? "Save Changes" : <><Plus className="h-4 w-4" /> Add Person</>}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={roleDialog} onOpenChange={setRoleDialog}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader><DialogTitle>New Role</DialogTitle><DialogDescription>Create a reusable access level. New roles start with only the permissions you select.</DialogDescription></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Role code" required><Input placeholder="FINANCE" value={roleCode} onChange={(e) => setRoleCode(e.target.value.toUpperCase())} maxLength={30} /></Field>
+              <Field label="Display name" required><Input placeholder="Finance" value={roleName} onChange={(e) => setRoleName(e.target.value)} maxLength={100} /></Field>
+            </div>
+            <div className="rounded-xl border border-border p-3"><p className="mb-2 text-sm font-medium">Permissions</p><div className="grid gap-2 sm:grid-cols-2">{configuredPermissions.map((p) => <label key={p.code} className="flex items-center gap-2 text-sm"><Checkbox checked={rolePermissionsDraft.includes(p.code)} onCheckedChange={(v) => setRolePermissionsDraft((current) => v ? [...current, p.code] : current.filter((x) => x !== p.code))} />{p.name}</label>)}</div></div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setRoleDialog(false)}>Cancel</Button><Button disabled={!roleCode.trim() || !roleName.trim()} onClick={() => void createRole()}>Create Role</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>
