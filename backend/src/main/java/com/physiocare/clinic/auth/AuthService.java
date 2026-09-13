@@ -95,17 +95,17 @@ public class AuthService {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already in use");
     }
 
-    String roleCode =
-        request.role().trim().equals("PHYSIOTHERAPIST") ? "PHYSIO" : request.role().trim();
-    if (!roleCode.equals("ADMIN") && !roleCode.equals("PHYSIO")) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported role");
-    }
+    // Roles are data, not an application enum. Keep the current aliases for
+    // the UI, but allow an administrator to use any active role configured in
+    // the roles table so new job functions do not require a backend release.
+    String roleCode = request.role().trim().toUpperCase();
+    if (roleCode.equals("PHYSIOTHERAPIST")) roleCode = "PHYSIO";
 
     Role role =
         roles
             .findByCode(roleCode)
             .orElseThrow(
-                () -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role not found"));
+                () -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role is not configured"));
     AppUser user = new AppUser();
     user.setEmail(email);
     user.setPasswordHash(encoder.encode(request.password()));
