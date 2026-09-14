@@ -60,7 +60,7 @@ public class CheckoutController {
   }
 
   @GetMapping("/patient-courses")
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient-course.view', 'checkout.read')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.view', 'course.use', 'checkout.create')")
   public Map<String, Object> courses(
       @RequestParam(required = false) Long patientId,
       @RequestParam(required = false) Long branchId,

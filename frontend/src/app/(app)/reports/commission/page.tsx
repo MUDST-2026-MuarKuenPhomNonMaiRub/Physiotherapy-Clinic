@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
+import { useSession } from "@/lib/auth/use-session";
 import { useReportScope } from "@/lib/auth/use-report-scope";
 import { getCommissionRecords, today } from "@/lib/domain";
 import { getCommissionLedgerRecords } from "@/lib/api/clinic-api";
@@ -41,8 +42,9 @@ function defaultRange(): { from: string; to: string } {
 export default function CommissionReportPage() {
   const transactions = useClinicStore((s) => s.transactions);
   const staff = useClinicStore((s) => s.staff);
-  const { isAccessible } = useBranchScope();
+  const { isAccessible, options: accessibleBranches } = useBranchScope();
   const { seesEveryone, ownStaffId, ownName } = useReportScope();
+  const { user } = useSession();
 
   const [range] = useState(defaultRange);
   const [dateFrom, setDateFrom] = useState(range.from);
@@ -64,12 +66,18 @@ export default function CommissionReportPage() {
   useEffect(() => {
     let cancelled = false;
     const requestedStaff = seesEveryone ? (staffFilter === "ALL" ? undefined : staffFilter) : ownStaffId ?? undefined;
-    getCommissionLedgerRecords(
-      dateFrom,
-      dateTo,
-      branchFilter === "ALL" ? undefined : branchFilter,
-      requestedStaff
+    // The API only serves an unscoped read to an admin; anyone else gets
+    // "all branches" by reading each of their own branches in turn.
+    const branchIds =
+      branchFilter !== "ALL"
+        ? [branchFilter]
+        : user?.role === "ADMIN"
+          ? [undefined]
+          : accessibleBranches.map((b) => b.id);
+    Promise.all(
+      branchIds.map((branchId) => getCommissionLedgerRecords(dateFrom, dateTo, branchId, requestedStaff))
     )
+      .then((parts) => parts.flat())
       .then((result) => {
         if (!cancelled) setCourseRecords(result);
       })
@@ -79,7 +87,7 @@ export default function CommissionReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [dateFrom, dateTo, branchFilter, staffFilter, seesEveryone, ownStaffId]);
+  }, [dateFrom, dateTo, branchFilter, staffFilter, seesEveryone, ownStaffId, user?.role, accessibleBranches]);
 
   const allRecords = useMemo(() => [...records, ...courseRecords], [records, courseRecords]);
 

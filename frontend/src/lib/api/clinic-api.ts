@@ -68,6 +68,27 @@ const query = (params: Record<string, string | number | null | undefined>) => {
 
 // -------------------------------------------------------------------- session
 
+/**
+ * Which branches a list should be read for. `null` means "no filter": an
+ * admin may read the whole clinic. Everyone else must name a branch on the
+ * operational lists (the API refuses an unscoped read), so their assigned
+ * branches are read one by one and merged.
+ */
+export type BranchScope = string[] | null;
+
+async function forBranches<T>(
+  scope: BranchScope,
+  read: (branchId?: string) => Promise<T[]>,
+  keyOf: (item: T) => string
+): Promise<T[]> {
+  if (scope === null) return read();
+  const merged = new Map<string, T>();
+  for (const rows of await Promise.all(scope.map((branchId) => read(branchId)))) {
+    for (const row of rows) merged.set(keyOf(row), row);
+  }
+  return [...merged.values()];
+}
+
 export interface LoginResult {
   accessToken: string;
   user: AppUser;
@@ -85,7 +106,7 @@ export async function login(email: string, password: string): Promise<LoginResul
   // The backend now orders roles with the highest-privilege one first, but
   // picking ADMIN explicitly when present costs nothing and keeps this
   // correct even if that ordering ever regresses.
-  const role: Role = profile.roles.includes("ADMIN") ? "ADMIN" : profile.roles[0] ?? "PHYSIOTHERAPIST";
+  const role = primaryRole(profile.roles);
   return {
     accessToken: session.accessToken,
     user: {
@@ -101,6 +122,16 @@ export async function login(email: string, password: string): Promise<LoginResul
       lastLogin: new Date().toISOString(),
     },
   };
+}
+
+/**
+ * The API names the therapist role PHYSIO; the app has always called it
+ * PHYSIOTHERAPIST, and the menus and landing route are keyed by that name.
+ */
+export function primaryRole(roles: string[]): Role {
+  if (roles.includes("ADMIN")) return "ADMIN";
+  const first = roles[0] ?? "PHYSIOTHERAPIST";
+  return first === "PHYSIO" ? "PHYSIOTHERAPIST" : first;
 }
 
 interface MeResponse {
@@ -320,8 +351,11 @@ export const setPaymentMethodEnabled = (id: string, active: boolean) =>
     body: { active },
   }).then(toPaymentMethod);
 
-export const listResources = () =>
-  apiRequest<Row[]>("/api/v1/rooms").then((rows) => rows.map(toResource));
+export const listResources = (branchId?: string | null) =>
+  apiRequest<Row[]>(`/api/v1/rooms${query({ branchId })}`).then((rows) => rows.map(toResource));
+
+export const listResourcesFor = (scope: BranchScope) =>
+  forBranches(scope, listResources, (r) => r.id);
 
 const roomBody = (resource: Omit<ResourceRoom, "id">) => ({
   name: resource.name,
@@ -575,6 +609,12 @@ export const setTreatmentFeeRuleActive = (id: string, active: boolean) =>
 export const listPatients = (branchId?: string | null) =>
   apiRequest<Row[]>(`/api/v1/patients${query({ branchId })}`).then((rows) => rows.map(toPatient));
 
+/** A patient seen at two of the caller's branches is listed once. */
+export const listPatientsFor = (scope: BranchScope) =>
+  forBranches(scope, listPatients, (p) => p.id).then((rows) =>
+    rows.sort((a, b) => Number(b.id) - Number(a.id))
+  );
+
 /**
  * The HN the next registration at this branch would be given. Asked of the
  * server because the number comes from a sequence that only moves forward —
@@ -606,6 +646,9 @@ export const listAppointments = (branchId?: string | null) =>
   apiRequest<Row[]>(`/api/v1/appointments${query({ branchId })}`).then((rows) =>
     rows.map(toAppointment)
   );
+
+export const listAppointmentsFor = (scope: BranchScope) =>
+  forBranches(scope, listAppointments, (a) => a.id);
 
 export interface AppointmentInput {
   patientId: string;
@@ -673,6 +716,18 @@ export const listPatientCourses = (branchId?: string | null): Promise<CourseSnap
     courseLedger: response.ledger.map(toLedgerEntry),
   }));
 
+export const listPatientCoursesFor = async (scope: BranchScope): Promise<CourseSnapshot> => {
+  if (scope === null) return listPatientCourses();
+  const parts = await Promise.all(scope.map((branchId) => listPatientCourses(branchId)));
+  const courses = new Map<string, PatientCourse>();
+  const ledger = new Map<string, CourseLedgerEntry>();
+  for (const part of parts) {
+    for (const pc of part.patientCourses) courses.set(`${pc.id}-${pc.patientId}`, pc);
+    for (const entry of part.courseLedger) ledger.set(entry.id, entry);
+  }
+  return { patientCourses: [...courses.values()], courseLedger: [...ledger.values()] };
+};
+
 export const transferCourseSessions = (
   patientCourseId: string,
   toPatientId: string,
@@ -695,6 +750,9 @@ export const listTransactions = (branchId?: string | null) =>
   apiRequest<Row[]>(`/api/v1/transactions${query({ branchId })}`).then((rows) =>
     rows.map(toTransaction)
   );
+
+export const listTransactionsFor = (scope: BranchScope) =>
+  forBranches(scope, listTransactions, (t) => t.id);
 
 export interface CheckoutAdjustmentInput {
   label: string;
@@ -773,9 +831,10 @@ export interface ClinicSnapshot {
 
 /**
  * One round of loading for the whole app. The user list is admin-only, so a
- * physiotherapist simply gets an empty one rather than a failed sign-in.
+ * physiotherapist simply gets an empty one rather than a failed sign-in, and
+ * the branch-scoped lists are read for the branches they are assigned to.
  */
-export async function loadSnapshot(isAdmin: boolean): Promise<ClinicSnapshot> {
+export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promise<ClinicSnapshot> {
   const [
     branches,
     staff,
@@ -797,13 +856,13 @@ export async function loadSnapshot(isAdmin: boolean): Promise<ClinicSnapshot> {
     listServices(),
     listCourseTemplates(),
     listPaymentMethods(),
-    listResources(),
+    listResourcesFor(scope),
     listMasterData(),
     listCommissionRules(),
-    listPatients(),
-    listPatientCourses(),
-    listAppointments(),
-    listTransactions(),
+    listPatientsFor(scope),
+    listPatientCoursesFor(scope),
+    listAppointmentsFor(scope),
+    listTransactionsFor(scope),
   ]);
 
   return {

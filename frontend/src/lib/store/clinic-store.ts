@@ -208,6 +208,12 @@ function upsert<T extends { id: string }>(list: T[], item: T) {
   else list.push(item);
 }
 
+/** The branches the signed-in user may read lists for; null = all (admin). */
+function branchScope(): api.BranchScope {
+  const user = useClinicStore.getState().session.user;
+  return !user || user.role === "ADMIN" ? null : user.branchIds;
+}
+
 function requireItem<T>(item: T | undefined, label: string): T {
   if (!item) throw new Error(`${label} no longer exists. Refresh and try again.`);
   return item;
@@ -265,8 +271,12 @@ export const useClinicStore = create<ClinicState>()(
           // The saved token may be older than the account behind it, so the
           // profile is re-read before anything is loaded with it.
           const profile = await api.me();
-          const role: Role = profile.roles[0] ?? "PHYSIOTHERAPIST";
-          const snapshot = await api.loadSnapshot(role === "ADMIN");
+          const role: Role = api.primaryRole(profile.roles);
+          // An admin stands at any branch; everyone else is limited to the
+          // branches their account is assigned to, and the API only hands
+          // them the operational lists one branch at a time.
+          const assigned = (profile.branchIds ?? []).map(String);
+          const snapshot = await api.loadSnapshot(role === "ADMIN", role === "ADMIN" ? null : assigned);
 
           set((s) => {
             Object.assign(s, snapshot);
@@ -274,11 +284,8 @@ export const useClinicStore = create<ClinicState>()(
             s.loading = false;
 
             const active = snapshot.branches.filter((b) => b.status === "ACTIVE");
-            // An admin stands at any branch; everyone else is limited to the
-            // branches their account is assigned to.
-            const assigned = (profile.branchIds ?? []).map(String);
             const allowed =
-              role === "ADMIN" || assigned.length === 0
+              role === "ADMIN"
                 ? active.map((b) => b.id)
                 : assigned.filter((id) => active.some((b) => b.id === id));
 
@@ -315,10 +322,11 @@ export const useClinicStore = create<ClinicState>()(
       },
 
       refreshOperational: async () => {
+        const scope = branchScope();
         const [courses, appointments, transactions] = await Promise.all([
-          api.listPatientCourses(),
-          api.listAppointments(),
-          api.listTransactions(),
+          api.listPatientCoursesFor(scope),
+          api.listAppointmentsFor(scope),
+          api.listTransactionsFor(scope),
         ]);
         set((s) => {
           s.patientCourses = courses.patientCourses;
@@ -713,7 +721,7 @@ export const useClinicStore = create<ClinicState>()(
       rescheduleAppointment: async (id, date, startTime, endTime, reason) => {
         const moved = await api.rescheduleAppointment(id, date, startTime, endTime, reason);
         // The original is now RESCHEDULED, so both rows are re-read together.
-        const appointments = await api.listAppointments();
+        const appointments = await api.listAppointmentsFor(branchScope());
         set((s) => {
           s.appointments = appointments;
         });
@@ -746,7 +754,7 @@ export const useClinicStore = create<ClinicState>()(
       transferCourseSessions: async (fromPatientCourseId, toPatientId, sessions) => {
         try {
           await api.transferCourseSessions(fromPatientCourseId, toPatientId, sessions);
-          const courses = await api.listPatientCourses();
+          const courses = await api.listPatientCoursesFor(branchScope());
           set((s) => {
             s.patientCourses = courses.patientCourses;
             s.courseLedger = courses.courseLedger;
