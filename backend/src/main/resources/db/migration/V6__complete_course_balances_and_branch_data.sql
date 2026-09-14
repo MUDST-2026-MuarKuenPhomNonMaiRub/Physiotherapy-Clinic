@@ -13,14 +13,15 @@ CREATE TABLE course_member_balances (
 CREATE INDEX idx_course_member_balances_patient
     ON course_member_balances(patient_id, patient_course_id);
 
--- Existing course/member balance backfill is handled once, comprehensively,
--- in V12 after all commission lineage tables exist.
-INSERT INTO branches (code, name, phone, address, active)
+INSERT INTO branches (code, name, phone, address)
 VALUES
-    ('R9', 'พระราม 9', NULL, 'พระราม 9 กรุงเทพฯ', TRUE),
-    ('BR', 'แบริ่ง', NULL, 'ซอยแบริ่ง 4 สมุทรปราการ', TRUE)
-ON CONFLICT (code) DO UPDATE SET
-    name = EXCLUDED.name,
-    address = EXCLUDED.address,
-    active = TRUE,
-    deleted_at = NULL;
+    ('R9', 'สาขา พระราม 9 (ใกล้ The nine)', NULL, 'พระราม 9 กรุงเทพฯ'),
+    ('BR', 'สาขา แบริ่ง (ซ.แบริ่ง 4)', NULL, 'ซอยแบริ่ง 4 สมุทรปราการ')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO course_member_balances (patient_course_id, patient_id, allocated_visits)
+SELECT scm.patient_course_id, scm.patient_id, pc.total_visits
+FROM shared_course_members scm
+JOIN patient_courses pc ON pc.id = scm.patient_course_id
+WHERE scm.role = 'OWNER'
+ON CONFLICT (patient_course_id, patient_id) DO NOTHING;
