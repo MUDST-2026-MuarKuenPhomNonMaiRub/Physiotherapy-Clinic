@@ -37,6 +37,7 @@ public class StaffService {
   @Transactional
   public StaffDtos.CreateResponse create(StaffDtos.CreateRequest r) {
     InputRules.optionalPhone(r.phone());
+    validateBranchIds(r.branchIds());
     boolean hasAccount = r.hasAccount() == null || r.hasAccount();
     String email = r.email() == null ? "" : r.email().trim().toLowerCase();
     AppUser user = null;
@@ -125,6 +126,7 @@ public class StaffService {
   @Transactional
   public StaffDtos.Row update(long id, StaffDtos.UpdateRequest r) {
     InputRules.optionalPhone(r.phone());
+    validateBranchIds(r.branchIds());
     Staff person =
         staff
             .findById(id)
@@ -204,6 +206,20 @@ public class StaffService {
       users.save(user);
     }
     staff.save(person);
+  }
+
+  private void validateBranchIds(String branchIds) {
+    if (branchIds == null || !branchIds.trim().matches("\\\\[\\\\s*\\\\d+(?:\\\\s*,\\\\s*\\\\d+)*\\\\s*\\\\]"))
+      throw new IllegalArgumentException("Branch IDs must be a JSON array of numeric IDs");
+    String body = branchIds.trim().substring(1, branchIds.trim().length() - 1).trim();
+    String[] ids = body.split("\\\\s*,\\\\s*");
+    long distinct = java.util.Arrays.stream(ids).distinct().count();
+    if (distinct != ids.length) throw new IllegalArgumentException("Branch IDs must not contain duplicates");
+    Integer active = db.queryForObject(
+        "SELECT count(*) FROM branches WHERE id = ANY(?::bigint[]) AND active AND deleted_at IS NULL",
+        Integer.class, "{" + String.join(",", ids) + "}");
+    if (active == null || active != ids.length)
+      throw new IllegalArgumentException("Branch IDs must reference active branches");
   }
 
   private static boolean isStrongPassword(String value) {

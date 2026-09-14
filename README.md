@@ -61,9 +61,31 @@ bash backend/run-local.sh
 cd frontend && npm install && npm run dev
 ```
 
-`run-local.sh` loads the project's `.env` before starting Spring. Maven does not
-read that file on its own — running `./mvnw spring-boot:run` directly fails with
-`Could not resolve placeholder 'APP_JWT_SECRET'`.
+`run-local.sh` loads the project's `.env` before starting Spring. It uses
+`DATABASE_URL_LOCAL` when set, otherwise builds a host URL from `POSTGRES_PORT`
+(and `POSTGRES_DB`), matching Compose. Maven does not read `.env` on its own —
+running `./mvnw spring-boot:run` directly fails with `Could not resolve
+placeholder 'APP_JWT_SECRET'`.
+
+## Backend tests
+
+From `backend/`, the standard command runs unit and request-validation tests
+without requiring PostgreSQL:
+
+```bash
+./mvnw test
+```
+
+The commission tests use real disposable PostgreSQL and are intentionally
+excluded from the default Maven run. Run them through the safe setup script,
+which starts and removes its own database container:
+
+```bash
+bash run-commission-tests.sh
+```
+
+Docker must be running. Set `IT_DB_PORT` if port `15433` is already occupied.
+Do not point these tests at the application's normal database.
 
 ## Structure
 

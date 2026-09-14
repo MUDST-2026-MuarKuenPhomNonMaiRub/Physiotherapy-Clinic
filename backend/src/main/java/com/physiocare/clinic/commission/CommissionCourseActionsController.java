@@ -33,7 +33,7 @@ public class CommissionCourseActionsController {
 
   public record AddMemberRequest(@Positive long patientId, @Positive int visitsFromOwner) {}
 
-  public record RefundRemainingRequest(@Positive int visits, @NotBlank String reason) {}
+  public record RefundRemainingRequest(@Positive int visits, @NotBlank String reason, @Positive Long memberPatientId) {}
 
   @GetMapping("/members")
   public List<Map<String, Object>> members(@PathVariable long id, Authentication authentication) {
@@ -66,6 +66,7 @@ public class CommissionCourseActionsController {
     branches.requireCourseAccess(authentication, id);
     adjustments.refundRemainingVisits(
         id,
+        request.memberPatientId(),
         request.visits(),
         branches.branchIdOf(id),
         currentUser.id(authentication),

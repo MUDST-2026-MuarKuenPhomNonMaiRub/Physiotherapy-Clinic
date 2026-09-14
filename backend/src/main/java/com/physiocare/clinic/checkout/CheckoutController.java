@@ -32,6 +32,7 @@ public class CheckoutController {
   }
 
   @GetMapping("/transactions")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.view', 'checkout.read')")
   public List<CheckoutDtos.TransactionView> list(
       @RequestParam(required = false) Long branchId,
       @RequestParam(required = false) Long patientId,
@@ -41,6 +42,7 @@ public class CheckoutController {
   }
 
   @GetMapping("/transactions/{id}")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.view', 'checkout.read')")
   public CheckoutDtos.TransactionView get(@PathVariable long id, Authentication authentication) {
     CheckoutDtos.TransactionView transaction = reader.get(id);
     branches.requireAccess(authentication, transaction.branchId());
@@ -58,6 +60,7 @@ public class CheckoutController {
   }
 
   @GetMapping("/patient-courses")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient-course.view', 'checkout.read')")
   public Map<String, Object> courses(
       @RequestParam(required = false) Long patientId,
       @RequestParam(required = false) Long branchId,

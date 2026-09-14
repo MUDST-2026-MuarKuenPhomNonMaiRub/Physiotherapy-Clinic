@@ -27,18 +27,31 @@ public class RoleController {
   public Map<String,Object> create(@RequestBody RoleRequest request) {
     String code = request.code().trim().toUpperCase();
     if (!code.matches("[A-Z][A-Z0-9_]{1,29}")) throw new IllegalArgumentException("Role code must use 2-30 uppercase letters, numbers or underscores");
+    validatePermissionCodes(request.permissionCodes());
     Long id = db.queryForObject("INSERT INTO roles(code,name) VALUES(?,?) RETURNING id", Long.class, code, request.name().trim());
     if (request.permissionCodes() != null) for (String permission : request.permissionCodes()) db.update("INSERT INTO role_permissions(role_id,permission_id) SELECT ?,id FROM permissions WHERE code=? ON CONFLICT DO NOTHING", id, permission);
-    return db.queryForMap("SELECT id,code,name FROM roles WHERE id=?", id);
+    return role(id);
   }
 
   @PutMapping("/{id}")
   public Map<String,Object> update(@PathVariable Long id, @RequestBody RoleRequest request) {
     if (request.name() == null || request.name().isBlank()) throw new IllegalArgumentException("Role name is required");
+    validatePermissionCodes(request.permissionCodes());
     db.update("UPDATE roles SET name=? WHERE id=?", request.name().trim(), id);
     db.update("DELETE FROM role_permissions WHERE role_id=?", id);
     if (request.permissionCodes() != null) for (String permission : request.permissionCodes()) db.update("INSERT INTO role_permissions(role_id,permission_id) SELECT ?,id FROM permissions WHERE code=? ON CONFLICT DO NOTHING", id, permission);
-    return db.queryForMap("SELECT id,code,name FROM roles WHERE id=?", id);
+    return role(id);
+  }
+
+  private void validatePermissionCodes(List<String> codes) {
+    if (codes == null || codes.isEmpty()) return;
+    String placeholders = String.join(",", java.util.Collections.nCopies(codes.size(), "?"));
+    int known = db.queryForObject("SELECT count(DISTINCT code) FROM permissions WHERE code IN (" + placeholders + ")", Integer.class, codes.toArray());
+    if (known != codes.stream().distinct().count()) throw new IllegalArgumentException("Unknown permission code");
+  }
+
+  private Map<String,Object> role(long id) {
+    return db.queryForMap("SELECT r.id,r.code,r.name,COALESCE(array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),'{}') AS permissions FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.id=? GROUP BY r.id", id);
   }
 
   @DeleteMapping("/{id}")

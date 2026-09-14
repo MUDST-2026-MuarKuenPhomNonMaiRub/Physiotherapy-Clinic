@@ -25,7 +25,12 @@ set +a
 
 # .env carries the URL the backend container uses, where the database answers
 # to the hostname "postgres". From the host it is on localhost instead.
-export DATABASE_URL="${DATABASE_URL_LOCAL:-jdbc:postgresql://localhost:5432/${POSTGRES_DB:-physiocare}}"
+# Prefer an explicit host URL; otherwise mirror Compose's configurable host port.
+if [ -n "${DATABASE_URL_LOCAL:-}" ]; then
+  export DATABASE_URL="$DATABASE_URL_LOCAL"
+else
+  export DATABASE_URL="jdbc:postgresql://localhost:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-physiocare}"
+fi
 export DATABASE_USERNAME="${POSTGRES_USER:-physiocare}"
 export DATABASE_PASSWORD="${POSTGRES_PASSWORD:-physiocare}"
 

@@ -30,6 +30,29 @@ public class CheckoutRepository {
             paymentMethodId));
   }
 
+  public void requireActivePaymentMethod(long id) {
+    Integer count = db.queryForObject("SELECT count(*) FROM payment_methods WHERE id=? AND active", Integer.class, id);
+    if (count == null || count == 0) throw new IllegalArgumentException("Payment method is inactive or not found");
+  }
+
+  public Map<String, Object> activeService(long id) {
+    return row("SELECT * FROM services WHERE id=? AND active AND deleted_at IS NULL", id, "Active service");
+  }
+
+  public Map<String, Object> activeCourse(long id) {
+    return row("SELECT * FROM courses WHERE id=? AND active AND deleted_at IS NULL", id, "Active course");
+  }
+
+  public void requireAppointmentMatches(long appointmentId, long patientId, long branchId, Long serviceId) {
+    Integer count = db.queryForObject(
+        "SELECT count(*) FROM appointments a JOIN branches b ON b.id=a.branch_id AND b.active AND b.deleted_at IS NULL "
+            + "JOIN services s ON s.id=a.service_id AND s.active AND s.deleted_at IS NULL "
+            + "WHERE a.id=? AND a.patient_id=? AND a.branch_id=? AND (?::bigint IS NULL OR a.service_id=?) "
+            + "AND a.status NOT IN ('CANCELLED','NO_SHOW')",
+        Integer.class, appointmentId, patientId, branchId, serviceId, serviceId);
+    if (count == null || count == 0) throw new IllegalArgumentException("Appointment does not match patient, branch, or service");
+  }
+
   public long createPatientCourse(
       long patientId, long branchId, long packageId, String packageName, int sessions, int bonus,
       BigDecimal price, BigDecimal discountRatio, Integer validityDays, Long salesTransactionId,

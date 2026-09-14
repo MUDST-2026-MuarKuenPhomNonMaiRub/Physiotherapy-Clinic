@@ -105,6 +105,18 @@ public class CommissionAdjustmentService {
       Long actorUserId,
       String actorName,
       String reason) {
+    refundRemainingVisits(patientCourseId, null, visitsToCancel, branchId, actorUserId, actorName, reason);
+  }
+
+  @Transactional
+  public void refundRemainingVisits(
+      long patientCourseId,
+      Long memberPatientId,
+      int visitsToCancel,
+      long branchId,
+      Long actorUserId,
+      String actorName,
+      String reason) {
     if (visitsToCancel <= 0) throw new IllegalArgumentException("Visits to cancel must be at least one");
     Map<String, Object> course =
         db.queryForMap("SELECT * FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
@@ -118,12 +130,13 @@ public class CommissionAdjustmentService {
       throw new IllegalArgumentException("Cannot cancel more sessions than remain unused on this course");
 
     long ownerPatientId = ((Number) course.get("patient_id")).longValue();
+    long targetPatientId = memberPatientId == null ? ownerPatientId : memberPatientId;
     int balanceRows = db.update(
         "UPDATE course_member_balances SET allocated_visits=allocated_visits-?,updated_at=now()"
             + " WHERE patient_course_id=? AND patient_id=? AND allocated_visits-used_visits>=?",
         visitsToCancel,
         patientCourseId,
-        ownerPatientId,
+        targetPatientId,
         visitsToCancel);
     if (balanceRows != 1)
       throw new IllegalArgumentException("Cannot cancel visits already used by the course member");

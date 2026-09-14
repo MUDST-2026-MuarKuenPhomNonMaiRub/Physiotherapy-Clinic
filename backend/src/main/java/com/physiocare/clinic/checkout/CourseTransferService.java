@@ -89,14 +89,12 @@ public class CourseTransferService {
         "UPDATE course_member_balances SET allocated_visits=allocated_visits-?,updated_at=now()"
             + " WHERE patient_course_id=? AND patient_id=?",
         r.sessions(), r.patientCourseId(), fromPatientId);
-    repository.addLedgerEntry(
+    long transferOutLedgerId = repository.addLedgerEntry(
         r.patientCourseId(), "TRANSFER_OUT", -r.sessions(),
         CheckoutService.remaining(repository.patientCourse(r.patientCourseId())), branchId, null,
         actor, actorUserId, transferGroupId, null);
-    db.update(
-        "UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=(SELECT max(id) FROM"
-            + " course_ledger_entries WHERE patient_course_id=?)",
-        r.toPatientId(), r.patientCourseId());
+    db.update("UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=?",
+        r.toPatientId(), transferOutLedgerId);
     repository.refreshCourseStatus(r.patientCourseId());
 
     // Keep the entitlement on the locked source course. This preserves its
@@ -115,14 +113,12 @@ public class CourseTransferService {
             + " allocated_visits=course_member_balances.allocated_visits+EXCLUDED.allocated_visits,"
             + " updated_at=now()",
         targetId, r.toPatientId(), r.sessions());
-    repository.addLedgerEntry(
+    long transferInLedgerId = repository.addLedgerEntry(
         targetId, "TRANSFER_IN", r.sessions(),
         CheckoutService.remaining(repository.patientCourse(targetId)), branchId, null, actor,
         actorUserId, transferGroupId, null);
-    db.update(
-        "UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=(SELECT max(id) FROM"
-            + " course_ledger_entries WHERE patient_course_id=?)",
-        fromPatientId, targetId);
+    db.update("UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=?",
+        fromPatientId, transferInLedgerId);
     repository.refreshCourseStatus(targetId);
 
     long transferId =

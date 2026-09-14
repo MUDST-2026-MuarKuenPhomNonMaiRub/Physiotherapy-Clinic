@@ -6,7 +6,6 @@ import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.common.InputRules;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -68,6 +67,9 @@ public class CheckoutService {
     branches.requirePatientExists(r.patientId());
     branches.requireStaffInBranch(r.treatingStaffId(), r.branchId(), "Treating staff");
     branches.requireStaffInBranch(r.salespersonId(), r.branchId(), "Salesperson");
+    repository.requireActivePaymentMethod(r.paymentMethodId());
+    if (r.appointmentId() != null)
+      repository.requireAppointmentMatches(r.appointmentId(), r.patientId(), r.branchId(), r.serviceId());
     if (r.caseOwnerEmployeeId() != null) {
       branches.requireStaffInBranch(r.caseOwnerEmployeeId(), r.branchId(), "Case owner");
     }
@@ -86,20 +88,22 @@ public class CheckoutService {
             .toList();
 
     Map<String, Object> service =
-        r.serviceId() == null ? null : repository.row("SELECT * FROM services WHERE id=?", r.serviceId(), "Service");
+        r.serviceId() == null ? null : repository.activeService(r.serviceId());
     Map<String, Object> course =
         r.purchaseCourseId() == null
             ? null
-            : repository.row("SELECT * FROM courses WHERE id=?", r.purchaseCourseId(), "Course");
+            : repository.activeCourse(r.purchaseCourseId());
 
     BigDecimal servicePrice =
         service == null
             ? BigDecimal.ZERO
-            : r.servicePrice() != null ? r.servicePrice() : (BigDecimal) service.get("base_price");
+            : (BigDecimal) service.get("base_price");
     BigDecimal coursePrice =
         course == null
             ? BigDecimal.ZERO
-            : r.coursePurchasePrice() != null ? r.coursePurchasePrice() : (BigDecimal) course.get("price");
+            : (BigDecimal) course.get("price");
+    if (service != null) requireCatalogPrice(r.servicePrice(), servicePrice, "service");
+    if (course != null) requireCatalogPrice(r.coursePurchasePrice(), coursePrice, "course");
     InputRules.money(servicePrice, "The service price");
     InputRules.money(coursePrice, "The course price");
     for (CheckoutDtos.Adjustment adjustment : adjustments) {
@@ -107,36 +111,18 @@ public class CheckoutService {
       InputRules.money(adjustment.amount().abs(), "An adjustment");
     }
 
-    BigDecimal grossTotal = servicePrice.add(coursePrice);
-    BigDecimal adjustmentTotal =
-        adjustments.stream().map(CheckoutDtos.Adjustment::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
-    BigDecimal discountTotal =
-        adjustments.stream()
-            .map(CheckoutDtos.Adjustment::amount)
-            .filter(a -> a.signum() < 0)
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    BigDecimal netTotal = grossTotal.add(adjustmentTotal);
-    /*
-     * Clamping a negative total to zero would leave a receipt whose lines no
-     * longer add up to what was charged, which the transaction screen and the
-     * revenue report both read as truth. A discount bigger than the bill is a
-     * keying mistake, so it is refused rather than absorbed.
-     */
+    CheckoutPricing pricing = CheckoutPricing.calculate(servicePrice, coursePrice, adjustments);
+    BigDecimal grossTotal = pricing.grossTotal();
+    BigDecimal discountTotal = pricing.discountTotal();
+    BigDecimal netTotal = pricing.netTotal();
+    /* A discount larger than the bill is a keying mistake, so refuse it. */
     InputRules.require(
         netTotal.signum() >= 0,
         "The discount is larger than the bill. The most that can be taken off is "
-            + grossTotal.add(adjustmentTotal.subtract(discountTotal)));
+            + grossTotal.add(pricing.adjustmentTotal().subtract(discountTotal)));
 
-    /*
-     * Percentage commission follows what was actually earned: a counter price
-     * override and any discount both shrink it, spread across the base lines in
-     * proportion to their price. Ad-hoc extra charges are not part of the item
-     * the rule prices, so they never inflate it.
-     */
-    BigDecimal discountRatio =
-        grossTotal.signum() > 0
-            ? grossTotal.add(discountTotal).max(BigDecimal.ZERO).divide(grossTotal, 10, RoundingMode.HALF_UP)
-            : BigDecimal.ONE;
+    /* Percentage commission follows the earned catalog lines after discounts. */
+    BigDecimal discountRatio = pricing.discountRatio();
 
     long transactionId =
         db.queryForObject(
@@ -272,6 +258,11 @@ public class CheckoutService {
     return reader.get(transactionId);
   }
 
+  static void requireCatalogPrice(BigDecimal supplied, BigDecimal catalog, String label) {
+    if (supplied != null && supplied.compareTo(catalog) != 0)
+      throw new IllegalArgumentException("The " + label + " price must match the active catalog price");
+  }
+
   /**
    * Reverses a receipt instead of deleting it: the transaction is marked
    * cancelled and every course movement it caused gets an opposing ledger entry,
@@ -375,6 +366,14 @@ public class CheckoutService {
     for (Map.Entry<Long, int[]> pending : deltas.entrySet()) {
       Map<String, Object> course = repository.patientCourse(pending.getKey());
       int[] delta = pending.getValue();
+      Integer usedByMember = db.queryForObject(
+          "SELECT count(*) FROM course_member_balances WHERE patient_course_id=? AND used_visits>0",
+          Integer.class, pending.getKey());
+      if (usedByMember != null && usedByMember > 0 && delta[0] < 0) {
+        throw new IllegalArgumentException(
+            "This sale cannot be voided: sessions from " + course.get("package_name_snapshot")
+                + " have already been used by a course member.");
+      }
       int entitlement =
           intOf(course, "total_visits") + delta[0]
               + intOf(course, "bonus_visits") + delta[1]

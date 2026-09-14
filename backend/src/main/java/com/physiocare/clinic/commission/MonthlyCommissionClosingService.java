@@ -196,6 +196,7 @@ public class MonthlyCommissionClosingService {
   public void override(long closingId, BigDecimal newRate, String reason, Long actorUserId) {
     Map<String, Object> closing =
         db.queryForMap("SELECT * FROM monthly_commission_closings WHERE id=? FOR UPDATE", closingId);
+    validateOverrideRate(((Number) closing.get("scheme_id")).longValue(), newRate);
     BigDecimal oldRate = (BigDecimal) closing.get("locked_commission_rate");
 
     db.update("UPDATE monthly_commission_closings SET locked_commission_rate=? WHERE id=?", newRate, closingId);
@@ -244,6 +245,15 @@ public class MonthlyCommissionClosingService {
         Map.of("locked_commission_rate", oldRate),
         Map.of("locked_commission_rate", newRate),
         reason);
+  }
+
+  private void validateOverrideRate(long schemeId, BigDecimal rate) {
+    if (rate == null) throw new IllegalArgumentException("Commission rate is required");
+    Map<String, Object> bounds = db.queryForMap("SELECT min(commission_rate) AS minimum, max(commission_rate) AS maximum FROM commission_tiers WHERE scheme_id=? AND active", schemeId);
+    BigDecimal minimum = (BigDecimal) bounds.get("minimum");
+    BigDecimal maximum = (BigDecimal) bounds.get("maximum");
+    if (minimum == null || rate.compareTo(minimum) < 0 || rate.compareTo(maximum) > 0)
+      throw new IllegalArgumentException("Override rate must be within the configured commission scheme bounds");
   }
 
   private BigDecimal monthlySales(YearMonth month, long employee) {

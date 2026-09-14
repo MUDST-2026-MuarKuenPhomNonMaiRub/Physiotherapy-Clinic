@@ -28,6 +28,7 @@ public class ReportService {
       @RequestParam LocalDate to,
       @RequestParam(required = false) Long branchId,
       Authentication authentication) {
+    validateDateRange(from, to);
     branches.requireFilter(authentication, branchId);
     return Map.of(
         "uniquePatients",
@@ -99,6 +100,7 @@ public class ReportService {
       @RequestParam LocalDate to,
       @RequestParam Long branchId,
       Authentication authentication) {
+    validateDateRange(from, to);
     branches.requireAccess(authentication, branchId);
     return db.queryForList(
         "SELECT employee_id treating_employee_id,sum(treatment_fee) treatment_fee,"
@@ -118,5 +120,14 @@ public class ReportService {
         from,
         to,
         branchId);
+  }
+
+  private void validateDateRange(LocalDate from, LocalDate to) {
+    if (from == null || to == null || from.isAfter(to)) {
+      throw new IllegalArgumentException("Report from date must not be after to date");
+    }
+    if (to.isAfter(from.plusYears(1))) {
+      throw new IllegalArgumentException("Report date range must not exceed one year");
+    }
   }
 }
