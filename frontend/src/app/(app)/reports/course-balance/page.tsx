@@ -53,7 +53,7 @@ export default function CourseBalanceReportPage() {
         <StatCard label="Expiring Within 30 Days" value={String(expiringSoonCount)} icon={AlertTriangle} tone="warning" />
       </div>
 
-      <div className="mb-4 relative w-64">
+      <div className="relative mb-4 w-full sm:w-64">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search patient or HN..." className="pl-9" />
       </div>

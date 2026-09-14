@@ -23,25 +23,36 @@ export function BranchSelector() {
     const only = accessible[0];
     if (!only) return null;
     return (
-      <div className="hidden items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm text-foreground sm:flex">
-        <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-        {only.name}
+      <div
+        className="flex h-9 max-w-44 shrink-0 items-center gap-2 rounded-lg border border-border bg-muted/50 px-2.5 text-sm text-foreground sm:max-w-56"
+        title={only.name}
+      >
+        <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="hidden truncate sm:inline">{only.name}</span>
+        <span className="truncate sm:hidden">{only.code}</span>
       </div>
     );
   }
 
   const current = accessible.find((b) => b.id === activeBranchId) ?? accessible[0];
 
+  // Kept on the phone layout as well: a branch switch is the one header
+  // control that changes what every screen shows.
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="hidden cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted sm:flex">
-          <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-          {current?.name ?? "Select Branch"}
-          <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <button
+          className="flex h-9 max-w-44 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted sm:max-w-56"
+          title={current?.name}
+          aria-label={`Branch: ${current?.name ?? "none"}`}
+        >
+          <Building2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="hidden truncate sm:inline">{current?.name ?? "Select Branch"}</span>
+          <span className="truncate sm:hidden">{current?.code ?? "Branch"}</span>
+          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent align="end" className="w-[min(16rem,calc(100vw-2rem))]">
         {accessible.map((b) => (
           <DropdownMenuItem key={b.id} onClick={() => setActiveBranch(b.id)} className="flex items-center justify-between">
             <div>

@@ -100,7 +100,7 @@ export default function TransactionsPage() {
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="relative w-64">
+        <div className="relative w-full sm:w-64">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Patient HN or name..." className="pl-9" />
         </div>
@@ -145,7 +145,42 @@ export default function TransactionsPage() {
         <EmptyState icon={Receipt} title="No transactions found" description="Try adjusting your filters." />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
+          {/* Phone: one card per receipt. */}
+          <ul className="divide-y divide-border md:hidden">
+            {pageItems.map((t) => {
+              const patient = patients.find((p) => p.id === t.patientId);
+              const pm = paymentMethods.find((p) => p.id === t.paymentMethodId);
+              return (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/transactions/${t.id}`)}
+                    className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left active:bg-muted/50"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {t.transactionNo} · {formatDateTime(t.date)}
+                      </p>
+                      <p className="mt-0.5 truncate text-sm font-medium text-foreground">
+                        {patient ? getPatientFullNameTh(patient) : "—"}
+                      </p>
+                      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 font-medium ${typeStyle[t.type]}`}>
+                          {typeLabel[t.type]}
+                        </span>
+                        {pm?.name}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-semibold text-foreground">{formatCurrency(t.total)}</p>
+                      <StatusBadge status={t.status} className="mt-1" />
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader>
                 <TableRow>

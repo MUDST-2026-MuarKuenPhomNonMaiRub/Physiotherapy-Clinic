@@ -246,6 +246,12 @@ function CheckoutContent() {
     !cashIsShort;
 
   const shouldOpenQr = isQrPayment && total > 0;
+  // Spending a session costs nothing, so that flow is not "payment"; an empty
+  // bill before anything is chosen still reads as one.
+  const confirmLabel =
+    mode === "COURSE" && subMode === "USE_EXISTING" && total === 0
+      ? "Complete Course Usage"
+      : "Confirm Payment";
 
   function selectPatient(nextPatientId: string) {
     setPatientId(nextPatientId);
@@ -780,7 +786,7 @@ function CheckoutContent() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="sticky top-20 space-y-4 rounded-xl border border-border bg-card p-5">
+            <div className="space-y-4 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-20">
               <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                 <ShoppingCart className="h-4 w-4" /> Order Summary
               </h3>
@@ -915,9 +921,26 @@ function CheckoutContent() {
               )}
               <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={() => { if (shouldOpenQr) setQrOpen(true); else void handleConfirm(); }}>
                 {shouldOpenQr && <QrCode className="h-4 w-4" />}
-                {total === 0 ? "Complete Course Usage" : "Confirm Payment"}
+                {confirmLabel}
               </Button>
             </div>
+          </div>
+
+          {/* Below the desktop breakpoint the summary sits under a long form,
+              so the total and the confirm button also ride along the bottom. */}
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-4 py-3 backdrop-blur lg:hidden">
+            <div>
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-lg font-semibold text-foreground">{formatCurrency(total)}</p>
+            </div>
+            <Button
+              size="lg"
+              disabled={!canConfirm || submitting}
+              onClick={() => { if (shouldOpenQr) setQrOpen(true); else void handleConfirm(); }}
+            >
+              {shouldOpenQr && <QrCode className="h-4 w-4" />}
+              {confirmLabel}
+            </Button>
           </div>
         </div>
       )}

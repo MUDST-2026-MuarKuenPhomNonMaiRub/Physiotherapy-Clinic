@@ -145,7 +145,38 @@ function AppointmentsPageContent() {
         <EmptyState icon={CalendarDays} title="No appointments found" description="Try adjusting your filters or create a new appointment." />
       ) : view === "list" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <TableScrollArea>
+          {/* Phone: one card per visit, tap to open. */}
+          <ul className="divide-y divide-border md:hidden">
+            {filtered.map((a) => {
+              const patient = patients.find((p) => p.id === a.patientId);
+              const svc = services.find((s) => s.id === a.serviceId);
+              const phy = staff.find((s) => s.id === a.physiotherapistId);
+              return (
+                <li key={a.id}>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/appointments/${a.id}`)}
+                    className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left active:bg-muted/50"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(a.date)} · {a.startTime}–{a.endTime}
+                      </p>
+                      <p className="mt-0.5 truncate text-sm font-medium text-foreground">
+                        {patient ? getPatientFullNameTh(patient) : "—"}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {svc?.name}
+                        {phy && ` · ${phy.name}`}
+                      </p>
+                    </div>
+                    <StatusBadge status={a.status} className="shrink-0" />
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <TableScrollArea className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>

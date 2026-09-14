@@ -15,13 +15,16 @@ export function MobileSidebar() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <button className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden">
+        <button
+          className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+          aria-label="Open navigation"
+        >
           <Menu className="h-5 w-5" />
         </button>
       </SheetTrigger>
       <SheetContent
         side="left"
-        className="flex w-[268px] flex-col gap-0 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground [&_svg]:shrink-0"
+        className="flex w-[268px] max-w-[85vw] flex-col gap-0 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground [&_svg]:shrink-0"
       >
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <ClinicBrand />

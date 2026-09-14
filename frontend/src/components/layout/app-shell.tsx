@@ -82,7 +82,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         <AppHeader />
         <main id="main-content" tabIndex={-1} className="flex flex-1 flex-col overflow-y-auto outline-none">
           {allowed ? (
-            <div className="flex flex-1 flex-col p-4 lg:p-6">{children}</div>
+            // Capped on very wide monitors so tables and forms do not stretch
+            // into unreadably long rows; the cap sits well above a 1920px
+            // display at 125% scaling, the common office setup.
+            <div className="mx-auto flex w-full max-w-[1680px] flex-1 flex-col p-4 lg:p-6 2xl:px-8">{children}</div>
           ) : (
             <Forbidden homeHref={defaultRouteByRole[user.role] ?? "/login"} />
           )}

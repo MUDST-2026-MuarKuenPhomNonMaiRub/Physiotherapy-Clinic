@@ -64,11 +64,11 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
       </Link>
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-card p-5">
-        <div className="flex items-start gap-4">
+        <div className="flex min-w-0 items-start gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-lg font-semibold text-primary">
             {patient.firstNameTh[0]}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-semibold text-foreground">{getPatientFullNameTh(patient)}</h1>
               <Badge variant="outline" className="font-mono text-xs">{patient.hn}</Badge>
@@ -82,7 +82,7 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           {can("patient.edit") && (
             <Button asChild variant="outline" size="sm">
               <Link href={`/patients/${patient.id}/edit`}>
@@ -212,7 +212,7 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
                         : "bg-success";
                 return (
                   <Link
-                    key={pc.id}
+                    key={`${pc.id}-${pc.patientId}`}
                     href={`/courses/${pc.id}`}
                     className="rounded-xl border border-border bg-card p-4 transition-shadow hover:shadow-sm"
                   >

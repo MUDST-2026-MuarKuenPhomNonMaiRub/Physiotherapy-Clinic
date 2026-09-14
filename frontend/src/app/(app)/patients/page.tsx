@@ -118,7 +118,42 @@ function PatientsPageContent() {
           />
         ) : (
           <>
-          <div className="overflow-x-auto">
+          {/* Phone: one card per patient. The table needs nine columns of width. */}
+          <ul className="divide-y divide-border md:hidden">
+            {pageResults.map(({ patient: p }) => (
+              <li key={p.id} className="flex items-center gap-1 pr-2">
+                <Link href={`/patients/${p.id}`} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 active:bg-muted/50">
+                  <span
+                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(p.id)}`}
+                  >
+                    {initials(p)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{getPatientFullNameTh(p)}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      <span className="font-mono text-primary">{p.hn}</span>
+                      {p.nickname && ` · ${p.nickname}`}
+                      {` · ${formatPhone(p.phone)}`}
+                    </p>
+                  </div>
+                </Link>
+                {/* Sibling links, not children of the row link: an <a> may not nest another <a>. */}
+                <div className="flex shrink-0 gap-0.5">
+                  {can("appointment.create") && (
+                    <Button asChild size="icon" variant="ghost" className="h-9 w-9" aria-label="New appointment">
+                      <Link href={`/appointments/new?patientId=${p.id}`}><CalendarPlus className="h-4 w-4" /></Link>
+                    </Button>
+                  )}
+                  {can("checkout.create") && (
+                    <Button asChild size="icon" variant="ghost" className="h-9 w-9" aria-label="Checkout">
+                      <Link href={`/checkout?patientId=${p.id}`}><ShoppingCart className="h-4 w-4" /></Link>
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader>
                 <TableRow>

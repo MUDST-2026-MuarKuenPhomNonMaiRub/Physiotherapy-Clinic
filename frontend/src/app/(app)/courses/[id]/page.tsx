@@ -149,7 +149,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         title={template?.name ?? "Course"}
         description={patient ? `${getPatientFullNameTh(patient)} · ${patient.hn}` : ""}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={pc.status} className="text-sm" />
             {can("course.transfer") && pc.status === "ACTIVE" && rem > 0 && (
               <Button variant="outline" onClick={openTransfer}>

@@ -65,7 +65,7 @@ export default function CoursesPage() {
       <PageHeader title="Patient Courses" description="Track course balances, usage and expiry across all patients" />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <div className="relative w-64">
+        <div className="relative w-full sm:w-64">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search patient or HN..." className="pl-9" />
         </div>
@@ -93,7 +93,44 @@ export default function CoursesPage() {
         <EmptyState icon={Ticket} title="No courses found" description="Try adjusting your search or filters." />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
+          {/* Phone: one card per course balance. */}
+          <ul className="divide-y divide-border md:hidden">
+            {pageRows.map(({ pc, patient, template }) => {
+              const rem = remainingSessions(pc);
+              const total = pc.purchased + pc.transferIn + pc.bonus;
+              const pct = total > 0 ? Math.max(0, Math.min(100, (rem / total) * 100)) : 0;
+              const barColor = pc.status !== "ACTIVE" ? "bg-muted-foreground/40" : pct <= 20 ? "bg-destructive" : pct <= 50 ? "bg-warning" : "bg-success";
+              return (
+                <li key={`${pc.id}-${pc.patientId}`}>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/courses/${pc.id}`)}
+                    className="w-full px-4 py-3 text-left active:bg-muted/50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{template?.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {patient ? getPatientFullNameTh(patient) : "—"}
+                          {patient && <span className="font-mono"> · {patient.hn}</span>}
+                        </p>
+                      </div>
+                      <StatusBadge status={pc.status} className="shrink-0" />
+                    </div>
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="shrink-0 text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">{rem}</span> / {total} left · exp {formatDate(pc.expiryDate)}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
             <Table>
               <TableHeader>
                 <TableRow>

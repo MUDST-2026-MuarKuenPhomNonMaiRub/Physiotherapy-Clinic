@@ -172,19 +172,25 @@ export function AppHeader() {
   };
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-3 border-b border-border bg-card px-4 lg:px-6">
+    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:gap-3 sm:px-4 lg:px-6">
       <MobileSidebar />
       <div className="min-w-0 flex-1">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
+        {/* The full trail needs room; a phone gets the current screen only. */}
+        <p className="truncate text-sm font-medium text-foreground md:hidden">
+          {segments.length ? humanize(segments[segments.length - 1]) : "LA BALANCE"}
+        </p>
+        <Breadcrumb className="hidden md:block">
+          <BreadcrumbList className="flex-nowrap overflow-hidden">
+            <BreadcrumbItem className="hidden shrink-0 xl:inline-flex">
               <BreadcrumbPage className="text-muted-foreground">LA BALANCE</BreadcrumbPage>
             </BreadcrumbItem>
             {segments.map((seg, i) => (
-              <span key={i} className="flex items-center gap-1.5">
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className={i === segments.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}>
+              <span key={i} className="flex min-w-0 items-center gap-1.5">
+                <BreadcrumbSeparator className={i === 0 ? "hidden xl:block" : undefined} />
+                <BreadcrumbItem className="min-w-0">
+                  <BreadcrumbPage
+                    className={`truncate ${i === segments.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}`}
+                  >
                     {humanize(seg)}
                   </BreadcrumbPage>
                 </BreadcrumbItem>
@@ -195,7 +201,7 @@ export function AppHeader() {
       </div>
 
       {can("patient.view") && (
-        <form onSubmit={submitSearch} className="hidden w-64 shrink-0 items-center md:flex">
+        <form onSubmit={submitSearch} className="hidden w-56 shrink-0 items-center xl:flex 2xl:w-64">
           <div className="relative w-full">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -212,14 +218,17 @@ export function AppHeader() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <button
+            className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Notifications"
+          >
             <Bell className="h-4.5 w-4.5" />
             {notifications.length > 0 && (
               <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
             )}
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80">
+        <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
           <DropdownMenuLabel>Notifications</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {notifications.length === 0 ? (
@@ -243,14 +252,17 @@ export function AppHeader() {
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-border py-1 pl-1 pr-2.5 transition-colors hover:bg-muted">
+          <button
+            className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-border py-1 pl-1 pr-1 transition-colors hover:bg-muted lg:pr-2.5"
+            aria-label="Account menu"
+          >
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
               {initials(user.displayName)}
             </div>
-            <div className="hidden text-left leading-tight sm:block">
-              <p className="text-[13px] font-medium text-foreground">{user.displayName}</p>
+            <div className="hidden max-w-40 text-left leading-tight lg:block">
+              <p className="truncate text-[13px] font-medium text-foreground">{user.displayName}</p>
             </div>
-            <Badge variant="secondary" className="hidden text-[10px] sm:inline-flex">
+            <Badge variant="secondary" className="hidden text-[10px] xl:inline-flex">
               {getRoleLabel(user.role)}
             </Badge>
           </button>
