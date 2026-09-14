@@ -24,8 +24,12 @@ public class AuthService {
   private final ConcurrentHashMap<String, LoginAttempt> loginAttempts = new ConcurrentHashMap<>();
   private static final int MAX_FAILED_ATTEMPTS = 5;
   private static final Duration LOCKOUT = Duration.ofMinutes(10);
+  // A failed/typo'd email is otherwise never removed, so this map would
+  // otherwise grow forever; once it's large enough to matter, each login
+  // sweeps out anything nobody has touched for a full lockout window.
+  private static final int SWEEP_THRESHOLD = 10_000;
 
-  private record LoginAttempt(AtomicInteger failures, long blockedUntil) {}
+  private record LoginAttempt(AtomicInteger failures, long blockedUntil, long lastAttemptAt) {}
 
   public AuthService(
       AuthenticationManager authenticationManager,
@@ -44,8 +48,10 @@ public class AuthService {
 
   public AuthDtos.LoginResponse login(AuthDtos.LoginRequest request) {
     String email = request.email().trim().toLowerCase();
+    long now = System.currentTimeMillis();
+    sweepStaleAttempts(now);
     LoginAttempt attempt = loginAttempts.get(email);
-    if (attempt != null && attempt.blockedUntil() > System.currentTimeMillis()) {
+    if (attempt != null && attempt.blockedUntil() > now) {
       throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts");
     }
     try {
@@ -53,11 +59,11 @@ public class AuthService {
           new UsernamePasswordAuthenticationToken(email, request.password()));
       loginAttempts.remove(email);
     } catch (org.springframework.security.core.AuthenticationException e) {
-      LoginAttempt current = loginAttempts.computeIfAbsent(email, k -> new LoginAttempt(new AtomicInteger(), 0));
+      LoginAttempt current =
+          loginAttempts.computeIfAbsent(email, k -> new LoginAttempt(new AtomicInteger(), 0, now));
       int failures = current.failures().incrementAndGet();
-      if (failures >= MAX_FAILED_ATTEMPTS) {
-        loginAttempts.put(email, new LoginAttempt(current.failures(), System.currentTimeMillis() + LOCKOUT.toMillis()));
-      }
+      long blockedUntil = failures >= MAX_FAILED_ATTEMPTS ? now + LOCKOUT.toMillis() : current.blockedUntil();
+      loginAttempts.put(email, new LoginAttempt(current.failures(), blockedUntil, now));
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
     }
 
@@ -65,6 +71,11 @@ public class AuthService {
     db.update("UPDATE users SET last_login=now() WHERE id=?", user.getId());
     return new AuthDtos.LoginResponse(
         jwt.generateToken(user), "Bearer", jwt.getExpirationMs() / 1000);
+  }
+
+  private void sweepStaleAttempts(long now) {
+    if (loginAttempts.size() < SWEEP_THRESHOLD) return;
+    loginAttempts.entrySet().removeIf(e -> now - e.getValue().lastAttemptAt() > LOCKOUT.toMillis());
   }
 
   public AuthDtos.MeResponse me(String email) {
@@ -84,7 +95,17 @@ public class AuthService {
         user.getFirstName(),
         user.getLastName(),
         user.isActive(),
-        user.getRoles().stream().map(Role::getCode).collect(Collectors.toSet()),
+        // A plain Set has no serialization order, and the frontend treats the
+        // first entry as the user's primary role — so a deterministic order
+        // (highest-privilege role first) is a correctness requirement here,
+        // not cosmetic.
+        user.getRoles().stream()
+            .map(Role::getCode)
+            .sorted(
+                java.util.Comparator.<String, Integer>comparing(
+                        code -> "ADMIN".equals(code) ? 0 : 1)
+                    .thenComparing(java.util.Comparator.naturalOrder()))
+            .collect(Collectors.toCollection(java.util.LinkedHashSet::new)),
         new java.util.HashSet<>(db.queryForList("SELECT DISTINCT p.code FROM permissions p JOIN role_permissions rp ON rp.permission_id=p.id JOIN user_roles ur ON ur.role_id=rp.role_id WHERE ur.user_id=? AND p.active=true ORDER BY p.code", String.class, user.getId())),
         staffIds.isEmpty() ? null : staffIds.get(0),
         branchIds);

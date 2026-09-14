@@ -68,7 +68,7 @@ public class AppointmentController {
   }
 
   @PostMapping("/{id}/{action}")
-  @PreAuthorize("#action == 'cancel' or #action == 'noshow' ? @permissionGuard.hasAny(authentication, 'appointment.cancel') : @permissionGuard.hasAny(authentication, 'appointment.edit')")
+  @PreAuthorize("#action.toLowerCase() == 'cancel' or #action.toLowerCase() == 'noshow' ? @permissionGuard.hasAny(authentication, 'appointment.cancel') : @permissionGuard.hasAny(authentication, 'appointment.edit')")
   public Map<String, Object> transition(
       @PathVariable long id,
       @PathVariable String action,

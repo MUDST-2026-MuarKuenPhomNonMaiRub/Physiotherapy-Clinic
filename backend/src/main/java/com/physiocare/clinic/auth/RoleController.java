@@ -16,7 +16,9 @@ public class RoleController {
 
   @GetMapping
   public List<Map<String,Object>> list() {
-    return db.queryForList("SELECT r.id,r.code,r.name,COALESCE(array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),'{}') AS permissions FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id LEFT JOIN permissions p ON p.id=rp.permission_id GROUP BY r.id ORDER BY r.code");
+    List<Map<String,Object>> rows = db.queryForList("SELECT r.id,r.code,r.name,COALESCE(array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),'{}') AS permissions FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id LEFT JOIN permissions p ON p.id=rp.permission_id GROUP BY r.id ORDER BY r.code");
+    rows.forEach(RoleController::resolvePermissionsArray);
+    return rows;
   }
 
   @GetMapping("/permissions")
@@ -51,7 +53,22 @@ public class RoleController {
   }
 
   private Map<String,Object> role(long id) {
-    return db.queryForMap("SELECT r.id,r.code,r.name,COALESCE(array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),'{}') AS permissions FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.id=? GROUP BY r.id", id);
+    Map<String,Object> row = db.queryForMap("SELECT r.id,r.code,r.name,COALESCE(array_agg(p.code) FILTER (WHERE p.code IS NOT NULL),'{}') AS permissions FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id LEFT JOIN permissions p ON p.id=rp.permission_id WHERE r.id=? GROUP BY r.id", id);
+    resolvePermissionsArray(row);
+    return row;
+  }
+
+  /** Postgres returns array_agg() as a java.sql.Array; Jackson can't serialize that JDBC
+   * handle directly, so unwrap it to a plain Java array before it leaves the controller. */
+  private static void resolvePermissionsArray(Map<String,Object> row) {
+    Object permissions = row.get("permissions");
+    if (permissions instanceof java.sql.Array array) {
+      try {
+        row.put("permissions", array.getArray());
+      } catch (java.sql.SQLException e) {
+        throw new IllegalStateException("Failed to read role permissions", e);
+      }
+    }
   }
 
   @DeleteMapping("/{id}")

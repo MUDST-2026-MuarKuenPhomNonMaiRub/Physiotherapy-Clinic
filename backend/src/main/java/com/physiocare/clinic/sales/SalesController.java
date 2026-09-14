@@ -30,7 +30,7 @@ public class SalesController {
         r.sellerEmployeeId(), r.caseOwnerEmployeeId(), r.amount(), r.visits()), authentication);
   }
   @PostMapping("/payments") @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.view')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'checkout.create')")
   public Object pay(@Valid @RequestBody PaymentRequest r, Authentication authentication) {
     return service.pay(new SalesService.PaymentRequest(r.salesTransactionId(), r.paymentMethodId(), r.amount(), r.referenceNo()), authentication);
   }

@@ -32,10 +32,21 @@ class PermissionGuardTest {
   }
 
   @Test
-  void preservesPhysioOperationalCompatibility() {
-    var auth = new UsernamePasswordAuthenticationToken("physio", "n/a",
+  void physioGrantsComeFromRolePermissionsNotAHardcodedRoleName() {
+    // CustomUserDetailsService always attaches both the ROLE_* authority and a
+    // PERM_* authority per row_permissions grant, so a real PHYSIO user looks
+    // like this — the PERM_ authority is what actually authorizes them, not
+    // the bare role name.
+    var withGrant = new UsernamePasswordAuthenticationToken("physio", "n/a",
+        List.of(new SimpleGrantedAuthority("ROLE_PHYSIO"), new SimpleGrantedAuthority("PERM_COURSE_TRANSFER")));
+    assertTrue(guard.hasAny(withGrant, "course.transfer"));
+    assertFalse(guard.hasAny(withGrant, "settings.manage"));
+
+    // The role name alone grants nothing: only ADMIN gets a hardcoded bypass.
+    // Every other role's access lives entirely in role_permissions (V21/V22),
+    // so editing it through the Role management screen actually takes effect.
+    var withoutGrant = new UsernamePasswordAuthenticationToken("physio", "n/a",
         List.of(new SimpleGrantedAuthority("ROLE_PHYSIO")));
-    assertTrue(guard.hasAny(auth, "course.transfer"));
-    assertFalse(guard.hasAny(auth, "settings.manage"));
+    assertFalse(guard.hasAny(withoutGrant, "course.transfer"));
   }
 }

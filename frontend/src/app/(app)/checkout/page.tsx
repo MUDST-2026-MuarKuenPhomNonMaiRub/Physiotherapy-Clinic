@@ -257,6 +257,14 @@ function CheckoutContent() {
     if (!canConfirm || !user || submitting) return;
     setSubmitting(true);
     try {
+      // The backend always charges the catalog price and never accepts a
+      // supplied price that differs from it — a manual price entered here is
+      // carried instead as an explicit adjustment, so it still lands on the
+      // receipt as an itemized line rather than a silently overwritten price.
+      const overrideAdjustment =
+        priceWasOverridden && baseItem
+          ? [{ label: "Price override", amount: basePrice - baseItem.listPrice }]
+          : [];
       const txn = await createTransaction({
         patientId,
         branchId,
@@ -270,10 +278,10 @@ function CheckoutContent() {
         salespersonId: needsSalesperson ? salespersonId : undefined,
         paymentMethodId,
         cashReceived: isCashPayment && cashReceived !== null ? cashReceived : undefined,
-        servicePrice: mode === "SINGLE" && priceWasOverridden ? basePrice : undefined,
-        coursePurchasePrice:
-          mode === "COURSE" && subMode === "PURCHASE" && priceWasOverridden ? basePrice : undefined,
-        adjustments: resolvedAdjustments.map((a) => ({ label: a.resolvedLabel, amount: a.amount })),
+        adjustments: [
+          ...overrideAdjustment,
+          ...resolvedAdjustments.map((a) => ({ label: a.resolvedLabel, amount: a.amount })),
+        ],
       });
       setResult(txn);
     } catch (error) {

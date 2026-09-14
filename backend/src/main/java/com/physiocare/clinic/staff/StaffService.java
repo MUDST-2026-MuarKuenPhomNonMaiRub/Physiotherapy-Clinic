@@ -1,5 +1,6 @@
 package com.physiocare.clinic.staff;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.physiocare.clinic.auth.*;
 import com.physiocare.clinic.common.InputRules;
 import jakarta.transaction.Transactional;
@@ -20,18 +21,21 @@ public class StaffService {
   private final RoleRepository roles;
   private final PasswordEncoder encoder;
   private final JdbcTemplate db;
+  private final ObjectMapper objectMapper;
 
   public StaffService(
       StaffRepository s,
       AppUserRepository u,
       RoleRepository r,
       PasswordEncoder e,
-      JdbcTemplate db) {
+      JdbcTemplate db,
+      ObjectMapper objectMapper) {
     staff = s;
     users = u;
     roles = r;
     encoder = e;
     this.db = db;
+    this.objectMapper = objectMapper;
   }
 
   @Transactional
@@ -209,15 +213,22 @@ public class StaffService {
   }
 
   private void validateBranchIds(String branchIds) {
-    if (branchIds == null || !branchIds.trim().matches("\\\\[\\\\s*\\\\d+(?:\\\\s*,\\\\s*\\\\d+)*\\\\s*\\\\]"))
+    long[] ids;
+    try {
+      ids = branchIds == null ? null : objectMapper.readValue(branchIds, long[].class);
+    } catch (com.fasterxml.jackson.core.JacksonException e) {
+      ids = null;
+    }
+    if (ids == null || ids.length == 0)
       throw new IllegalArgumentException("Branch IDs must be a JSON array of numeric IDs");
-    String body = branchIds.trim().substring(1, branchIds.trim().length() - 1).trim();
-    String[] ids = body.split("\\\\s*,\\\\s*");
     long distinct = java.util.Arrays.stream(ids).distinct().count();
     if (distinct != ids.length) throw new IllegalArgumentException("Branch IDs must not contain duplicates");
+    String idList = java.util.stream.LongStream.of(ids)
+        .mapToObj(String::valueOf)
+        .collect(java.util.stream.Collectors.joining(","));
     Integer active = db.queryForObject(
         "SELECT count(*) FROM branches WHERE id = ANY(?::bigint[]) AND active AND deleted_at IS NULL",
-        Integer.class, "{" + String.join(",", ids) + "}");
+        Integer.class, "{" + idList + "}");
     if (active == null || active != ids.length)
       throw new IllegalArgumentException("Branch IDs must reference active branches");
   }

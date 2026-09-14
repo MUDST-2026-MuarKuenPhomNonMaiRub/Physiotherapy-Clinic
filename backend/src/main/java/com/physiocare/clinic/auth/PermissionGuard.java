@@ -15,12 +15,14 @@ public class PermissionGuard {
     return false;
   }
 
+  /**
+   * Break-glass only: ADMIN always passes, even if role_permissions is ever
+   * misconfigured or mid-migration. Every other built-in role (PHYSIO,
+   * RECEPTIONIST, FINANCE, REPORT_VIEWER) is granted exclusively through
+   * role_permissions (see V17/V18/V20) so the Role management screen is the
+   * single source of truth for what they can do.
+   */
   private boolean legacyRoleAllows(String authority, String permission) {
-    if ("ROLE_ADMIN".equals(authority)) return true;
-    if ("ROLE_PHYSIO".equals(authority) || "ROLE_RECEPTIONIST".equals(authority))
-      return permission.startsWith("patient.") || permission.startsWith("appointment.") || permission.startsWith("course.") || permission.equals("checkout.create") || permission.equals("transaction.view") || permission.equals("report.view") || permission.equals("commission.view.own");
-    if ("ROLE_FINANCE".equals(authority)) return permission.startsWith("transaction.") || permission.startsWith("report.") || permission.startsWith("commission.") || permission.equals("checkout.create");
-    if ("ROLE_REPORT_VIEWER".equals(authority)) return permission.startsWith("report.") || permission.startsWith("commission.");
-    return false;
+    return "ROLE_ADMIN".equals(authority);
   }
 }

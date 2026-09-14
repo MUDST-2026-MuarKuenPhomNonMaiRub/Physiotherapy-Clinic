@@ -44,6 +44,39 @@ To stop the application without deleting data:
 docker compose down
 ```
 
+### If the backend won't start with "Migration checksum mismatch" or "Detected applied migration not resolved locally"
+
+A commit rewrote `V6` and removed `V7`, `V14`, `V15` after they had already been
+applied on some databases (this repo's own local Postgres included). Flyway
+refuses to start against any database that already ran the old versions,
+because it can no longer prove the new files describe the same history.
+
+- **Local Docker Postgres, no data you need to keep:** reset it —
+  `docker compose down -v` then `docker compose up -d --build`. Flyway
+  replays the full migration set from scratch on the empty volume.
+- **The shared cloud database** (`DATABASE_URL_DOCKER` in `.env`), or any
+  local database with data worth keeping: do **not** reset it. Reconcile
+  Flyway's bookkeeping instead, with the official Flyway CLI's `repair`
+  command — it only rewrites `flyway_schema_history` rows to match the
+  current migration files; it never touches table data or re-runs SQL:
+
+  ```bash
+  docker run --rm \
+    -v "$(pwd)/backend/src/main/resources/db/migration:/flyway/sql" \
+    flyway/flyway:11 \
+    -url="<the DATABASE_URL_DOCKER value, as a jdbc:postgresql:// URL>" \
+    -user="<DATABASE_USERNAME_DOCKER>" -password="<DATABASE_PASSWORD_DOCKER>" \
+    repair
+  ```
+
+  Run this once per database that already has data (ask in the team chat
+  before running it against the shared one, so it isn't repaired twice at
+  once). Afterwards `docker compose up -d --build` starts normally.
+
+Avoid this in future: once a migration has shipped to the shared database,
+treat its file as frozen — add a new migration to change course instead of
+editing or deleting one that already ran.
+
 ## Developing with hot reload
 
 Docker rebuilds the whole image on every change, so day-to-day work runs the

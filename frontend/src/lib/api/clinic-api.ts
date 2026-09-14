@@ -82,7 +82,10 @@ export async function login(email: string, password: string): Promise<LoginResul
   // The profile is fetched with the token login just issued, before the store
   // has had a chance to record it.
   const profile = await fetchMe(session.accessToken);
-  const role: Role = profile.roles[0] ?? "PHYSIOTHERAPIST";
+  // The backend now orders roles with the highest-privilege one first, but
+  // picking ADMIN explicitly when present costs nothing and keeps this
+  // correct even if that ordering ever regresses.
+  const role: Role = profile.roles.includes("ADMIN") ? "ADMIN" : profile.roles[0] ?? "PHYSIOTHERAPIST";
   return {
     accessToken: session.accessToken,
     user: {

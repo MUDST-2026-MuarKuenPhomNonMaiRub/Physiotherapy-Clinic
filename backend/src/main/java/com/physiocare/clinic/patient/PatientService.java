@@ -98,7 +98,7 @@ public class PatientService {
   }
 
   @PostMapping
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.create')")
   @ResponseStatus(HttpStatus.CREATED)
   @Transactional
   public Map<String, Object> create(

@@ -117,7 +117,11 @@ function parseIdList(value: unknown): string[] {
   }
 }
 
-export const toBranchIdsJson = (branchIds: string[]) => JSON.stringify(branchIds);
+// The backend stores this verbatim and later casts each element to bigint
+// (see BranchAccessService.requireStaffInBranch), so it must be a JSON array
+// of numbers — a quoted "1" fails that cast with "invalid input syntax for
+// type bigint".
+export const toBranchIdsJson = (branchIds: string[]) => JSON.stringify(branchIds.map(Number));
 
 // ------------------------------------------------------------------- catalogue
 
