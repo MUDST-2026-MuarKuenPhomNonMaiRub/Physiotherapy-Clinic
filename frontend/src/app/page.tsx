@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { defaultRouteByRole } from "@/lib/permissions/navigation";
+import { me } from "@/lib/api/clinic-api";
 import { Activity } from "lucide-react";
 
 export default function RootPage() {
@@ -11,11 +12,30 @@ export default function RootPage() {
   const hasHydrated = useClinicStore((s) => s.hasHydrated);
   const user = useClinicStore((s) => s.session.user);
   const accessToken = useClinicStore((s) => s.session.accessToken);
+  const logout = useClinicStore((s) => s.logout);
 
   useEffect(() => {
     if (!hasHydrated) return;
-    router.replace(user && accessToken ? (defaultRouteByRole[user.role] ?? "/login") : "/login");
-  }, [hasHydrated, user, accessToken, router]);
+    if (!user || !accessToken) {
+      router.replace("/login");
+      return;
+    }
+
+    let active = true;
+    void me()
+      .then(() => {
+        if (active) router.replace(defaultRouteByRole[user.role] ?? "/login");
+      })
+      .catch(() => {
+        if (!active) return;
+        logout();
+        router.replace("/login");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [hasHydrated, user, accessToken, logout, router]);
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
