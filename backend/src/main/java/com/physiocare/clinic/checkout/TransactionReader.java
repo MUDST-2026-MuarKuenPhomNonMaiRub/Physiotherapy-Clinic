@@ -155,31 +155,25 @@ public class TransactionReader {
   /** Course balance and its full history, for the course detail and report screens. */
   public Map<String, Object> courseLedger(Long patientId, Long branchId) {
     Map<String, Object> result = new LinkedHashMap<>();
-    String courseSql;
-    Object[] courseArgs;
-    if (patientId == null) {
-      // The unscoped list is used by course reports and shows each course once,
-      // using the owner's balance as the display balance.
-      courseSql =
-          "SELECT pc.id,pc.course_id,pc.patient_id,pc.package_id,pc.package_name_snapshot,"
-              + "pc.sale_date,pc.valid_until,pc.total_visits,pc.bonus_visits,pc.visits_used,"
-              + "pc.transfer_in_visits,pc.transfer_out_visits,pc.branch_id,pc.status"
-              + " FROM patient_courses pc WHERE (?::bigint IS NULL OR pc.branch_id=?) ORDER BY pc.id";
-      courseArgs = new Object[] {branchId, branchId};
-    } else {
-      // A patient-scoped list must include both the owner and shared members;
-      // the balance columns are per patient, not just the course owner.
-      courseSql =
-          "SELECT pc.id,pc.course_id,cmb.patient_id,pc.package_id,pc.package_name_snapshot,"
-              + "pc.sale_date,pc.valid_until,cmb.allocated_visits AS total_visits,"
-              + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.bonus_visits ELSE 0 END AS bonus_visits,"
-              + "cmb.used_visits,CASE WHEN cmb.patient_id=pc.patient_id THEN pc.transfer_in_visits ELSE 0 END AS transfer_in_visits,"
-              + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.transfer_out_visits ELSE 0 END AS transfer_out_visits,"
-              + "pc.branch_id,pc.status FROM patient_courses pc JOIN course_member_balances cmb"
-              + " ON cmb.patient_course_id=pc.id WHERE cmb.patient_id=?"
-              + " AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY pc.id";
-      courseArgs = new Object[] {patientId, branchId, branchId};
-    }
+    // One row per person holding sessions on a course: the owner, and anyone
+    // sessions were transferred to. Each row carries that person's own
+    // balance so purchased + bonus + transfer-in - used - transfer-out is what
+    // they can still spend. A transfer moves sessions inside the same course
+    // (the recipient becomes a member), so the owner's row shows the
+    // transfer-out and the recipient's row shows it as transfer-in.
+    String courseSql =
+        "SELECT pc.id,pc.course_id,cmb.patient_id,pc.patient_id AS owner_patient_id,pc.package_id,"
+            + "pc.package_name_snapshot,pc.sale_date,pc.valid_until,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.total_visits ELSE 0 END AS total_visits,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.bonus_visits ELSE 0 END AS bonus_visits,"
+            + "cmb.used_visits AS visits_used,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN 0 ELSE cmb.allocated_visits END AS transfer_in_visits,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.transfer_out_visits ELSE 0 END AS transfer_out_visits,"
+            + "pc.branch_id,pc.status FROM patient_courses pc JOIN course_member_balances cmb"
+            + " ON cmb.patient_course_id=pc.id WHERE (?::bigint IS NULL OR cmb.patient_id=?)"
+            + " AND (?::bigint IS NULL OR pc.branch_id=?)"
+            + " ORDER BY pc.id, (cmb.patient_id=pc.patient_id) DESC, cmb.patient_id";
+    Object[] courseArgs = new Object[] {patientId, patientId, branchId, branchId};
     result.put("patientCourses", db.queryForList(courseSql, courseArgs));
     String ledgerSql;
     Object[] ledgerArgs;

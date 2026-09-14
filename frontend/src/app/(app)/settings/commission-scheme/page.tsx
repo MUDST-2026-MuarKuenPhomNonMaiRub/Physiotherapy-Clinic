@@ -5,6 +5,7 @@ import { Plus, TrendingUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { createCommissionScheme, listCommissionSchemes } from "@/lib/api/clinic-api";
 import { formatDate } from "@/lib/format";
+import { today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export default function CommissionSchemePage() {
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState("DEFAULT");
-  const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10));
+  const [effectiveFrom, setEffectiveFrom] = useState(today());
   const [tiers, setTiers] = useState<TierDraft[]>([emptyTier(1)]);
 
   async function load() {
@@ -54,7 +55,7 @@ export default function CommissionSchemePage() {
 
   function openCreate() {
     setCode("DEFAULT");
-    setEffectiveFrom(new Date().toISOString().slice(0, 10));
+    setEffectiveFrom(today());
     setTiers([emptyTier(1)]);
     setOpen(true);
   }

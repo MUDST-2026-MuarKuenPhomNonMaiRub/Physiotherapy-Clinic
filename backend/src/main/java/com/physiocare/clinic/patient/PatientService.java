@@ -71,6 +71,15 @@ public class PatientService {
    * arrive straight from the API, so the rules are enforced here as well.
    */
   private void validate(PatientRequest r) {
+    validate(r, true);
+  }
+
+  /**
+   * {@code requireNationalId} is false when editing a record that already
+   * holds a national ID: the number is only ever stored as a hash, so the edit
+   * form cannot echo it back, and a blank means "keep what is on file".
+   */
+  private void validate(PatientRequest r, boolean requireNationalId) {
     InputRules.oneOf(r.customerType(), CUSTOMER_TYPES, "Customer type");
     InputRules.oneOf(r.genderCode(), GENDERS, "Gender");
     InputRules.phone(r.phone());
@@ -90,7 +99,7 @@ public class PatientService {
     // neither rule can be applied to every record.
     if ("THAI".equals(r.customerType())) {
       InputRules.require(
-          r.nationalId() != null && !r.nationalId().isBlank(),
+          !requireNationalId || (r.nationalId() != null && !r.nationalId().isBlank()),
           "A Thai patient needs a national ID");
       InputRules.thaiText(r.firstNameTh(), "First name");
       InputRules.thaiText(r.lastNameTh(), "Last name");
@@ -192,15 +201,22 @@ public class PatientService {
   @Transactional
   public Map<String, Object> update(
       @PathVariable long id, @Valid @RequestBody PatientRequest r, Authentication authentication) {
-    validate(r);
     Map<String, Object> existing = get(id, authentication);
+    boolean hasNationalId =
+        Boolean.TRUE.equals(
+            db.queryForObject(
+                "SELECT national_id_hash IS NOT NULL FROM patients WHERE id=?", Boolean.class, id));
+    validate(r, !hasNationalId);
     branches.requireAccess(
         authentication, ((Number) existing.get("registered_branch_id")).longValue());
     try {
+      // A blank national ID or passport keeps the hash already on file — the
+      // edit form never sees the original, so it cannot send it back.
       db.update(
           "UPDATE patients SET customer_type=?,prefix=?,first_name_th=?,last_name_th=?,"
-              + "first_name_en=?,last_name_en=?,nickname=?,gender_code=?,national_id_hash=?,"
-              + "passport_hash=?,birth_date=?,blood_group_code=?,"
+              + "first_name_en=?,last_name_en=?,nickname=?,gender_code=?,"
+              + "national_id_hash=COALESCE(?,national_id_hash),"
+              + "passport_hash=COALESCE(?,passport_hash),birth_date=?,blood_group_code=?,"
               + "nationality_code=?,phone=?,email=?,address_text=?,customer_group_code=?,"
               + "referral_channel_code=?,insurance_company_code=?,updated_at=now()"
               + " WHERE id=? AND deleted_at IS NULL",

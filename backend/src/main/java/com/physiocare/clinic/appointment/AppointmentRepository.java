@@ -13,7 +13,12 @@ public class AppointmentRepository {
       "a.id,a.appointment_no,a.patient_id,a.branch_id,a.provider_staff_id,a.service_id,a.room_id,"
           + "a.starts_at,a.ends_at,a.status,a.patient_note,a.internal_note,a.cancel_reason_code,"
           + "a.created_at,EXISTS(SELECT 1 FROM sales_transactions st WHERE st.appointment_id=a.id"
-          + " AND st.status<>'CANCELLED') AS checked_out";
+          + " AND st.status<>'CANCELLED') AS checked_out,"
+          // Completing a visit spends one session from the patient's course
+          // (see AppointmentService); checkout has to know which course so it
+          // links to that usage instead of spending a second session.
+          + "(SELECT cu.patient_course_id FROM course_usages cu JOIN visits v ON v.id=cu.visit_id"
+          + " WHERE v.appointment_id=a.id AND cu.status<>'REVERSED' LIMIT 1) AS used_patient_course_id";
 
   private final JdbcTemplate db;
 

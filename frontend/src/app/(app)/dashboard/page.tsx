@@ -6,7 +6,7 @@ import { Users, UserPlus, UserRound, Wallet } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { formatCurrency } from "@/lib/format";
-import { today } from "@/lib/domain";
+import { localDate, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
@@ -29,7 +29,7 @@ function periodBounds(period: Period, value: string) {
 }
 
 function yearOptions(transactions: { date: string }[]) {
-  const years = new Set(transactions.map((t) => t.date.slice(0, 4)));
+  const years = new Set(transactions.map((t) => localDate(t.date).slice(0, 4)));
   years.add(today().slice(0, 4));
   return Array.from(years).sort().reverse();
 }
@@ -42,6 +42,26 @@ export default function DashboardPage() {
   const currentYear = today().slice(0, 4);
   const [period, setPeriod] = useState<Period>("month");
   const [periodValue, setPeriodValue] = useState(today().slice(0, 7));
+
+  /**
+   * The value box changes shape with the period (YYYY-MM-DD / YYYY-MM / YYYY),
+   * so the current selection is re-cut to the new shape instead of being left
+   * behind in the old one, which would match nothing.
+   */
+  function changePeriod(next: Period) {
+    const base =
+      periodValue.length >= 10
+        ? periodValue
+        : periodValue.length === 7
+          ? `${periodValue}-01`
+          : periodValue.length === 4
+            ? `${periodValue}-01-01`
+            : today();
+    // Narrowing to a day inside the current month lands on today, not the 1st.
+    const day = base.slice(0, 7) === today().slice(0, 7) ? today() : base;
+    setPeriod(next);
+    setPeriodValue(next === "day" ? day : next === "month" ? base.slice(0, 7) : base.slice(0, 4));
+  }
   const [branchFilter, setBranchFilter] = useState("ALL");
   const years = yearOptions(transactions);
   const [comparisonYear, setComparisonYear] = useState(String(Number(currentYear) - 1));
@@ -67,14 +87,14 @@ export default function DashboardPage() {
     () => transactions.filter((t) => t.status === "COMPLETED" && (branchFilter === "ALL" ? isAccessible(t.branchId) : t.branchId === branchFilter)),
     [transactions, branchFilter, isAccessible]
   );
-  const periodTransactions = accessibleTransactions.filter((t) => t.date.slice(0, 10) >= selectedBounds.from && t.date.slice(0, 10) <= selectedBounds.to);
+  const periodTransactions = accessibleTransactions.filter((t) => localDate(t.date) >= selectedBounds.from && localDate(t.date) <= selectedBounds.to);
   const totalSales = periodTransactions.reduce((sum, t) => sum + t.total, 0);
 
   const annualComparison = useMemo(() => {
     return monthNames.map((month, index) => {
       const monthNumber = String(index + 1).padStart(2, "0");
       const totalFor = (year: string) => accessibleTransactions
-        .filter((t) => t.date.slice(0, 7) === `${year}-${monthNumber}`)
+        .filter((t) => localDate(t.date).slice(0, 7) === `${year}-${monthNumber}`)
         .reduce((sum, t) => sum + t.total, 0);
       return { month, selected: totalFor(selectedYear), comparison: totalFor(comparisonYear) };
     });
@@ -102,7 +122,7 @@ export default function DashboardPage() {
     <>
       <PageHeader title="Dashboard" description="Sales and customer overview" />
       <div className="motion-rise-in motion-delay-1 mb-5 flex flex-wrap items-center gap-2">
-        <Select value={period} onValueChange={(value) => setPeriod(value as Period)}>
+        <Select value={period} onValueChange={(value) => changePeriod(value as Period)}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="day">Daily</SelectItem>

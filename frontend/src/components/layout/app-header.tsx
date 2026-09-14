@@ -43,12 +43,22 @@ const labelMap: Record<string, string> = {
   revenue: "Revenue",
   "course-balance": "Course Balance",
   "staff-sales": "Staff Sales",
+  "course-commission": "Course Commission",
+  "commission-audit": "Commission Audit",
+  "commission-scheme": "Commission Tiers",
+  "monthly-closing": "Monthly Closing",
+  "treatment-fee-rules": "Treatment Fee Rules",
+  "my-appointments": "My Appointments",
+  "my-commission": "My Commission",
+  dashboard: "Dashboard",
   new: "New",
+  edit: "Edit",
 };
 
+/** Record ids (numeric, or a prefixed number such as "AP-2026-00001") read as "Detail". */
 function humanize(segment: string): string {
   if (labelMap[segment]) return labelMap[segment];
-  if (/^[a-z]{0,4}-?\d/.test(segment) || segment.length > 12) return "Detail";
+  if (/^\d+$/.test(segment) || /^[a-z]{0,4}-?\d/.test(segment)) return "Detail";
   return segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, " ");
 }
 

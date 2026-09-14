@@ -6,7 +6,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { today } from "@/lib/domain";
+import { addDays, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { AppointmentTimeGrid } from "@/components/appointments/appointment-time-grid";
 import {
@@ -25,12 +25,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-
-function shiftDate(dateStr: string, days: number): string {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 /** "Wednesday, 12 August 2026" — the weekday is what staff actually orient by. */
 function formatDayHeading(dateStr: string): string {
@@ -113,7 +107,7 @@ export default function CalendarPage() {
               variant="outline"
               size="icon-lg"
               className="h-11 w-11 sm:h-9 sm:w-9"
-              onClick={() => setDate(shiftDate(date, -1))}
+              onClick={() => setDate(addDays(date, -1))}
               aria-label="Previous day"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -122,7 +116,7 @@ export default function CalendarPage() {
               variant="outline"
               size="icon-lg"
               className="h-11 w-11 sm:h-9 sm:w-9"
-              onClick={() => setDate(shiftDate(date, 1))}
+              onClick={() => setDate(addDays(date, 1))}
               aria-label="Next day"
             >
               <ChevronRight className="h-4 w-4" />

@@ -32,6 +32,9 @@ public final class StaffDtos {
 
   public record CreateResponse(Long staffId, Long userId) {}
 
+  /** Gives an existing person, added without a login, an account of their own. */
+  public record AccountRequest(@NotBlank @Email String email, @NotBlank String role, @NotBlank String password) {}
+
   public record Row(
       Long id,
       String name,

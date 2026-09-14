@@ -106,13 +106,19 @@ public class ReportService {
         "SELECT employee_id treating_employee_id,sum(treatment_fee) treatment_fee,"
             + "sum(owner_net_commission) owner_net,sum(gross_commission_allocation) gross FROM ("
             + "SELECT ca.case_owner_employee_id employee_id,0 treatment_fee,ca.owner_net_commission,"
-            + "ca.gross_commission_allocation FROM commission_allocations ca JOIN visits v "
-            + "ON v.id=ca.visit_id WHERE ca.allocation_status='ALLOCATED' AND "
-            + "ca.visit_date BETWEEN ? AND ? AND v.branch_id=? UNION ALL "
+            // Scoped by the visit's branch when the usage came through an
+            // appointment; a checkout-only usage has no visit row, so it falls
+            // back to the branch the course was sold at rather than vanishing.
+            + "ca.gross_commission_allocation FROM commission_allocations ca "
+            + "JOIN patient_courses pc ON pc.id=ca.patient_course_id "
+            + "LEFT JOIN visits v ON v.id=ca.visit_id WHERE ca.allocation_status='ALLOCATED' AND "
+            + "ca.visit_date BETWEEN ? AND ? AND COALESCE(v.branch_id,pc.branch_id)=? UNION ALL "
             + "SELECT ca.treating_employee_id employee_id,ca.treatment_fee_amount treatment_fee,"
-            + "0 owner_net,0 gross_commission_allocation FROM commission_allocations ca JOIN visits v "
-            + "ON v.id=ca.visit_id WHERE ca.allocation_status='ALLOCATED' AND "
-            + "ca.visit_date BETWEEN ? AND ? AND v.branch_id=? AND ca.treating_employee_id<>ca.case_owner_employee_id"
+            + "0 owner_net,0 gross_commission_allocation FROM commission_allocations ca "
+            + "JOIN patient_courses pc ON pc.id=ca.patient_course_id "
+            + "LEFT JOIN visits v ON v.id=ca.visit_id WHERE ca.allocation_status='ALLOCATED' AND "
+            + "ca.visit_date BETWEEN ? AND ? AND COALESCE(v.branch_id,pc.branch_id)=? "
+            + "AND ca.treating_employee_id<>ca.case_owner_employee_id"
             + ") allocations GROUP BY employee_id",
         from,
         to,

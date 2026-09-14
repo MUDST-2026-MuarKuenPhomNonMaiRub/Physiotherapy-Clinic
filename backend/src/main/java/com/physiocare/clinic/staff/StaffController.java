@@ -31,6 +31,13 @@ public class StaffController {
     return service.update(id, r);
   }
 
+  @PostMapping("/{id}/account")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public StaffDtos.Row createAccount(
+      @PathVariable long id, @Valid @RequestBody StaffDtos.AccountRequest r) {
+    return service.createAccount(id, r);
+  }
+
   @DeleteMapping("/{id}")
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public void softDelete(@PathVariable long id) {

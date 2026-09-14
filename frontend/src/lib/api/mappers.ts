@@ -283,6 +283,8 @@ export function toAppointment(row: Row): Appointment {
     status: str(row.status) as AppointmentStatus,
     createdAt: row.created_at == null ? "" : new Date(str(row.created_at)).toISOString(),
     checkedOut: bool(row.checked_out),
+    usedPatientCourseId:
+      row.used_patient_course_id == null ? undefined : id(row.used_patient_course_id),
   };
 }
 
@@ -316,6 +318,7 @@ export function toPatientCourse(row: Row): PatientCourse {
   return {
     id: id(row.id),
     patientId: id(row.patient_id),
+    ownerPatientId: row.owner_patient_id == null ? id(row.patient_id) : id(row.owner_patient_id),
     courseId: id(row.package_id),
     purchaseDate: str(row.sale_date).slice(0, 10),
     expiryDate: str(row.valid_until).slice(0, 10),

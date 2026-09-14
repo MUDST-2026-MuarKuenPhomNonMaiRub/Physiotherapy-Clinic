@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
-import { remainingSessions, today } from "@/lib/domain";
+import { addDays, remainingSessions, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { ReportsNav } from "@/components/reports/reports-nav";
 import { StatCard } from "@/components/shared/stat-card";
@@ -39,9 +39,7 @@ export default function CourseBalanceReportPage() {
 
   const activeCourses = rows.filter(({ pc }) => pc.status === "ACTIVE");
   const totalRemaining = activeCourses.reduce((s, { pc }) => s + remainingSessions(pc), 0);
-  const expiringSoonDate = new Date(`${today()}T00:00:00`);
-  expiringSoonDate.setDate(expiringSoonDate.getDate() + 30);
-  const expiringSoonStr = expiringSoonDate.toISOString().slice(0, 10);
+  const expiringSoonStr = addDays(today(), 30);
   const expiringSoonCount = activeCourses.filter(({ pc }) => pc.expiryDate <= expiringSoonStr).length;
 
   return (
@@ -78,7 +76,7 @@ export default function CourseBalanceReportPage() {
             </TableHeader>
             <TableBody>
               {rows.map(({ pc, patient, template }) => (
-                <TableRow key={pc.id}>
+                <TableRow key={`${pc.id}-${pc.patientId}`}>
                   <TableCell>
                     <p className="font-medium text-foreground">{patient ? getPatientFullNameTh(patient) : "—"}</p>
                     <p className="font-mono text-xs text-muted-foreground">{patient?.hn}</p>

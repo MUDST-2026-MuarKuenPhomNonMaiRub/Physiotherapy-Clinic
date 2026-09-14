@@ -9,11 +9,38 @@ import type {
   Transaction,
 } from "@/types";
 
+/** YYYY-MM-DD for a Date, in the browser's own zone (never UTC). */
+export function toDateKey(value: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
 /** The clinic's current date as YYYY-MM-DD, in the browser's own zone. */
 export function today(): string {
-  const now = new Date();
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  return toDateKey(new Date());
+}
+
+/**
+ * Moves a YYYY-MM-DD key by whole days. Done through local time on purpose:
+ * `toISOString()` on a local midnight lands on the previous UTC day for any
+ * clinic east of Greenwich, which made "next day" stand still.
+ */
+export function addDays(dateKey: string, days: number): string {
+  const d = new Date(`${dateKey}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return toDateKey(d);
+}
+
+/**
+ * The local calendar day of a timestamp. Transactions carry a UTC instant, so
+ * slicing the first ten characters puts an early-morning sale on the day
+ * before; a bare date key is returned as is.
+ */
+export function localDate(value: string): string {
+  if (!value) return "";
+  if (value.length <= 10) return value;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value.slice(0, 10) : toDateKey(d);
 }
 
 // ------------------------------------------------------------------ validation
@@ -80,7 +107,7 @@ export const fieldRules = {
     if (value > today()) return "A date of birth cannot be in the future";
     const hundredAndThirtyYearsAgo = new Date();
     hundredAndThirtyYearsAgo.setFullYear(hundredAndThirtyYearsAgo.getFullYear() - 130);
-    return value > hundredAndThirtyYearsAgo.toISOString().slice(0, 10)
+    return value > toDateKey(hundredAndThirtyYearsAgo)
       ? null
       : "That date is not plausible";
   },

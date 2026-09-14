@@ -71,7 +71,13 @@ public class CourseTransferService {
     branches.requireAccess(authentication, branchId);
     branches.requirePatientExists(r.toPatientId());
 
-    if (CheckoutService.remaining(source) < r.sessions())
+    // The course totals still count sessions already given away (a transfer
+    // stays inside the course), so the owner's own balance is the limit.
+    Integer ownerRemaining = db.queryForObject(
+        "SELECT allocated_visits-used_visits FROM course_member_balances WHERE patient_course_id=?"
+            + " AND patient_id=?",
+        Integer.class, r.patientCourseId(), fromPatientId);
+    if (ownerRemaining == null || ownerRemaining < r.sessions())
       throw new IllegalArgumentException("Not enough sessions remaining to transfer");
 
     String actor = currentUser.displayName(authentication);

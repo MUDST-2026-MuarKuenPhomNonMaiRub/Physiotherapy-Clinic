@@ -115,7 +115,7 @@ export default function CoursesPage() {
                   const pct = total > 0 ? Math.max(0, Math.min(100, (rem / total) * 100)) : 0;
                   const barColor = pc.status !== "ACTIVE" ? "bg-muted-foreground/40" : pct <= 20 ? "bg-destructive" : pct <= 50 ? "bg-warning" : "bg-success";
                   return (
-                    <TableRow key={pc.id} className="cursor-pointer" onClick={() => router.push(`/courses/${pc.id}`)}>
+                    <TableRow key={`${pc.id}-${pc.patientId}`} className="cursor-pointer" onClick={() => router.push(`/courses/${pc.id}`)}>
                       <TableCell>
                         <p className="font-medium text-foreground">{patient ? getPatientFullNameTh(patient) : "—"}</p>
                         <p className="font-mono text-xs text-muted-foreground">{patient?.hn}</p>

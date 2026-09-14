@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { today } from "@/lib/domain";
+import { localDate, today } from "@/lib/domain";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Award, Receipt, Wallet } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
@@ -61,7 +61,7 @@ export default function StaffSalesReportPage() {
           const attributedStaffId = t.salespersonId ?? ((t.type === "SINGLE_VISIT" || t.type === "ASSESSMENT") ? t.treatingStaffId : undefined);
           return effectiveStaffFilter === "ALL" || attributedStaffId === effectiveStaffFilter;
         })
-        .filter((t) => t.date.slice(0, 10) >= dateFrom && t.date.slice(0, 10) <= dateTo),
+        .filter((t) => localDate(t.date) >= dateFrom && localDate(t.date) <= dateTo),
     [transactions, branchFilter, effectiveStaffFilter, dateFrom, dateTo, isAccessible]
   );
 

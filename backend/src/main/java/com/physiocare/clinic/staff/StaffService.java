@@ -44,30 +44,8 @@ public class StaffService {
     validateBranchIds(r.branchIds());
     boolean hasAccount = r.hasAccount() == null || r.hasAccount();
     String email = r.email() == null ? "" : r.email().trim().toLowerCase();
-    AppUser user = null;
-    if (hasAccount) {
-      InputRules.require(!email.isBlank(), "An email is required for a login account");
-      InputRules.email(email);
-      if (users.existsByEmailIgnoreCase(email))
-        throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already in use");
-      InputRules.require(isStrongPassword(r.password()),
-          "Password must contain upper, lower, number and special character and be at least 12 characters");
-      String roleCode = r.role() == null ? "" : r.role();
-      String code = roleCode.equals("PHYSIOTHERAPIST") ? "PHYSIO" : roleCode;
-      Role role =
-          roles
-              .findByCode(code)
-              .orElseThrow(
-                  () -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role not found"));
-      user = new AppUser();
-      user.setEmail(email);
-      user.setPasswordHash(encoder.encode(r.password()));
-      user.setFirstName(r.name().trim());
-      user.setLastName(r.nameEn() == null || r.nameEn().isBlank() ? "Staff" : r.nameEn().trim());
-      user.setActive(true);
-      user.setRoles(Set.of(role));
-      users.save(user);
-    }
+    AppUser user =
+        hasAccount ? newLogin(email, r.role(), r.password(), r.name(), r.nameEn()) : null;
     Staff p = new Staff();
     p.setName(r.name().trim());
     p.setNameEn(r.nameEn() == null ? "" : r.nameEn().trim());
@@ -93,6 +71,59 @@ public class StaffService {
           r.branchIds());
     }
     return new StaffDtos.CreateResponse(saved.getId(), user == null ? null : user.getId());
+  }
+
+  /** Validates and stores a login; the caller links it to the person. */
+  private AppUser newLogin(String email, String roleCode, String password, String name, String nameEn) {
+    InputRules.require(!email.isBlank(), "An email is required for a login account");
+    InputRules.email(email);
+    if (users.existsByEmailIgnoreCase(email))
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already in use");
+    InputRules.require(isStrongPassword(password),
+        "Password must contain upper, lower, number and special character and be at least 12 characters");
+    String code = roleCode == null ? "" : roleCode.equals("PHYSIOTHERAPIST") ? "PHYSIO" : roleCode;
+    Role role =
+        roles
+            .findByCode(code)
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role not found"));
+    AppUser user = new AppUser();
+    user.setEmail(email);
+    user.setPasswordHash(encoder.encode(password));
+    user.setFirstName(name.trim());
+    user.setLastName(nameEn == null || nameEn.isBlank() ? "Staff" : nameEn.trim());
+    user.setActive(true);
+    user.setRoles(Set.of(role));
+    return users.save(user);
+  }
+
+  /**
+   * A person first recorded without a login (a salesperson, say) can be given
+   * one later. The account inherits the branches they already work at.
+   */
+  @Transactional
+  public StaffDtos.Row createAccount(long id, StaffDtos.AccountRequest r) {
+    Staff person =
+        staff
+            .findById(id)
+            .filter(candidate -> candidate.getDeletedAt() == null)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff not found"));
+    if (person.getUserId() != null)
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "This person already has a login");
+    InputRules.require("ACTIVE".equals(person.getStatus()), "Reactivate this person before giving them a login");
+    String email = r.email().trim().toLowerCase();
+    AppUser user = newLogin(email, r.role(), r.password(), person.getName(), person.getNameEn());
+    person.setEmail(email);
+    person.setUserId(user.getId());
+    staff.save(person);
+    db.update(
+        "INSERT INTO user_branches(user_id,branch_id,is_default) SELECT ?, value::bigint,"
+            + " row_number() OVER ()=1 FROM jsonb_array_elements_text(?::jsonb) WHERE EXISTS"
+            + " (SELECT 1 FROM branches b WHERE b.id=value::bigint AND b.active AND b.deleted_at IS"
+            + " NULL)",
+        user.getId(),
+        person.getBranchIds());
+    return toRow(person);
   }
 
   public List<StaffDtos.Row> listActive() {
@@ -141,6 +172,7 @@ public class StaffService {
     person.setPosition(r.position().trim());
     person.setPhone(r.phone() == null ? "" : r.phone().trim());
     person.setBranchIds(r.branchIds());
+    String previousStatus = person.getStatus();
     if (r.status() != null && !r.status().isBlank()) person.setStatus(r.status().trim());
     if (r.avatarColor() != null && !r.avatarColor().isBlank())
       person.setAvatarColor(r.avatarColor());
@@ -164,9 +196,12 @@ public class StaffService {
           r.branchIds());
     }
 
-    // An inactive therapist must not be able to sign in either.
+    // An inactive therapist must not be able to sign in either. The login
+    // only follows the status when the status itself changes: a plain profile
+    // edit must not quietly hand access back to someone it was taken from.
+    boolean statusChanged = !java.util.Objects.equals(previousStatus, person.getStatus());
     AppUser user = person.getUserId() == null ? null : users.findById(person.getUserId()).orElse(null);
-    if (user != null) {
+    if (user != null && statusChanged) {
       user.setActive("ACTIVE".equals(person.getStatus()));
       users.save(user);
     }

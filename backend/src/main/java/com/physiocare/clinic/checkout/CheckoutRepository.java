@@ -53,6 +53,27 @@ public class CheckoutRepository {
     if (count == null || count == 0) throw new IllegalArgumentException("Appointment does not match patient, branch, or service");
   }
 
+  /**
+   * The course usage a completed appointment already produced, if any —
+   * id and course, or null when the visit spent nothing.
+   */
+  public Map<String, Object> visitUsageForAppointment(long appointmentId) {
+    List<Map<String, Object>> rows = db.queryForList(
+        "SELECT cu.id,cu.patient_course_id,cu.quantity FROM course_usages cu JOIN visits v ON v.id=cu.visit_id"
+            + " WHERE v.appointment_id=? AND cu.status<>'REVERSED' ORDER BY cu.id LIMIT 1",
+        appointmentId);
+    return rows.isEmpty() ? null : rows.get(0);
+  }
+
+  /** Points an appointment-created usage (and its ledger line) at the receipt that settled it. */
+  public void linkUsageToTransaction(long usageId, long transactionId) {
+    db.update("UPDATE course_usages SET sales_transaction_id=? WHERE id=?", transactionId, usageId);
+    db.update(
+        "UPDATE course_ledger_entries SET related_transaction_id=? WHERE id="
+            + "(SELECT course_ledger_entry_id FROM course_usages WHERE id=?)",
+        transactionId, usageId);
+  }
+
   public long createPatientCourse(
       long patientId, long branchId, long packageId, String packageName, int sessions, int bonus,
       BigDecimal price, BigDecimal discountRatio, Integer validityDays, Long salesTransactionId,

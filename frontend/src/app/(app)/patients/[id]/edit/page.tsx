@@ -97,17 +97,20 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
 
   function validate(): boolean {
     const e: Record<string, string> = {};
+    // The ID number and passport are stored hashed and never read back, so
+    // the box starts empty on edit; blank means "keep the one on file" and
+    // only a typed value is checked.
     if (form.customerType === "THAI") {
       const firstNameTh = fieldRules.thaiName(form.firstNameTh);
       if (firstNameTh) e.firstNameTh = firstNameTh;
       const lastNameTh = fieldRules.thaiName(form.lastNameTh);
       if (lastNameTh) e.lastNameTh = lastNameTh;
-      const nationalId = fieldRules.nationalId(form.nationalId);
+      const nationalId = form.nationalId ? fieldRules.nationalId(form.nationalId) : null;
       if (nationalId) e.nationalId = nationalId;
     } else {
       if (!form.firstNameEn) e.firstNameEn = "Required";
       if (!form.lastNameEn) e.lastNameEn = "Required";
-      const passport = fieldRules.passport(form.passport);
+      const passport = form.passport ? fieldRules.passport(form.passport) : null;
       if (passport) e.passport = passport;
       if (!form.nationality) e.nationality = "Required";
     }
@@ -290,24 +293,33 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
           <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {form.customerType === "THAI" ? (
               <div className="space-y-1.5">
-                <Label>National ID <span className="text-destructive">*</span></Label>
+                <Label>National ID</Label>
                 <Input
                   value={form.nationalId}
                   maxLength={13}
                   onChange={(e) => update("nationalId", e.target.value.replace(/\D/g, ""))}
-                  placeholder="13-digit number"
+                  placeholder="Leave blank to keep the number on file"
                 />
-                {nationalIdError && <p className="text-xs text-destructive">{nationalIdError}</p>}
+                {nationalIdError ? (
+                  <p className="text-xs text-destructive">{nationalIdError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Stored securely and not shown. Enter a new number only to replace it.</p>
+                )}
               </div>
             ) : (
               <div className="space-y-1.5">
-                <Label>Passport Number <span className="text-destructive">*</span></Label>
+                <Label>Passport Number</Label>
                 <Input
                   value={form.passport}
                   onChange={(e) => update("passport", fieldInput.passport(e.target.value))}
                   autoComplete="off"
+                  placeholder="Leave blank to keep the number on file"
                 />
-                {passportError && <p className="text-xs text-destructive">{passportError}</p>}
+                {passportError ? (
+                  <p className="text-xs text-destructive">{passportError}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Stored securely and not shown. Enter a new number only to replace it.</p>
+                )}
               </div>
             )}
           </CardContent>

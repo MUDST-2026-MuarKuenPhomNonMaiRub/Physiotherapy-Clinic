@@ -91,10 +91,12 @@ function CheckoutContent() {
   // Always follow the branch selected in the app header so a checkout opened
   // before switching branches is still recorded against the current branch.
   const branchId = activeBranchId ?? branches[0]?.id ?? "";
-  const [mode, setMode] = useState<Mode>("SINGLE");
-  const [serviceId, setServiceId] = useState(linkedAppointment?.serviceId ?? "");
+  const [mode, setMode] = useState<Mode>(linkedAppointment?.usedPatientCourseId ? "COURSE" : "SINGLE");
+  const [serviceId, setServiceId] = useState(
+    linkedAppointment && !linkedAppointment.usedPatientCourseId ? linkedAppointment.serviceId : ""
+  );
   const [subMode, setSubMode] = useState<CourseSubMode>("USE_EXISTING");
-  const [useCourseId, setUseCourseId] = useState("");
+  const [useCourseId, setUseCourseId] = useState(linkedAppointment?.usedPatientCourseId ?? "");
   const [useQty, setUseQty] = useState(1);
   const [purchaseTemplateId, setPurchaseTemplateId] = useState("");
   const [useToday, setUseToday] = useState(false);
@@ -415,15 +417,29 @@ function CheckoutContent() {
                             onClick={() => {
                               selectPatient(p.id);
                               setAppointmentId(a.id);
-                              setMode("SINGLE");
-                              setServiceId(a.serviceId);
                               setTreatingStaffId(a.physiotherapistId);
+                              // Completing the visit already spent a course
+                              // session, so the receipt settles that session
+                              // rather than charging the visit again.
+                              if (a.usedPatientCourseId) {
+                                setMode("COURSE");
+                                setSubMode("USE_EXISTING");
+                                setUseCourseId(a.usedPatientCourseId);
+                                setUseQty(1);
+                                setServiceId("");
+                              } else {
+                                setMode("SINGLE");
+                                setServiceId(a.serviceId);
+                              }
                             }}
                             className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3.5 py-2.5 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
                           >
                             <div>
                               <p className="text-sm font-medium text-foreground">{getPatientFullNameTh(p)}</p>
-                              <p className="text-xs text-muted-foreground">{svc?.name} · {a.startTime}–{a.endTime}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {svc?.name} · {a.startTime}–{a.endTime}
+                                {a.usedPatientCourseId && " · course session used"}
+                              </p>
                             </div>
                             <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">Completed</span>
                           </button>
@@ -464,7 +480,12 @@ function CheckoutContent() {
               <div>
                 <p className="text-sm font-semibold text-foreground">{getPatientFullNameTh(patient)}</p>
                 <p className="font-mono text-xs text-muted-foreground">{patient.hn} · {branches.find((b) => b.id === branchId)?.name}</p>
-                {linkedAppointment && <p className="mt-1 text-xs text-muted-foreground">Linked visit: {formatDate(linkedAppointment.date)} {linkedAppointment.startTime}</p>}
+                {linkedAppointment && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Linked visit: {formatDate(linkedAppointment.date)} {linkedAppointment.startTime}
+                    {linkedAppointment.usedPatientCourseId && " · 1 course session already used at completion"}
+                  </p>
+                )}
               </div>
               {!preselectPatientId && (
                 <Button variant="ghost" size="icon" onClick={() => { selectPatient(""); setAppointmentId(undefined); }}><X className="h-4 w-4" /></Button>
@@ -810,17 +831,7 @@ function CheckoutContent() {
                           {a.resolvedLabel}
                           {a.isPercent && a.kind === "DISCOUNT" && (
                             <span className="ml-1 text-xs">({a.value}%)</span>
-                )}
-
-                {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && courseDiscountTotal !== 0 && (
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">Course price after discount</span>
-                      <span className="font-semibold text-primary">{formatCurrency(courseNetPrice)}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">ราคานี้จะถูกบันทึกไว้กับ Course ที่สร้างหลัง Confirm Payment</p>
-                  </div>
-                )}
+                          )}
                         </span>
                         <span className={`shrink-0 ${a.amount < 0 ? "text-success" : "text-[#8A5A00]"}`}>
                           {formatCurrencySigned(a.amount)}
@@ -829,6 +840,16 @@ function CheckoutContent() {
                     ))}
                   </div>
                 </>
+              )}
+
+              {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && courseDiscountTotal !== 0 && (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Course price after discount</span>
+                    <span className="font-semibold text-primary">{formatCurrency(courseNetPrice)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">ราคานี้จะถูกบันทึกไว้กับ Course ที่สร้างหลัง Confirm Payment</p>
+                </div>
               )}
 
               <Separator />
@@ -902,7 +923,7 @@ function CheckoutContent() {
       )}
 
       <Dialog open={qrOpen} onOpenChange={setQrOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5 text-primary" /> QR Payment</DialogTitle>
             <DialogDescription>ให้ลูกค้าสแกน QR เพื่อชำระเงินตามยอดด้านล่าง</DialogDescription>

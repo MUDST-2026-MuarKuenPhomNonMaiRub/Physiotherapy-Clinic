@@ -247,6 +247,16 @@ export const updateStaff = (id: string, staff: Partial<Staff> & { branchIds: str
 export const deleteStaff = (id: string) =>
   apiRequest<void>(`/api/v1/staff/${id}`, { method: "DELETE" });
 
+/** Gives a person who was recorded without a login one of their own. */
+export const createStaffAccount = (
+  id: string,
+  account: { email: string; role: Role; password: string }
+) =>
+  apiRequest<Row>(`/api/v1/staff/${id}/account`, {
+    method: "POST",
+    body: { email: account.email, role: toRoleCode(account.role), password: account.password },
+  }).then(toStaff);
+
 // ---------------------------------------------------------------------- users
 
 export const listUsers = () =>

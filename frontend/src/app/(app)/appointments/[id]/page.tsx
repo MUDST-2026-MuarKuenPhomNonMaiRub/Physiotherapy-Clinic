@@ -54,6 +54,8 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
   const services = useClinicStore((s) => s.services);
   const resources = useClinicStore((s) => s.resources);
   const branches = useClinicStore((s) => s.branches);
+  const patientCourses = useClinicStore((s) => s.patientCourses);
+  const courseTemplates = useClinicStore((s) => s.courseTemplates);
   const checkInAppointment = useClinicStore((s) => s.checkInAppointment);
   const startService = useClinicStore((s) => s.startService);
   const completeService = useClinicStore((s) => s.completeService);
@@ -77,6 +79,12 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
   const service = services.find((s) => s.id === apt.serviceId);
   const room = resources.find((r) => r.id === apt.resourceId);
   const branch = branches.find((b) => b.id === apt.branchId);
+  const usedCourse = apt.usedPatientCourseId
+    ? patientCourses.find((pc) => pc.id === apt.usedPatientCourseId)
+    : undefined;
+  const usedCourseTemplate = usedCourse
+    ? courseTemplates.find((c) => c.id === usedCourse.courseId)
+    : undefined;
   const isTerminalAlt = ["CANCELLED", "NO_SHOW", "RESCHEDULED"].includes(apt.status);
   const canOperate = can("appointment.edit");
   const canFrontDeskOps = can("appointment.cancel");
@@ -140,6 +148,13 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
               <Detail icon={DoorOpen} label="Room" value={room?.name ?? "—"} />
               <Detail icon={MapPin} label="Branch" value={branch?.name ?? "—"} />
               <Detail label="Service" value={service?.name ?? "—"} />
+              {usedCourse && (
+                <Detail
+                  label="Course session"
+                  value={`1 session used from ${usedCourseTemplate?.name ?? "the patient's course"}`}
+                  link={`/courses/${usedCourse.id}`}
+                />
+              )}
             </dl>
             {apt.note && (
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">

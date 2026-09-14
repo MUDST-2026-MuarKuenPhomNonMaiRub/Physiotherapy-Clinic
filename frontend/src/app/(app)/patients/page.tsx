@@ -92,7 +92,7 @@ function PatientsPageContent() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by HN, name, phone, national ID..."
+            placeholder="Search by HN, name, nickname or phone..."
             className="pl-9"
           />
         </div>

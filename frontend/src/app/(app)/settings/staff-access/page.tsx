@@ -153,6 +153,7 @@ export default function StaffAccessPage() {
   const updateStaff = useClinicStore((s) => s.updateStaff);
   const toggleStaffStatus = useClinicStore((s) => s.toggleStaffStatus);
   const deleteStaff = useClinicStore((s) => s.deleteStaff);
+  const createStaffAccount = useClinicStore((s) => s.createStaffAccount);
   const updateUser = useClinicStore((s) => s.updateUser);
   const toggleUserStatus = useClinicStore((s) => s.toggleUserStatus);
 
@@ -248,7 +249,8 @@ export default function StaffAccessPage() {
       phone: s.phone,
       email: s.email,
       branchIds: s.branchIds,
-      hasAccount: !!account,
+      // A deactivated login shows as "no access" so it can be switched back on.
+      hasAccount: !!account && account.status === "ACTIVE",
       username: account?.username ?? "",
       password: "",
       role: account?.role ?? suggestedRoleForPosition[s.position],
@@ -275,11 +277,7 @@ export default function StaffAccessPage() {
     form.name.trim().length > 0 &&
     form.branchIds.length > 0 &&
     !phoneError &&
-    (!form.hasAccount || (
-      form.username.trim().length > 0 &&
-      form.email.trim().length > 0 &&
-      passwordValid
-    ));
+    (!form.hasAccount || (form.email.trim().length > 0 && passwordValid));
 
   async function save() {
     if (!canSave || saving) return;
@@ -302,12 +300,21 @@ export default function StaffAccessPage() {
         if (account) {
           if (form.hasAccount) {
             if (account.role !== form.role) await updateUser(account.id, { role: form.role });
+            // Access that was taken away earlier is handed back by re-enabling
+            // the same login rather than creating a second one.
+            if (account.status !== "ACTIVE") await toggleUserStatus(account.id);
           } else if (account.status === "ACTIVE") {
             // Access is revoked by deactivating the login, never by dropping
             // the record — transactions and commission still point at this
             // person.
             await toggleUserStatus(account.id);
           }
+        } else if (form.hasAccount) {
+          await createStaffAccount(editing.id, {
+            email: profile.email,
+            role: form.role,
+            password: form.password,
+          });
         }
         toast.success(`${profile.name} updated`);
       } else {
@@ -437,10 +444,12 @@ export default function StaffAccessPage() {
                           <Badge variant="outline" className="font-normal">{s.position}</Badge>
                         </TableCell>
                         <TableCell>
-                          {account ? (
+                          {account && account.status === "ACTIVE" ? (
                             <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${roleStyles[account.role]}`}>
                               {roleLabels[account.role]}
                             </span>
+                          ) : account ? (
+                            <span className="text-xs text-muted-foreground">Access revoked</span>
                           ) : (
                             <span className="text-xs text-muted-foreground">No access</span>
                           )}
@@ -675,12 +684,10 @@ export default function StaffAccessPage() {
 
               {form.hasAccount && (
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Username" required>
-                    <Input
-                      value={form.username}
-                      autoComplete="off"
-                      onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                    />
+                  <Field label="Sign-in email" required>
+                    {/* The login is the email above — there is no separate username. */}
+                    <Input value={form.email} readOnly tabIndex={-1} className="bg-muted/60 text-muted-foreground" />
+                    <p className="mt-1 text-xs text-muted-foreground">Signs in with the email entered above.</p>
                   </Field>
                   {passwordRequired && (
                     <Field label="Password" required>

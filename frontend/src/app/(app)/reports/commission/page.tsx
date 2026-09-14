@@ -6,7 +6,7 @@ import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { useSession } from "@/lib/auth/use-session";
 import { useReportScope } from "@/lib/auth/use-report-scope";
-import { getCommissionRecords, today } from "@/lib/domain";
+import { getCommissionRecords, localDate, today } from "@/lib/domain";
 import { getCommissionLedgerRecords } from "@/lib/api/clinic-api";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
@@ -60,7 +60,7 @@ export default function CommissionReportPage() {
     return getCommissionRecords(transactions)
       .filter((r) => (branchFilter === "ALL" ? isAccessible(r.branchId) : r.branchId === branchFilter))
       .filter((r) => effectiveStaffFilter === "ALL" || r.staffId === effectiveStaffFilter)
-      .filter((r) => r.date.slice(0, 10) >= dateFrom && r.date.slice(0, 10) <= dateTo);
+      .filter((r) => localDate(r.date) >= dateFrom && localDate(r.date) <= dateTo);
   }, [transactions, branchFilter, effectiveStaffFilter, dateFrom, dateTo, isAccessible]);
 
   useEffect(() => {

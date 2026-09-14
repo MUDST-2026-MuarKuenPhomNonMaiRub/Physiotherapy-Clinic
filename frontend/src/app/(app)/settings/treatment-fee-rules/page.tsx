@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { createTreatmentFeeRule, listTreatmentFeeRules, setTreatmentFeeRuleActive, updateTreatmentFeeRule } from "@/lib/api/clinic-api";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { formatDate } from "@/lib/format";
+import { today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ const emptyForm = {
   feeType: "FIXED" as TreatmentFeeRule["feeType"],
   feeValue: 0,
   percentageBase: "COURSE_VALUE_PER_VISIT",
-  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveFrom: today(),
   effectiveTo: "",
   employeeGroup: "",
   serviceId: "",

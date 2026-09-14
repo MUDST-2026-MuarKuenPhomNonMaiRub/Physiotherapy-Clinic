@@ -6,7 +6,7 @@ import { Receipt, Search } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh, localDate, searchPatients } from "@/lib/domain";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -80,8 +80,8 @@ export default function TransactionsPage() {
       .filter((t) => paymentFilter === "ALL" || t.paymentMethodId === paymentFilter)
       .filter((t) => statusFilter === "ALL" || t.status === statusFilter)
       .filter((t) => staffFilter === "ALL" || t.treatingStaffId === staffFilter || t.salespersonId === staffFilter)
-      .filter((t) => !dateFrom || t.date.slice(0, 10) >= dateFrom)
-      .filter((t) => !dateTo || t.date.slice(0, 10) <= dateTo)
+      .filter((t) => !dateFrom || localDate(t.date) >= dateFrom)
+      .filter((t) => !dateTo || localDate(t.date) <= dateTo)
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [transactions, matchingPatientIds, branchFilter, typeFilter, paymentFilter, statusFilter, staffFilter, dateFrom, dateTo, isAccessible]);
 

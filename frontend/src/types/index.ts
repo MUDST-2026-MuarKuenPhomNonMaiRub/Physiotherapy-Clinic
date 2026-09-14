@@ -138,9 +138,17 @@ export interface CourseTemplate {
 
 export type PatientCourseStatus = "ACTIVE" | "EXPIRED" | "USED_UP";
 
+/**
+ * One person's balance on a course. The buyer is the owner; anyone sessions
+ * were transferred to gets a row of their own on the same course id, so a
+ * list is keyed by id + patientId rather than id alone.
+ */
 export interface PatientCourse {
   id: string;
+  /** Whose balance this row is. */
   patientId: string;
+  /** The patient who bought the course. */
+  ownerPatientId: string;
   courseId: string;
   purchaseDate: string;
   expiryDate: string;
@@ -199,6 +207,8 @@ export interface Appointment {
   status: AppointmentStatus;
   createdAt: string;
   checkedOut?: boolean;
+  /** The course a completed visit already drew a session from, if any. */
+  usedPatientCourseId?: string;
 }
 
 export type TransactionType =

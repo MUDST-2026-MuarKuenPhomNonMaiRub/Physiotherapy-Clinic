@@ -54,15 +54,18 @@ export default function CoursesTransferPage() {
       .filter((l) => (branchFilter === "ALL" ? isAccessible(l.branchId) : l.branchId === branchFilter));
     return outs
       .map((out) => {
-        const in_ = courseLedger.find((l) => l.type === "TRANSFER_IN" && l.transferGroupId === out.transferGroupId);
+        // A transfer stays inside the same course (the recipient becomes a
+        // member of it), so the recipient is the ledger's counterparty rather
+        // than the owner of some other course.
         const fromPc = patientCourses.find((p) => p.id === out.patientCourseId);
-        const toPc = in_ ? patientCourses.find((p) => p.id === in_.patientCourseId) : undefined;
         const template = fromPc ? courseTemplates.find((c) => c.id === fromPc.courseId) : undefined;
         return {
           id: out.id,
           date: out.date,
-          fromPatient: fromPc ? patients.find((p) => p.id === fromPc.patientId) : undefined,
-          toPatient: toPc ? patients.find((p) => p.id === toPc.patientId) : undefined,
+          fromPatient: fromPc ? patients.find((p) => p.id === fromPc.ownerPatientId) : undefined,
+          toPatient: out.transferCounterpartyPatientId
+            ? patients.find((p) => p.id === out.transferCounterpartyPatientId)
+            : undefined,
           course: template?.name ?? "—",
           sessions: Math.abs(out.quantity),
           branch: branches.find((b) => b.id === out.branchId)?.name,
@@ -76,7 +79,7 @@ export default function CoursesTransferPage() {
 
   // --- transfer wizard -----------------------------------------------------
   const sourceMatches = sourceQuery ? searchPatients(sourceQuery, patients).slice(0, 6) : [];
-  const sourceCourse = patientCourses.find((p) => p.id === sourceCourseId);
+  const sourceCourse = patientCourses.find((p) => p.id === sourceCourseId && p.patientId === p.ownerPatientId);
   const sourcePatient = sourceCourse ? patients.find((p) => p.id === sourceCourse.patientId) : undefined;
   const sourceRemaining = sourceCourse ? remainingSessions(sourceCourse) : 0;
   const targetMatches = targetQuery
@@ -86,9 +89,15 @@ export default function CoursesTransferPage() {
     : [];
   const targetPatient = patients.find((p) => p.id === targetPatientId);
 
+  // Only the buyer can pass sessions on; someone who received sessions holds
+  // a member balance on the owner's course, not a course of their own.
   function transferableCoursesFor(patientId: string) {
     return patientCourses.filter(
-      (pc) => pc.patientId === patientId && pc.status === "ACTIVE" && remainingSessions(pc) > 0
+      (pc) =>
+        pc.patientId === patientId &&
+        pc.ownerPatientId === patientId &&
+        pc.status === "ACTIVE" &&
+        remainingSessions(pc) > 0
     );
   }
 

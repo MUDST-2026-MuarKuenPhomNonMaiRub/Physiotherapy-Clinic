@@ -118,6 +118,8 @@ interface ClinicState {
   updateStaff: (id: string, data: Partial<Staff>) => Promise<void>;
   toggleStaffStatus: (id: string) => Promise<void>;
   deleteStaff: (id: string) => Promise<void>;
+  /** Adds a login to a person who was recorded without one. */
+  createStaffAccount: (id: string, account: { email: string; role: Role; password: string }) => Promise<void>;
 
   // admin: users
   updateUser: (id: string, data: Partial<AppUser>) => Promise<void>;
@@ -436,6 +438,15 @@ export const useClinicStore = create<ClinicState>()(
         });
       },
 
+      createStaffAccount: async (id, account) => {
+        const staff = await api.createStaffAccount(id, account);
+        const users = await api.listUsers().catch(() => []);
+        set((s) => {
+          upsert(s.staff, staff);
+          if (users.length) s.users = users;
+        });
+      },
+
       deleteStaff: async (id) => {
         await api.deleteStaff(id);
         set((s) => {
@@ -699,8 +710,15 @@ export const useClinicStore = create<ClinicState>()(
 
       completeService: async (id) => {
         const appointment = await api.transitionAppointment(id, "complete");
+        // Completing a visit spends a session from the patient's course, so
+        // the course balances are re-read along with the appointment.
+        const courses = await api.listPatientCoursesFor(branchScope()).catch(() => null);
         set((s) => {
           upsert(s.appointments, appointment);
+          if (courses) {
+            s.patientCourses = courses.patientCourses;
+            s.courseLedger = courses.courseLedger;
+          }
         });
       },
 

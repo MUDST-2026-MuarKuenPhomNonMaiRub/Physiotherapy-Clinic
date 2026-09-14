@@ -201,6 +201,35 @@ public class CheckoutService {
     // ---- course usage -----------------------------------------------------
     Long useId = r.usePatientCourseId() != null ? r.usePatientCourseId()
         : (r.useNewlyPurchasedSession() ? purchasedCourseId : null);
+    // Completing the appointment already spent a session from the patient's
+    // course. That usage is settled by this receipt rather than repeated, and a
+    // paid single visit on top of it would bill the visit twice.
+    Map<String, Object> visitUsage =
+        r.appointmentId() == null ? null : repository.visitUsageForAppointment(r.appointmentId());
+    if (visitUsage != null) {
+      long usedCourseId = ((Number) visitUsage.get("patient_course_id")).longValue();
+      if (useId == null && service != null) {
+        throw new IllegalArgumentException(
+            "This visit already used a session from the patient's course. Check it out as"
+                + " \"Use Existing Course\" instead of a paid visit.");
+      }
+      if (useId != null && useId != usedCourseId) {
+        throw new IllegalArgumentException(
+            "This visit already used a session from a different course");
+      }
+      if (useId != null) {
+        int quantity = r.useSessionsCount() == null ? 1 : r.useSessionsCount();
+        if (quantity != ((Number) visitUsage.get("quantity")).intValue()) {
+          throw new IllegalArgumentException(
+              "This visit already used " + visitUsage.get("quantity")
+                  + " session(s) when the appointment was completed");
+        }
+        repository.linkUsageToTransaction(((Number) visitUsage.get("id")).longValue(), transactionId);
+        patientCourseId = useId;
+        type = (service != null || course != null) ? "MIXED" : "COURSE_USAGE";
+        useId = null;
+      }
+    }
     if (useId != null) {
       int quantity = r.useSessionsCount() == null ? 1 : r.useSessionsCount();
       if (quantity <= 0) throw new IllegalArgumentException("Sessions used must be at least one");

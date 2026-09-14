@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { useMemo, useState } from "react";
-import { today } from "@/lib/domain";
+import { localDate, today } from "@/lib/domain";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
@@ -45,7 +45,7 @@ export default function RevenueReportPage() {
       transactions
         .filter((t) => t.status === "COMPLETED")
         .filter((t) => (branchFilter === "ALL" ? isAccessible(t.branchId) : t.branchId === branchFilter))
-        .filter((t) => t.date.slice(0, 10) >= dateFrom && t.date.slice(0, 10) <= dateTo),
+        .filter((t) => localDate(t.date) >= dateFrom && localDate(t.date) <= dateTo),
     [transactions, branchFilter, dateFrom, dateTo, isAccessible]
   );
 
@@ -56,7 +56,7 @@ export default function RevenueReportPage() {
   const byDate = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of filtered) {
-      const d = t.date.slice(0, 10);
+      const d = localDate(t.date);
       map.set(d, (map.get(d) ?? 0) + t.total);
     }
     return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
@@ -107,7 +107,7 @@ export default function RevenueReportPage() {
               {byDate.map(([date, revenue]) => (
                 <TableRow key={date}>
                   <TableCell>{formatDate(date)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{filtered.filter((t) => t.date.slice(0, 10) === date).length}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">{filtered.filter((t) => localDate(t.date) === date).length}</TableCell>
                   <TableCell className="text-right font-medium">{formatCurrency(revenue)}</TableCell>
                 </TableRow>
               ))}
