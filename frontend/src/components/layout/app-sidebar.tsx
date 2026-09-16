@@ -60,7 +60,7 @@ export function AppSidebar() {
   return (
     <aside className="motion-sidebar hidden w-[268px] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex">
       <ClinicBrand />
-      <NavContent role={user.role} />
+      <NavContent role={user.role} permissions={user.permissions} />
       <SidebarUserFooter />
     </aside>
   );

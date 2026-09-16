@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 /** Account administration for the staff-access screen. */
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
 @Service
 public class UserService {
   private final JdbcTemplate db;

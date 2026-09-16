@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 /** Read-only Finance/Admin view of the append-only commission audit trail. */
 @Service
-@PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.all')")
 public class CommissionAuditQueryService {
   private final JdbcTemplate db;
 

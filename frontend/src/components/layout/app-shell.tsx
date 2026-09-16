@@ -67,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (loadError && !dataLoaded) return <LoadFailure message={loadError} onRetry={() => void refresh()} />;
   if (!dataLoaded) return <FullScreenLoader message="Loading clinic data…" />;
 
-  const allowed = canAccessRoute(user.role, pathname);
+  const allowed = canAccessRoute(user.role, pathname, user.permissions);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

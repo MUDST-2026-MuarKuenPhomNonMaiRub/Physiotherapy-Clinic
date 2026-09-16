@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 /** HTTP adapter for the commission audit trail. */
 @RestController
 @RequestMapping("/api/v1/commission/audit")
-@PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.all')")
 public class CommissionAuditController {
   private final CommissionAuditQueryService service;
   public CommissionAuditController(CommissionAuditQueryService service){this.service=service;}

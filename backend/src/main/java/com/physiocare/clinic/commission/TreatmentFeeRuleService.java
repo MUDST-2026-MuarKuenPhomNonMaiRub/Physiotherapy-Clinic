@@ -49,7 +49,7 @@ public class TreatmentFeeRuleService {
             + " id DESC");
   }
 
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> create(@Valid RuleRequest r, Authentication authentication) {
     validate(r);
     long id =
@@ -73,7 +73,7 @@ public class TreatmentFeeRuleService {
     return created;
   }
 
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> update(
       long id, @Valid RuleRequest r, Authentication authentication) {
     validate(r);
@@ -92,7 +92,7 @@ public class TreatmentFeeRuleService {
     return after;
   }
 
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setStatus(
       long id, Map<String, Boolean> body, Authentication authentication) {
     Boolean active = body.get("active");

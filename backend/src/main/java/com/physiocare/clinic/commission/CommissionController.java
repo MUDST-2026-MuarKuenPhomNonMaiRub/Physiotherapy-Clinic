@@ -26,7 +26,7 @@ public class CommissionController {
 
   @PostMapping("/courses")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.all')")
   public void createCourse(@Valid @RequestBody CommissionDtos.CreateCourseRequest request) {
     service.createCourse(request);
   }
@@ -38,7 +38,7 @@ public class CommissionController {
   }
 
   @GetMapping("/ledger-records")
-  @PreAuthorize("hasAnyRole('ADMIN','PHYSIO','FINANCE','REPORT_VIEWER')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.own', 'commission.view.all')")
   public List<Map<String, Object>> ledgerRecords(
       @RequestParam LocalDate from,
       @RequestParam LocalDate to,

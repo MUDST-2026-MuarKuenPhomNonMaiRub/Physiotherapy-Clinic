@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/auth/use-session";
-import { navigationByRole } from "@/lib/permissions/navigation";
+import { navigationForUser } from "@/lib/permissions/navigation";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,7 +16,7 @@ export function ReportsNav() {
   if (!user) return null;
 
   const items =
-    navigationByRole[user.role].find((group) => group.title === "Report")?.items ?? [];
+    navigationForUser(user.role, user.permissions).find((group) => group.title === "Report")?.items ?? [];
 
   return (
     <div className="mb-5 flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/50 p-1">

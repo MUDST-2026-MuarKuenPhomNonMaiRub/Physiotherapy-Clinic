@@ -14,6 +14,6 @@ public class CommissionSettingsController {
   public CommissionSettingsController(CommissionSettingsService service){this.service=service;}
   @GetMapping public Object list(){return service.list();}
   @PostMapping
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Object create(@Valid @RequestBody CommissionSettingsService.Scheme r, Authentication a){return service.create(r,a);}
 }

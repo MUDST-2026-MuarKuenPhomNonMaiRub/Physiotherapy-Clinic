@@ -28,7 +28,7 @@ export function MobileSidebar() {
       >
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <ClinicBrand />
-        <NavContent role={user.role} onNavigate={() => setOpen(false)} />
+        <NavContent role={user.role} permissions={user.permissions} onNavigate={() => setOpen(false)} />
         <SidebarUserFooter />
       </SheetContent>
     </Sheet>

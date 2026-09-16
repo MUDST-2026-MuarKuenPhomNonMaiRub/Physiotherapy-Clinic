@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   findActiveHref,
-  navigationByRole,
+  navigationForUser,
   type NavItem,
 } from "@/lib/permissions/navigation";
 import type { Role } from "@/types";
@@ -43,10 +43,10 @@ function NavLink({
   );
 }
 
-export function NavContent({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
+export function NavContent({ role, permissions, onNavigate }: { role: Role; permissions?: string[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   const activeHref = findActiveHref(role, pathname);
-  const groups = navigationByRole[role] ?? [];
+  const groups = navigationForUser(role, permissions);
 
   return (
     <nav className="flex-1 overflow-y-auto px-4 py-4">

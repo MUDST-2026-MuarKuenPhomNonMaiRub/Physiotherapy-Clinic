@@ -11,7 +11,7 @@ public class LegacyTransferReconciliationController {
   public LegacyTransferReconciliationController(LegacyTransferReconciliationService service) { this.service = service; }
 
   @PostMapping("/reconcile")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public LegacyTransferReconciliationService.Report reconcile(
       @RequestParam(defaultValue = "true") boolean dryRun) {
     return service.reconcile(dryRun);

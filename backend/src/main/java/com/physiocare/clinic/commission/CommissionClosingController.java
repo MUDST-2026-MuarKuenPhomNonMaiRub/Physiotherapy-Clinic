@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 /** Event B of the requirement: previewing, running, and (rarely) overriding a monthly close. */
 @RestController
 @RequestMapping("/api/v1/commission/closing")
-@PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.all')")
 public class CommissionClosingController {
   private final MonthlyCommissionClosingService closing;
   private final CurrentUser currentUser;
@@ -46,7 +46,7 @@ public class CommissionClosingController {
   }
 
   @PostMapping("/{id}/override")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public void override(
       @PathVariable long id, @RequestBody OverrideRequest request, Authentication authentication) {
     if (request.reason() == null || request.reason().isBlank())

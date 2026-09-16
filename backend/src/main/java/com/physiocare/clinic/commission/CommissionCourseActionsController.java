@@ -43,7 +43,7 @@ public class CommissionCourseActionsController {
 
   @PostMapping("/members")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.view')")
   public void addMember(
       @PathVariable long id, @RequestBody AddMemberRequest request, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);
@@ -52,7 +52,7 @@ public class CommissionCourseActionsController {
   }
 
   @DeleteMapping("/members/{patientId}")
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE','RECEPTIONIST')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.use')")
   public void removeMember(
       @PathVariable long id, @PathVariable long patientId, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);
@@ -60,7 +60,7 @@ public class CommissionCourseActionsController {
   }
 
   @PostMapping("/refund-remaining")
-  @PreAuthorize("hasAnyRole('ADMIN','FINANCE')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.all')")
   public void refundRemaining(
       @PathVariable long id, @RequestBody RefundRemainingRequest request, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);

@@ -15,12 +15,12 @@ public class CommissionRuleController {
   public CommissionRuleController(CommissionRuleService service) { this.service=service; }
   @GetMapping public List<Map<String,Object>> list(){return service.list();}
   @PostMapping @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String,Object> create(@Valid @RequestBody CommissionRuleService.RuleRequest r){return service.create(r);}
   @PatchMapping("/{id}")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String,Object> update(@PathVariable long id,@Valid @RequestBody CommissionRuleService.RuleRequest r){return service.update(id,r);}
   @PatchMapping("/{id}/status")
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String,Object> setStatus(@PathVariable long id,@RequestBody CommissionRuleService.ActiveRequest r){return service.setStatus(id,r);}
 }

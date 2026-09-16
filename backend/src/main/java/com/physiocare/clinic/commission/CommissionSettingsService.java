@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
 public class CommissionSettingsService {
   private final JdbcTemplate db;
   private final CommissionAuditService audit;

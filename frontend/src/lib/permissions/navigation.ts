@@ -4,6 +4,7 @@ export interface NavItem {
   label: string;
   href: string;
   icon: string; // lucide-react icon name, resolved by <NavIcon />
+  permission?: string;
 }
 
 export interface NavGroup {
@@ -84,6 +85,23 @@ export const navigationByRole: Record<Role, NavGroup[]> = {
   PHYSIOTHERAPIST: [overviewGroup, patientGroup, financeGroup, physioReportGroup],
 };
 
+const permissionByHref: Record<string, string> = {
+  "/dashboard": "dashboard.view", "/patients": "patient.view", "/appointments": "appointment.view",
+  "/courses": "course.view", "/courses/transfer": "course.transfer", "/checkout": "checkout.create",
+  "/transactions": "transaction.view", "/reports/course-balance": "course.view", "/reports/staff-sales": "report.view.all",
+  "/reports/commission": "commission.view.own", "/reports/course-commission": "commission.view.own",
+  "/reports/commission-audit": "commission.view.all", "/settings": "settings.manage",
+};
+
+export function navigationForUser(role: Role, permissions?: string[]): NavGroup[] {
+  const groups = navigationByRole[role] ?? [];
+  if (permissions === undefined) return groups;
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !permissionByHref[item.href] || permissions.includes(permissionByHref[item.href])),
+  })).filter((group) => group.items.length > 0);
+}
+
 export const defaultRouteByRole: Record<Role, string> = {
   ADMIN: "/calendar",
   PHYSIOTHERAPIST: "/calendar",
@@ -94,7 +112,7 @@ export const defaultRouteByRole: Record<Role, string> = {
  * highlights Courses Transfer rather than its parent Patient Courses.
  */
 export function findActiveHref(role: Role, pathname: string): string | null {
-  const hrefs = (navigationByRole[role] ?? []).flatMap((g) => g.items.map((i) => i.href));
+  const hrefs = navigationForUser(role).flatMap((g) => g.items.map((i) => i.href));
   return (
     hrefs
       .filter((href) => pathname === href || pathname.startsWith(href + "/"))
@@ -104,17 +122,18 @@ export function findActiveHref(role: Role, pathname: string): string | null {
 
 // Route prefix -> roles allowed, matched by longest prefix. Routes not listed
 // are open to any authenticated user; per-action rules live in rolePermissions.
-export const routeAccess: { prefix: string; roles: Role[] }[] = [
-  { prefix: "/settings", roles: ["ADMIN"] },
+export const routeAccess: { prefix: string; permission: string }[] = [
+  { prefix: "/settings", permission: "settings.manage" },
   // Hidden from the menu as well, but the address bar is the way in that
   // actually needs closing.
-  { prefix: "/reports/staff-sales", roles: ["ADMIN"] },
+  { prefix: "/reports/staff-sales", permission: "report.view.all" },
 ];
 
-export function canAccessRoute(role: Role, pathname: string): boolean {
+export function canAccessRoute(role: Role, pathname: string, permissions?: string[]): boolean {
   const matches = routeAccess
     .filter((r) => pathname.startsWith(r.prefix))
     .sort((a, b) => b.prefix.length - a.prefix.length);
   if (matches.length === 0) return true;
-  return matches[0].roles.includes(role);
+  if (permissions === undefined) return role === "ADMIN";
+  return permissions.includes(matches[0].permission);
 }

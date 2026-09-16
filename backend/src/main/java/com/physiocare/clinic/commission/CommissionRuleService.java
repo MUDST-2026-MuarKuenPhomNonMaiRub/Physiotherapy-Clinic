@@ -43,7 +43,7 @@ public class CommissionRuleService {
             + " FROM commission_rules ORDER BY id");
   }
 
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> create(@Valid RuleRequest r) {
     validate(r);
     long id =
@@ -64,7 +64,7 @@ public class CommissionRuleService {
     return rule(id);
   }
 
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> update(long id, @Valid RuleRequest r) {
     validate(r);
     int rows =
@@ -86,7 +86,7 @@ public class CommissionRuleService {
     return rule(id);
   }
 
-  @PreAuthorize("hasRole('ADMIN')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setStatus(long id, ActiveRequest r) {
     int rows = db.update("UPDATE commission_rules SET active=?,updated_at=now() WHERE id=?", r.active(), id);
     if (rows == 0) throw new IllegalArgumentException("Commission rule not found");
