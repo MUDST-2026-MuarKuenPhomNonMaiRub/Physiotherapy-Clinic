@@ -395,9 +395,7 @@ export default function StaffAccessPage() {
               <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All access levels</SelectItem>
-                {(configuredRoles.length
-                  ? configuredRoles.map((r) => ({ code: r.code === "PHYSIO" ? "PHYSIOTHERAPIST" : r.code, name: r.name }))
-                  : allRoles.map((r) => ({ code: r, name: roleLabels[r] }))).map((r) => (
+                {allRoles.map((r) => ({ code: r, name: roleLabels[r] })).map((r) => (
                     <SelectItem key={r.code} value={r.code}>{r.name}</SelectItem>
                   ))}
                 <SelectItem value="NO_ACCOUNT">No login account</SelectItem>
@@ -713,9 +711,7 @@ export default function StaffAccessPage() {
                     <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
                       <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {(configuredRoles.length
-                          ? configuredRoles.map((r) => ({ code: r.code === "PHYSIO" ? "PHYSIOTHERAPIST" : r.code, name: r.name }))
-                          : allRoles.map((r) => ({ code: r, name: roleLabels[r] }))).map((r) => (
+                        {allRoles.map((r) => ({ code: r, name: roleLabels[r] })).map((r) => (
                             <SelectItem key={r.code} value={r.code}>{r.name}</SelectItem>
                           ))}
                       </SelectContent>
