@@ -762,6 +762,9 @@ function CheckoutContent() {
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className={`space-y-1.5${needsSalesperson ? "" : " sm:col-span-2"}`}>
                   <Label>Treating Staff {needsTreatingStaff && <span className="text-destructive">*</span>}</Label>
+                  {needsSalesperson && (
+                    <p className="text-xs invisible" aria-hidden="true">Required only when purchasing a course package.</p>
+                  )}
                   <Select value={treatingStaffId} onValueChange={setTreatingStaffId}>
                     <SelectTrigger className="w-full"><SelectValue placeholder="Select physiotherapist" /></SelectTrigger>
                     <SelectContent>

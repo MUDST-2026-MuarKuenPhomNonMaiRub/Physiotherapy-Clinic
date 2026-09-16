@@ -54,6 +54,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [hasHydrated, isAuthenticated, router]);
 
+  // The app shell owns the scroll container rather than the browser window.
+  // Reset it on navigation so a long page never opens with its page title
+  // tucked underneath the fixed-height header.
+  useEffect(() => {
+    document.getElementById("main-content")?.scrollTo({ top: 0, left: 0 });
+  }, [pathname]);
+
   // The clinic collections live on the server, so they are read once the
   // session is known and again whenever the user asks for a reload.
   useEffect(() => {
