@@ -28,16 +28,18 @@ public class PatientService {
   private final JdbcTemplate db;
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
+  private final PiiCryptoService pii;
 
-  public PatientService(JdbcTemplate db, BranchAccessService branches, CurrentUser currentUser) {
+  public PatientService(JdbcTemplate db, BranchAccessService branches, CurrentUser currentUser, PiiCryptoService pii) {
     this.db = db;
     this.branches = branches;
     this.currentUser = currentUser;
+    this.pii = pii;
   }
 
   private static final String COLUMNS =
       "id,hn,customer_type,prefix,first_name_th,last_name_th,first_name_en,last_name_en,nickname,"
-          + "gender_code,NULL AS national_id,NULL AS passport_no,birth_date,blood_group_code,nationality_code,"
+          + "gender_code,national_id_ciphertext,passport_ciphertext,birth_date,blood_group_code,nationality_code,"
           + "phone,email,address_text,customer_group_code,referral_channel_code,"
           + "insurance_company_code,registered_branch_id,registered_at,active";
 
@@ -122,10 +124,10 @@ public class PatientService {
           db.queryForObject(
               "INSERT INTO patients(hn,registered_branch_id,customer_type,prefix,first_name_th,"
                   + "last_name_th,first_name_en,last_name_en,nickname,gender_code,national_id_hash,"
-                  + "passport_hash,birth_date,blood_group_code,"
+                  + "national_id_ciphertext,passport_hash,passport_ciphertext,birth_date,blood_group_code,"
                   + "nationality_code,phone,email,address_text,customer_group_code,"
                   + "referral_channel_code,insurance_company_code,created_by)"
-                  + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+                  + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
               Long.class,
               hn,
               r.registeredBranchId(),
@@ -138,7 +140,9 @@ public class PatientService {
               blankToNull(r.nickname()),
               r.genderCode(),
               sha256(r.nationalId()),
+              pii.encrypt(r.nationalId()),
               sha256(r.passportNo()),
+              pii.encrypt(r.passportNo()),
               r.birthDate(),
               blankToNull(r.bloodGroupCode()),
               blankToNull(r.nationalityCode()),
@@ -149,7 +153,7 @@ public class PatientService {
               blankToNull(r.referralChannelCode()),
               blankToNull(r.insuranceCompanyCode()),
               currentUser.id(authentication));
-      return db.queryForMap("SELECT " + COLUMNS + " FROM patients WHERE id=?", id);
+      return decode(db.queryForMap("SELECT " + COLUMNS + " FROM patients WHERE id=?", id));
     } catch (DuplicateKeyException e) {
       throw new IllegalArgumentException("A patient with this national ID is already registered");
     }
@@ -182,7 +186,7 @@ public class PatientService {
         branchId,
         branchId,
         branchId,
-        branchId);
+        branchId).stream().map(this::decode).toList();
   }
 
   @GetMapping("/{id}")
@@ -191,7 +195,7 @@ public class PatientService {
         db.queryForList(
             "SELECT " + COLUMNS + " FROM patients WHERE id=? AND deleted_at IS NULL", id);
     if (rows.isEmpty()) throw new IllegalArgumentException("Patient not found");
-    Map<String, Object> patient = rows.get(0);
+    Map<String, Object> patient = decode(rows.get(0));
     branches.requirePatientAccess(authentication, id);
     return patient;
   }
@@ -215,8 +219,8 @@ public class PatientService {
       db.update(
           "UPDATE patients SET customer_type=?,prefix=?,first_name_th=?,last_name_th=?,"
               + "first_name_en=?,last_name_en=?,nickname=?,gender_code=?,"
-              + "national_id_hash=COALESCE(?,national_id_hash),"
-              + "passport_hash=COALESCE(?,passport_hash),birth_date=?,blood_group_code=?,"
+          + "national_id_hash=COALESCE(?,national_id_hash),national_id_ciphertext=COALESCE(?,national_id_ciphertext),"
+          + "passport_hash=COALESCE(?,passport_hash),passport_ciphertext=COALESCE(?,passport_ciphertext),birth_date=?,blood_group_code=?,"
               + "nationality_code=?,phone=?,email=?,address_text=?,customer_group_code=?,"
               + "referral_channel_code=?,insurance_company_code=?,updated_at=now()"
               + " WHERE id=? AND deleted_at IS NULL",
@@ -229,7 +233,9 @@ public class PatientService {
           blankToNull(r.nickname()),
           r.genderCode(),
           sha256(r.nationalId()),
+          pii.encrypt(r.nationalId()),
           sha256(r.passportNo()),
+          pii.encrypt(r.passportNo()),
           r.birthDate(),
           blankToNull(r.bloodGroupCode()),
           blankToNull(r.nationalityCode()),
@@ -244,6 +250,14 @@ public class PatientService {
       throw new IllegalArgumentException("A patient with this national ID is already registered");
     }
     return get(id, authentication);
+  }
+
+  private Map<String, Object> decode(Map<String, Object> row) {
+    String nationalId = pii.decrypt((String) row.remove("national_id_ciphertext"));
+    String passport = pii.decrypt((String) row.remove("passport_ciphertext"));
+    row.put("national_id", nationalId);
+    row.put("passport_no", passport);
+    return row;
   }
 
   /**
