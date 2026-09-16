@@ -5,7 +5,7 @@ import Link from "next/link";
 import { CalendarDays, Clock, DoorOpen, Droplet, MapPin, Phone, UserRound } from "lucide-react";
 import type { Appointment, Patient } from "@/types";
 import { useClinicStore } from "@/lib/store/clinic-store";
-import { getPatientFullNameEn, getPatientFullNameTh, remainingSessions } from "@/lib/domain";
+import { getPatientFullNameTh, remainingSessions } from "@/lib/domain";
 import { calcAge, formatDate } from "@/lib/format";
 import { toast } from "sonner";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -173,7 +173,7 @@ export function PhysioAppointmentList({ list, showDate }: { list: Appointment[];
                   <div>
                     <SheetTitle>{getPatientFullNameTh(selectedPatient)}</SheetTitle>
                     <SheetDescription>
-                      {getPatientFullNameEn(selectedPatient)} · {calcAge(selectedPatient.dob)} yrs ·{" "}
+                      {calcAge(selectedPatient.dob)} yrs ·{" "}
                       {selectedPatient.gender === "MALE" ? "Male" : selectedPatient.gender === "FEMALE" ? "Female" : "Other"}
                     </SheetDescription>
                   </div>

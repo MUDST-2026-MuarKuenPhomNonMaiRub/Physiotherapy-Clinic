@@ -8,7 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getMasterDataByCategory, fieldRules, fieldInput } from "@/lib/domain";
+import { getMasterDataByCategory, fieldRules, fieldInput, getPatientTitle, patientTitles } from "@/lib/domain";
 import type { CustomerType, Gender } from "@/types";
 import { PageHeader } from "@/components/shared/page-header";
 import { Forbidden } from "@/components/shared/forbidden";
@@ -68,7 +68,7 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
 
   const [form, setForm] = useState<FormState>({
     customerType: patient.customerType,
-    titleTh: patient.titleTh,
+    titleTh: patient.customerType === "FOREIGNER" ? getPatientTitle(patient) : patient.titleTh,
     firstNameTh: patient.firstNameTh,
     lastNameTh: patient.lastNameTh,
     firstNameEn: patient.firstNameEn,
@@ -195,7 +195,10 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
               <Label>Customer Type</Label>
               <RadioGroup
                 value={form.customerType}
-                onValueChange={(v) => update("customerType", v as CustomerType)}
+                onValueChange={(v) => {
+                  const customerType = v as CustomerType;
+                  setForm((f) => ({ ...f, customerType, titleTh: customerType === "THAI" ? "นาย" : "Mr." }));
+                }}
                 className="flex gap-4"
               >
                 <label className="flex items-center gap-2 text-sm">
@@ -209,13 +212,13 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
               <div className="space-y-1.5">
-                <Label>Title</Label>
+                <Label>Title ({form.customerType === "THAI" ? "TH" : "EN"})</Label>
                 <Select value={form.titleTh} onValueChange={(v) => update("titleTh", v)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="นาย">นาย (Mr.)</SelectItem>
-                    <SelectItem value="นาง">นาง (Mrs.)</SelectItem>
-                    <SelectItem value="นางสาว">นางสาว (Ms.)</SelectItem>
+                    {(form.customerType === "THAI" ? patientTitles.thai : patientTitles.foreigner).map((title) => (
+                      <SelectItem key={title.value} value={title.value}>{title.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

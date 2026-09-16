@@ -125,7 +125,32 @@ export const fieldInput = {
 
 // -------------------------------------------------------------------- patients
 
+export const patientTitles = {
+  thai: [
+    { value: "นาย", label: "นาย" },
+    { value: "นาง", label: "นาง" },
+    { value: "นางสาว", label: "นางสาว" },
+  ],
+  foreigner: [
+    { value: "Mr.", label: "Mr." },
+    { value: "Mrs.", label: "Mrs." },
+    { value: "Ms.", label: "Ms." },
+    { value: "Dr.", label: "Dr." },
+  ],
+} as const;
+
+export function getPatientTitle(patient: Patient): string {
+  if (patient.customerType === "FOREIGNER") {
+    return ({ นาย: "Mr.", นาง: "Mrs.", นางสาว: "Ms." } as Record<string, string>)[patient.titleTh] ?? patient.titleTh;
+  }
+  return patient.titleTh;
+}
+
+/** The primary patient name shown throughout the app, in the patient's language. */
 export function getPatientFullNameTh(patient: Patient): string {
+  if (patient.customerType === "FOREIGNER") {
+    return `${getPatientTitle(patient)} ${patient.firstNameEn || patient.firstNameTh} ${patient.lastNameEn || patient.lastNameTh}`.trim();
+  }
   return `${patient.titleTh}${patient.firstNameTh} ${patient.lastNameTh}`.trim();
 }
 

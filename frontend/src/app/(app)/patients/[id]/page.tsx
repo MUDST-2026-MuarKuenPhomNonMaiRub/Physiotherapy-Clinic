@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getPatientFullNameEn, getPatientFullNameTh } from "@/lib/domain";
+import { getPatientFullNameTh } from "@/lib/domain";
 import { calcAge, formatCurrency, formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
 import { remainingSessions } from "@/lib/domain";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -73,7 +73,6 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
               <h1 className="text-xl font-semibold text-foreground">{getPatientFullNameTh(patient)}</h1>
               <Badge variant="outline" className="font-mono text-xs">{patient.hn}</Badge>
             </div>
-            <p className="text-sm text-muted-foreground">{getPatientFullNameEn(patient)}</p>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span>{patient.gender === "MALE" ? "Male" : patient.gender === "FEMALE" ? "Female" : "Other"} · {age} yrs</span>
               <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{formatPhone(patient.phone)}</span>
@@ -119,8 +118,10 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
           <div className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Personal Information</h3>
             <dl className="space-y-2.5 text-sm">
-              <Row label="Title / Name (TH)" value={`${patient.titleTh}${patient.firstNameTh} ${patient.lastNameTh}`} />
-              <Row label="Name (EN)" value={getPatientFullNameEn(patient)} />
+              <Row
+                label={patient.customerType === "THAI" ? "Title / Name (TH)" : "Title / Name (EN)"}
+                value={getPatientFullNameTh(patient)}
+              />
               <Row label="Nickname" value={patient.nickname} />
               <Row label="Date of Birth" value={`${formatDate(patient.dob)} (${age} yrs)`} />
               <Row label="Blood Group" value={patient.bloodGroup} />

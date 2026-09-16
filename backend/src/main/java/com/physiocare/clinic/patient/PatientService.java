@@ -141,8 +141,8 @@ public class PatientService {
               r.genderCode(),
               sha256(r.nationalId()),
               pii.encrypt(r.nationalId()),
-              sha256(r.passportNo()),
-              pii.encrypt(r.passportNo()),
+              sha256(normalizePassport(r.passportNo())),
+              pii.encrypt(normalizePassport(r.passportNo())),
               r.birthDate(),
               blankToNull(r.bloodGroupCode()),
               blankToNull(r.nationalityCode()),
@@ -155,7 +155,7 @@ public class PatientService {
               currentUser.id(authentication));
       return decode(db.queryForMap("SELECT " + COLUMNS + " FROM patients WHERE id=?", id));
     } catch (DuplicateKeyException e) {
-      throw new IllegalArgumentException("A patient with this national ID is already registered");
+      throw duplicatePatient(e);
     }
   }
 
@@ -234,8 +234,8 @@ public class PatientService {
           r.genderCode(),
           sha256(r.nationalId()),
           pii.encrypt(r.nationalId()),
-          sha256(r.passportNo()),
-          pii.encrypt(r.passportNo()),
+          sha256(normalizePassport(r.passportNo())),
+          pii.encrypt(normalizePassport(r.passportNo())),
           r.birthDate(),
           blankToNull(r.bloodGroupCode()),
           blankToNull(r.nationalityCode()),
@@ -247,7 +247,7 @@ public class PatientService {
           blankToNull(r.insuranceCompanyCode()),
           id);
     } catch (DuplicateKeyException e) {
-      throw new IllegalArgumentException("A patient with this national ID is already registered");
+      throw duplicatePatient(e);
     }
     return get(id, authentication);
   }
@@ -331,6 +331,18 @@ public class PatientService {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException("SHA-256 is unavailable", e);
     }
+  }
+
+  private static String normalizePassport(String value) {
+    return value == null || value.isBlank() ? null : value.trim().toUpperCase(java.util.Locale.ROOT);
+  }
+
+  private static IllegalArgumentException duplicatePatient(DuplicateKeyException e) {
+    String detail = e.getMostSpecificCause().getMessage();
+    return new IllegalArgumentException(
+        detail != null && detail.contains("uq_patient_passport_hash")
+            ? "A patient with this passport number is already registered"
+            : "A patient with this national ID is already registered");
   }
 
   private static String blankToNull(String value) {

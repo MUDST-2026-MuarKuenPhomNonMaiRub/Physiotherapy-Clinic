@@ -8,7 +8,7 @@ import { ArrowLeft, CalendarPlus, CheckCircle2, Fingerprint, Tags, User, UserRou
 import type { LucideIcon } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getMasterDataByCategory, fieldInput } from "@/lib/domain";
+import { getMasterDataByCategory, fieldInput, getPatientFullNameTh, patientTitles } from "@/lib/domain";
 import { fieldRules } from "@/lib/domain";
 import { previewPatientHN } from "@/lib/api/clinic-api";
 import type { CustomerType, Gender, Patient } from "@/types";
@@ -191,8 +191,7 @@ export default function NewPatientPage() {
         </div>
         <p className="text-lg font-semibold text-foreground">Patient Registered Successfully</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {created.titleTh}
-          {created.firstNameTh} {created.lastNameTh} has been added to the system.
+          {getPatientFullNameTh(created)} has been added to the system.
         </p>
         <div className="mt-5 rounded-xl border border-border bg-card px-6 py-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Hospital Number (HN)</p>
@@ -253,6 +252,7 @@ export default function NewPatientPage() {
                   setForm((f) => ({
                     ...f,
                     customerType,
+                    titleTh: customerType === "THAI" ? "นาย" : "Mr.",
                     nationality: customerType === "THAI" ? "Thai" : f.nationality === "Thai" ? "" : f.nationality,
                   }));
                 }}
@@ -269,13 +269,13 @@ export default function NewPatientPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
               <div className="space-y-1.5">
-                <Label>Title</Label>
+                <Label>Title ({form.customerType === "THAI" ? "TH" : "EN"})</Label>
                 <Select value={form.titleTh} onValueChange={(v) => update("titleTh", v)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="นาย">นาย (Mr.)</SelectItem>
-                    <SelectItem value="นาง">นาง (Mrs.)</SelectItem>
-                    <SelectItem value="นางสาว">นางสาว (Ms.)</SelectItem>
+                    {(form.customerType === "THAI" ? patientTitles.thai : patientTitles.foreigner).map((title) => (
+                      <SelectItem key={title.value} value={title.value}>{title.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

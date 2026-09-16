@@ -8,7 +8,7 @@ import type { Patient } from "@/types";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { getPatientFullNameEn, getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
 import { formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageLoading } from "@/components/shared/page-loading";
@@ -190,7 +190,6 @@ function PatientsPageContent() {
                           </span>
                           <div>
                             <p className="text-sm font-medium text-foreground hover:underline">{getPatientFullNameTh(p)}</p>
-                            <p className="text-xs text-muted-foreground">{getPatientFullNameEn(p)}</p>
                           </div>
                         </div>
                       </TableCell>
