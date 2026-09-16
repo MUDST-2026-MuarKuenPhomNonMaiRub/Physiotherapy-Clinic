@@ -1,5 +1,6 @@
 package com.physiocare.clinic.commission;
 
+import com.physiocare.clinic.auth.PermissionGuard;
 import com.physiocare.clinic.common.CurrentUser;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -18,10 +19,12 @@ import org.springframework.stereotype.Service;
 public class CommissionQueryService {
   private final JdbcTemplate db;
   private final CurrentUser currentUser;
+  private final PermissionGuard guard;
 
-  public CommissionQueryService(JdbcTemplate db, CurrentUser currentUser) {
+  public CommissionQueryService(JdbcTemplate db, CurrentUser currentUser, PermissionGuard guard) {
     this.db = db;
     this.currentUser = currentUser;
+    this.guard = guard;
   }
 
   public record ReportRow(
@@ -47,7 +50,7 @@ public class CommissionQueryService {
             + " JOIN patient_courses pc ON pc.id=ca.patient_course_id"
             + " LEFT JOIN course_usages cu ON cu.id=ca.course_usage_id"
             + " LEFT JOIN sales_transactions st ON st.id=cu.sales_transaction_id"
-            + " WHERE ca.allocation_status='ALLOCATED' AND ca.visit_date BETWEEN ? AND ?"
+            + " WHERE ca.visit_date BETWEEN ? AND ?"
             + " AND (?::bigint IS NULL OR pc.branch_id=?))"
             + " SELECT id,patient_course_id,course_id,package_name_snapshot,visit_date,allocation_status,"
             + "case_owner_employee_id,treating_employee_id,owner_net_commission,treatment_fee_amount,"
@@ -71,24 +74,40 @@ public class CommissionQueryService {
         staffFilter);
   }
 
+  /**
+   * Figures are append-only: every allocation counts in the month of its
+   * visit whatever later happened to it, and a reversal shows up as a signed
+   * adjustment in the month it was booked. Re-running an earlier month never
+   * changes its total, and a void in a later month appears there as the
+   * clawback it is — the two together net to zero, never to minus one.
+   * Sale-month figures (sales, generated, outstanding) are keyed by the
+   * first of the month, so the range is widened to whole months.
+   */
   public List<ReportRow> report(LocalDate from, LocalDate to, Long requestedStaffId, Authentication auth) {
     Long staffFilter = effectiveStaffFilter(requestedStaffId, auth);
+    LocalDate fromMonth = from.withDayOfMonth(1);
+    LocalDate toMonth = to.withDayOfMonth(1);
     List<Map<String, Object>> rows =
         db.queryForList(
             "WITH owner AS ("
                 + "  SELECT case_owner_employee_id AS staff_id, sum(gross_commission_allocation) AS"
                 + "  gross, sum(owner_net_commission) AS owner_net FROM commission_allocations WHERE"
-                + "  allocation_status='ALLOCATED' AND visit_date BETWEEN ? AND ? GROUP BY"
-                + "  case_owner_employee_id"
+                + "  visit_date BETWEEN ? AND ? GROUP BY case_owner_employee_id"
                 + " ), treating AS ("
                 + "  SELECT treating_employee_id AS staff_id, sum(treatment_fee_amount) AS fee FROM"
-                + "  commission_allocations WHERE allocation_status='ALLOCATED' AND visit_date"
-                + "  BETWEEN ? AND ? GROUP BY treating_employee_id"
+                + "  commission_allocations WHERE visit_date BETWEEN ? AND ?"
+                + "  GROUP BY treating_employee_id"
                 + " ), adj AS ("
-                + "  SELECT pc.case_owner_employee_id AS staff_id, sum(a.owner_net_amount) AS"
-                + "  adjustment FROM commission_adjustments a JOIN patient_courses pc ON"
-                + "  pc.id=a.patient_course_id WHERE a.created_at::date BETWEEN ? AND ? GROUP BY"
-                + "  pc.case_owner_employee_id"
+                + "  SELECT staff_id, sum(amount) AS adjustment FROM ("
+                + "    SELECT pc.case_owner_employee_id AS staff_id, a.owner_net_amount AS amount"
+                + "    FROM commission_adjustments a JOIN patient_courses pc ON pc.id=a.patient_course_id"
+                + "    WHERE a.created_at::date BETWEEN ? AND ?"
+                + "    UNION ALL"
+                + "    SELECT ca.treating_employee_id, a.treatment_fee_amount"
+                + "    FROM commission_adjustments a JOIN commission_allocations ca"
+                + "    ON ca.id=a.commission_allocation_id"
+                + "    WHERE a.created_at::date BETWEEN ? AND ? AND a.treatment_fee_amount<>0"
+                + "  ) x GROUP BY staff_id"
                 + " ), sales AS ("
                 + "  SELECT seller_employee_id AS staff_id, sum(net_course_sale_amount) AS"
                 + "  monthly_sales, sum(total_course_commission_pool) AS generated FROM"
@@ -119,7 +138,8 @@ public class CommissionQueryService {
                 + "        treating.staff_id IS NOT NULL OR adj.staff_id IS NOT NULL OR"
                 + "        outstanding.staff_id IS NOT NULL)"
                 + " ORDER BY s.name",
-            from, to, from, to, from, to, from, to, from, to, staffFilter, staffFilter);
+            from, to, from, to, from, to, from, to, fromMonth, toMonth, fromMonth, toMonth,
+            staffFilter, staffFilter);
 
     return rows.stream()
         .map(
@@ -194,9 +214,13 @@ public class CommissionQueryService {
         from, to, allowedStaff, allowedStaff, from.withDayOfMonth(1), to.withDayOfMonth(1));
   }
 
+  /** Clinic-wide reads belong to whoever holds commission.view.all; everyone else reads their own row. */
+  private boolean seesEveryone(Authentication auth) {
+    return currentUser.isAdmin(auth) || guard.hasAny(auth, "commission.view.all");
+  }
+
   private Long effectiveStaffFilter(Long requested, Authentication auth) {
-    boolean privileged = currentUser.isAdmin(auth) || hasRole(auth, "FINANCE");
-    if (privileged) return requested;
+    if (seesEveryone(auth)) return requested;
     Long ownStaffId = currentUser.staffId(auth);
     if (ownStaffId == null)
       throw new IllegalArgumentException("This account has no staff profile to report on");
@@ -204,15 +228,10 @@ public class CommissionQueryService {
   }
 
   private void requireOwnRecordOrPrivileged(Number caseOwnerId, Authentication auth) {
-    boolean privileged = currentUser.isAdmin(auth) || hasRole(auth, "FINANCE") || hasRole(auth, "RECEPTIONIST");
-    if (privileged) return;
+    if (seesEveryone(auth)) return;
     Long ownStaffId = currentUser.staffId(auth);
     if (caseOwnerId == null || ownStaffId == null || caseOwnerId.longValue() != ownStaffId)
       throw new IllegalArgumentException("Not authorized to view this course's commission detail");
   }
 
-  private boolean hasRole(Authentication auth, String role) {
-    return auth != null
-        && auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
-  }
 }

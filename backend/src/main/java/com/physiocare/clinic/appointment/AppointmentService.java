@@ -91,11 +91,17 @@ public class AppointmentService {
       case "noshow" -> "NO_SHOW";
       default -> throw new IllegalArgumentException("Invalid appointment action");
     };
-    transitionTo(id, status, body == null ? null : body.reason(), auth);
+    transitionTo(id, status, body == null ? null : body.reason(),
+        body == null ? null : body.usePatientCourseId(), auth);
     return get(id, auth);
   }
 
   private void transitionTo(long id, String status, String reason, Authentication auth) {
+    transitionTo(id, status, reason, null, auth);
+  }
+
+  private void transitionTo(
+      long id, String status, String reason, Long usePatientCourseId, Authentication auth) {
     Map<String, Object> current = appointments.lockForUpdate(id);
     branches.requireAccess(auth, ((Number) current.get("branch_id")).longValue());
     String from = (String) current.get("status");
@@ -106,16 +112,27 @@ public class AppointmentService {
     appointments.addEvent(id, from, status, reason, currentUser.id(auth));
     if ("COMPLETED".equals(status)) {
       appointments.createCompletedVisit(id);
-      recordAppointmentCourseUsage(id, auth);
+      if (usePatientCourseId != null) recordAppointmentCourseUsage(id, usePatientCourseId, auth);
     }
   }
 
-  private void recordAppointmentCourseUsage(long appointmentId, Authentication auth) {
+  /**
+   * Spends one session from the course the caller chose. The choice is
+   * explicit because a patient may hold a course for a different treatment
+   * than the one booked, or may simply be paying this visit per visit; the
+   * server only checks that the named course is one the patient can spend
+   * from right now (active, not expired, sessions left on their balance).
+   */
+  private void recordAppointmentCourseUsage(
+      long appointmentId, long patientCourseId, Authentication auth) {
     Map<String, Object> appointment = appointments.get(appointmentId);
-    List<Long> courseIds = appointments.findEligibleCourseIds(((Number) appointment.get("patient_id")).longValue());
-    if (courseIds.isEmpty()) return;
-    courseUsage.recordAppointmentUsage(courseIds.get(0),
-        ((Number) appointment.get("patient_id")).longValue(), 1,
+    long patientId = ((Number) appointment.get("patient_id")).longValue();
+    List<Long> eligible = appointments.findEligibleCourseIds(patientId);
+    if (!eligible.contains(patientCourseId))
+      throw new IllegalArgumentException(
+          "That course cannot be used for this visit: it is not active for this patient or has no"
+              + " sessions left");
+    courseUsage.recordAppointmentUsage(patientCourseId, patientId, 1,
         ((Number) appointment.get("branch_id")).longValue(), appointmentId,
         ((Number) appointment.get("provider_staff_id")).longValue(), currentUser.displayName(auth),
         currentUser.id(auth), LocalDate.now());

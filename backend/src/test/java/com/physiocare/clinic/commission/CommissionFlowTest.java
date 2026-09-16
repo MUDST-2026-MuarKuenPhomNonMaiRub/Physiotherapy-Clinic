@@ -32,6 +32,7 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
   @Autowired private TreatmentFeeResolver feeResolver;
   @Autowired private CommissionQueryService commissionQueries;
   @Autowired private CheckoutService checkout;
+  @Autowired private CommissionSettingsService settings;
   @Autowired private CourseTransferController transfers;
 
   @Autowired private ReportService legacyReports;
@@ -518,7 +519,12 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     assertThat(((Number) provisional.get("seller_employee_id")).longValue()).isEqualTo(seller);
     assertThat(((Number) provisional.get("case_owner_employee_id")).longValue()).isEqualTo(seller);
 
-    assertThat(closing.close(YearMonth.now(), seedActorUserId())).isEqualTo(1);
+    // The counter dates the sale today; a month can only be closed once it
+    // is over, so the sale is moved back a month before closing it.
+    YearMonth lastMonth = YearMonth.now().minusMonths(1);
+    db.update("UPDATE patient_courses SET sale_date=?, sale_month=? WHERE id=?",
+        lastMonth.atDay(1), lastMonth.atDay(1), patientCourse);
+    assertThat(closing.close(lastMonth, seedActorUserId())).isEqualTo(1);
     Map<String, Object> locked = db.queryForMap(
         "SELECT commission_status,locked_commission_rate FROM patient_courses WHERE id=?", patientCourse);
     assertThat(locked.get("commission_status")).isEqualTo("LOCKED");
@@ -536,7 +542,18 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     long cash = db.queryForObject("SELECT id FROM payment_methods WHERE code='CASH'", Long.class);
     seedCourse(seller, seller, patient, new BigDecimal("10000"), 10, LocalDate.now());
     YearMonth month = YearMonth.now();
-    assertThat(closing.close(month, seedActorUserId())).isEqualTo(1);
+    // The running month cannot be closed through the service; the closing
+    // row is written directly to represent a month somebody closed early.
+    assertThatThrownBy(() -> closing.close(month, seedActorUserId()))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("ended");
+    long schemeId = db.queryForObject(
+        "SELECT id FROM commission_schemes WHERE code='T_CLOSED_MONTH'", Long.class);
+    db.update(
+        "INSERT INTO monthly_commission_closings(closing_month,employee_id,monthly_course_sales,"
+            + "scheme_id,commission_scheme_version,calculated_commission_rate,locked_commission_rate,"
+            + "status,closed_at) VALUES(?,?,10000,?,1,0.07,0.07,'CLOSED',now())",
+        month.atDay(1), seller, schemeId);
 
     assertThatThrownBy(() -> checkout.checkout(
         new CheckoutDtos.CheckoutRequest(
@@ -608,6 +625,161 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
     assertThat(rows).hasSize(1);
     assertThat(rows.get(0).get("commission_type")).isEqualTo("COURSE_OWNER");
     assertThat((BigDecimal) rows.get(0).get("commission_amount")).isEqualByComparingTo("70.00");
+  }
+
+  // ---- Case 7/8: whole-baht tier table saves; overlap and real gaps do not ----
+  @Test
+  void wholeBahtTierRangesSaveAndResolveWithoutASilentZeroRate() {
+    SecurityContextHolder.getContext().setAuthentication(adminAuthentication());
+    try {
+      String code = "T_WHOLE_BAHT_" + nextId();
+      // The requirement's default table, entered exactly as it is written.
+      settings.create(new CommissionSettingsService.Scheme(code, LocalDate.of(2020, 1, 1), null, List.of(
+          new CommissionSettingsService.Tier(1, new BigDecimal("0"), new BigDecimal("59999"), new BigDecimal("0.05")),
+          new CommissionSettingsService.Tier(2, new BigDecimal("60000"), new BigDecimal("69999"), new BigDecimal("0.06")),
+          new CommissionSettingsService.Tier(3, new BigDecimal("70000"), null, new BigDecimal("0.07")))),
+          adminAuthentication());
+
+      assertThatThrownBy(() -> settings.create(new CommissionSettingsService.Scheme(code + "_OVERLAP", LocalDate.of(2020, 1, 1), null, List.of(
+          new CommissionSettingsService.Tier(1, new BigDecimal("0"), new BigDecimal("59999"), new BigDecimal("0.05")),
+          new CommissionSettingsService.Tier(2, new BigDecimal("50000"), null, new BigDecimal("0.07")))),
+          adminAuthentication()))
+          .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("overlap");
+      assertThatThrownBy(() -> settings.create(new CommissionSettingsService.Scheme(code + "_GAP", LocalDate.of(2020, 1, 1), null, List.of(
+          new CommissionSettingsService.Tier(1, new BigDecimal("0"), new BigDecimal("59999"), new BigDecimal("0.05")),
+          new CommissionSettingsService.Tier(2, new BigDecimal("70000"), null, new BigDecimal("0.07")))),
+          adminAuthentication()))
+          .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("gap");
+
+      // Make the whole-baht scheme the one the close resolves (highest version wins).
+      db.update("UPDATE commission_schemes SET version=99 WHERE code=?", code);
+      long seller = seedStaff("Whole Baht Seller");
+      long patient = seedPatient("Whole Baht Patient");
+      // 59,999.50 falls in the sub-baht sliver between two tiers: still 5%, never 0%.
+      seedCourse(seller, seller, patient, new BigDecimal("59999.50"), 10, LocalDate.of(2026, 7, 1));
+      closing.close(YearMonth.of(2026, 7), null);
+      assertThat(db.queryForObject(
+          "SELECT locked_commission_rate FROM monthly_commission_closings WHERE employee_id=? AND closing_month=?",
+          BigDecimal.class, seller, LocalDate.of(2026, 7, 1))).isEqualByComparingTo("0.05");
+    } finally {
+      SecurityContextHolder.clearContext();
+    }
+  }
+
+  @Test
+  void closingRefusesAMonthNoTierCovers() {
+    String code = "T_NO_TIER_" + nextId();
+    long schemeId = db.queryForObject(
+        "INSERT INTO commission_schemes(code,version,effective_from) VALUES(?,99,'2020-01-01') RETURNING id",
+        Long.class, code);
+    // A tier table that only starts at 100,000: a seller below it has no rate.
+    db.update("INSERT INTO commission_tiers(scheme_id,tier_order,minimum_monthly_sales,maximum_monthly_sales,commission_rate)"
+        + " VALUES(?,1,100000,NULL,0.10)", schemeId);
+    long seller = seedStaff("Uncovered Seller");
+    long patient = seedPatient("Uncovered Patient");
+    seedCourse(seller, seller, patient, new BigDecimal("10000"), 10, LocalDate.of(2026, 6, 1));
+    assertThat(closing.preview(YearMonth.of(2026, 6)).stream()
+        .filter(row -> row.employeeId() == seller).findFirst().orElseThrow().suggestedRate()).isNull();
+    assertThatThrownBy(() -> closing.close(YearMonth.of(2026, 6), null))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("No commission tier");
+    assertThat(db.queryForObject(
+        "SELECT commission_status FROM patient_courses WHERE seller_employee_id=?", String.class, seller))
+        .isEqualTo("PROVISIONAL");
+  }
+
+  // ---- Void of a sold course after its month closed: pool written down, audited, unusable ----
+  @Test
+  void voidingASoldCourseAfterCloseWritesDownThePoolAndBlocksFurtherUse() {
+    long seller = seedStaff("Void After Close Seller");
+    long patient = seedPatient("Void After Close Patient");
+    long branch = activeBranchId();
+    seedFlatScheme("T_VOID_AFTER_CLOSE", new BigDecimal("0.07"), null);
+    long courseTemplate = db.queryForObject("SELECT id FROM courses LIMIT 1", Long.class);
+    BigDecimal price = db.queryForObject("SELECT price FROM courses WHERE id=?", BigDecimal.class, courseTemplate);
+    long cash = db.queryForObject("SELECT id FROM payment_methods WHERE code='CASH'", Long.class);
+
+    CheckoutDtos.TransactionView sale = checkout.checkout(
+        new CheckoutDtos.CheckoutRequest(
+            patient, branch, null, null, courseTemplate, null, null, false, seller, seller, cash,
+            null, price, null, null, List.of()),
+        adminAuthentication());
+    long course = sale.patientCourseId();
+    YearMonth lastMonth = YearMonth.now().minusMonths(1);
+    db.update("UPDATE patient_courses SET sale_date=?, sale_month=? WHERE id=?",
+        lastMonth.atDay(1), lastMonth.atDay(1), course);
+    closing.close(lastMonth, seedActorUserId());
+    BigDecimal pool = db.queryForObject(
+        "SELECT total_course_commission_pool FROM patient_courses WHERE id=?", BigDecimal.class, course);
+    assertThat(pool).isPositive();
+
+    checkout.voidTransaction(sale.id(), "Customer changed their mind", adminAuthentication());
+
+    Map<String, Object> after = db.queryForMap(
+        "SELECT status,commission_status,total_course_commission_pool FROM patient_courses WHERE id=?", course);
+    assertThat(after.get("status")).isEqualTo("REFUNDED");
+    assertThat(after.get("commission_status")).isEqualTo("CANCELLED");
+    assertThat((BigDecimal) after.get("total_course_commission_pool")).isEqualByComparingTo("0");
+    assertThat(db.queryForObject(
+        "SELECT gross_amount FROM commission_adjustments WHERE patient_course_id=? AND adjustment_type='REFUND_POOL_REDUCTION'",
+        BigDecimal.class, course)).isEqualByComparingTo(pool.negate());
+    assertThat(db.queryForObject(
+        "SELECT count(*) FROM audit_logs WHERE entity_type='patient_courses' AND entity_id=? AND action='COURSE_SALE_VOIDED_AFTER_CLOSE'",
+        Long.class, String.valueOf(course))).isEqualTo(1);
+    // The owner's spendable balance follows the sessions taken back, and the
+    // course itself refuses further use.
+    assertThat(db.queryForObject(
+        "SELECT allocated_visits FROM course_member_balances WHERE patient_course_id=? AND patient_id=?",
+        Integer.class, course, patient)).isZero();
+    assertThatThrownBy(() -> use(course, patient, 1, LocalDate.now(), seller))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("refunded");
+  }
+
+  @Test
+  void usageIsRefusedOnAnExpiredCourse() {
+    long seller = seedStaff("Expired Seller");
+    long patient = seedPatient("Expired Patient");
+    long course = seedCourse(seller, seller, patient, new BigDecimal("10000"), 10, LocalDate.of(2026, 1, 1));
+    db.update("UPDATE patient_courses SET valid_until='2026-06-30' WHERE id=?", course);
+    assertThatThrownBy(() -> use(course, patient, 1, LocalDate.of(2026, 7, 1), seller))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("expired");
+    assertThatCode(() -> use(course, patient, 1, LocalDate.of(2026, 6, 30), seller)).doesNotThrowAnyException();
+  }
+
+  // ---- A reversed allocation counts once, as a signed adjustment, never twice ----
+  @Test
+  void voidedAllocationIsNotDoubleCountedInTheCourseCommissionReport() {
+    long owner = seedStaff("Report Void Owner");
+    long patient = seedPatient("Report Void Patient");
+    seedFlatScheme("T_REPORT_VOID", new BigDecimal("0.07"), null);
+    long course = seedCourse(owner, owner, patient, new BigDecimal("10000"), 10, LocalDate.of(2026, 5, 1));
+    closing.close(YearMonth.of(2026, 5), null);
+    long usageId = use(course, patient, 1, LocalDate.of(2026, 5, 10), owner);
+    long ledgerEntryId = db.queryForObject(
+        "SELECT course_ledger_entry_id FROM course_usages WHERE id=?", Long.class, usageId);
+    adjustments.reverseUsageForLedgerEntry(ledgerEntryId, seedActorUserId(), "keyed twice");
+
+    // The visit month keeps what was released then; the clawback is booked
+    // in the month the reversal happened. Across both they net to zero —
+    // the old query subtracted the reversal twice and showed -70.
+    CommissionQueryService.ReportRow visitMonth = commissionQueries.report(
+            LocalDate.of(2026, 5, 1), LocalDate.of(2026, 5, 31), owner, adminAuthentication())
+        .stream().filter(r -> r.staffId() == owner).findFirst().orElseThrow();
+    assertThat(visitMonth.ownerNetReleased()).isEqualByComparingTo("70.00");
+    assertThat(visitMonth.adjustments()).isEqualByComparingTo("0");
+    assertThat(visitMonth.totalVariablePay()).isEqualByComparingTo("70.00");
+
+    LocalDate today = LocalDate.now();
+    CommissionQueryService.ReportRow reversalMonth = commissionQueries.report(
+            today.withDayOfMonth(1), today, owner, adminAuthentication())
+        .stream().filter(r -> r.staffId() == owner).findFirst().orElseThrow();
+    assertThat(reversalMonth.adjustments()).isEqualByComparingTo("-70.00");
+
+    {
+      CommissionQueryService.ReportRow whole = commissionQueries.report(
+              LocalDate.of(2026, 5, 1), today, owner, adminAuthentication())
+          .stream().filter(r -> r.staffId() == owner).findFirst().orElseThrow();
+      assertThat(whole.totalVariablePay()).isEqualByComparingTo("0");
+    }
   }
 
   private Authentication adminAuthentication() {

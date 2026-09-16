@@ -50,6 +50,14 @@ public class CommissionSettingsService {
   public Object create(@Valid Scheme r, Authentication authentication) {
     List<Tier> tiers = new ArrayList<>(r.tiers());
     tiers.sort(Comparator.comparing(Tier::min));
+    // Ranges are inclusive on both ends. Tiers are entered in whole baht
+    // ("0 - 59,999", "60,000 - 69,999"), so the next tier may start anywhere
+    // within one baht above the previous maximum; a sale that lands in that
+    // sub-baht sliver is still resolved by resolveTierRate, which takes the
+    // highest tier whose minimum is at or below the sale. Anything wider than
+    // one baht is a real gap the administrator did not intend.
+    if (tiers.get(0).min().signum() != 0)
+      throw new IllegalArgumentException("The first tier must start at 0");
     for (int i = 0; i < tiers.size(); i++) {
       Tier a = tiers.get(i);
       if (a.max() != null && a.max().compareTo(a.min()) < 0)
@@ -58,12 +66,15 @@ public class CommissionSettingsService {
         throw new IllegalArgumentException("An unlimited tier must be the final tier");
       if (i > 0) {
         Tier p = tiers.get(i - 1);
-        if (p.max() == null || p.max().add(BigDecimal.valueOf(.01)).compareTo(a.min()) > 0)
+        if (p.max() == null || a.min().compareTo(p.max()) <= 0)
           throw new IllegalArgumentException("Tier ranges overlap or are invalid");
-        if (p.max().add(BigDecimal.valueOf(.01)).compareTo(a.min()) != 0)
+        if (a.min().subtract(p.max()).compareTo(BigDecimal.ONE) > 0)
           throw new IllegalArgumentException("Tier ranges contain an unintended gap");
       }
     }
+    java.util.Set<Integer> orders = new java.util.HashSet<>();
+    for (Tier t : tiers)
+      if (!orders.add(t.order())) throw new IllegalArgumentException("Tier order values must be unique");
     Integer version =
         db.queryForObject(
             "SELECT COALESCE(max(version),0)+1 FROM commission_schemes WHERE code=?",

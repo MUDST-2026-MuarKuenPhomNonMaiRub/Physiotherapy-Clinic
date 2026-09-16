@@ -520,7 +520,7 @@ export const getCommissionLedgerRecords = (
         ruleId: String(row.patient_course_id),
         ruleName: "Course Commission",
         amount: Number(row.commission_amount ?? 0),
-        reversed: false,
+        reversed: row.allocation_status === "REVERSED",
       }))
       .filter((row) => row.amount !== 0)
   );
@@ -689,10 +689,23 @@ export const createAppointment = (input: AppointmentInput) =>
 
 type AppointmentAction = "confirm" | "arrive" | "start" | "complete" | "cancel" | "noshow";
 
-export const transitionAppointment = (id: string, action: AppointmentAction, reason?: string) =>
+/**
+ * `usePatientCourseId` is only meaningful for "complete": the course the visit
+ * is charged against. Left out, the visit is paid per visit at checkout and
+ * nothing is deducted from any course.
+ */
+export const transitionAppointment = (
+  id: string,
+  action: AppointmentAction,
+  reason?: string,
+  usePatientCourseId?: string
+) =>
   apiRequest<Row>(`/api/v1/appointments/${id}/${action}`, {
     method: "POST",
-    body: { reason: reason ?? null },
+    body: {
+      reason: reason ?? null,
+      usePatientCourseId: usePatientCourseId ? Number(usePatientCourseId) : null,
+    },
   }).then(toAppointment);
 
 export const rescheduleAppointment = (
@@ -780,6 +793,8 @@ export interface CheckoutInput {
   useNewlyPurchasedSession?: boolean;
   treatingStaffId?: string;
   salespersonId?: string;
+  /** Owner of the course's commission pool; defaults to the salesperson when omitted. */
+  caseOwnerEmployeeId?: string;
   paymentMethodId: string;
   /** Cash handed over at the counter. Only meaningful when paying by cash. */
   cashReceived?: number;
@@ -806,6 +821,7 @@ export const checkout = (input: CheckoutInput): Promise<Transaction> =>
       useNewlyPurchasedSession: input.useNewlyPurchasedSession ?? false,
       treatingStaffId: input.treatingStaffId ? Number(input.treatingStaffId) : null,
       salespersonId: input.salespersonId ? Number(input.salespersonId) : null,
+      caseOwnerEmployeeId: input.caseOwnerEmployeeId ? Number(input.caseOwnerEmployeeId) : null,
       paymentMethodId: Number(input.paymentMethodId),
       cashReceived: input.cashReceived ?? null,
       servicePrice: input.servicePrice ?? null,

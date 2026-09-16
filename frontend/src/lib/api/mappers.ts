@@ -450,8 +450,8 @@ export function toClosingPreviewRow(row: Row): ClosingPreviewRow {
     monthlySales: num(row.monthlySales),
     schemeId: row.schemeId == null ? null : id(row.schemeId),
     schemeVersion: row.schemeVersion == null ? null : num(row.schemeVersion),
-    suggestedRate: num(row.suggestedRate),
-    suggestedPool: num(row.suggestedPool),
+    suggestedRate: row.suggestedRate == null ? null : num(row.suggestedRate),
+    suggestedPool: row.suggestedPool == null ? null : num(row.suggestedPool),
     alreadyClosed: bool(row.alreadyClosed),
   };
 }

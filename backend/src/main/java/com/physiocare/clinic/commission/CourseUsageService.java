@@ -102,6 +102,16 @@ public class CourseUsageService {
     }
 
     Map<String, Object> course = lockCourse(patientCourseId);
+    // The member balance alone is not enough: a voided or refunded course
+    // keeps its balance rows, and an expired course is only marked EXPIRED
+    // lazily, so both are checked here at the moment a session is spent.
+    if (!"ACTIVE".equals(course.get("status")))
+      throw new IllegalArgumentException(
+          "This course is " + String.valueOf(course.get("status")).toLowerCase().replace('_', ' ')
+              + " and cannot be used");
+    java.sql.Date validUntil = (java.sql.Date) course.get("valid_until");
+    if (validUntil != null && validUntil.toLocalDate().isBefore(usageDate))
+      throw new IllegalArgumentException("This course expired on " + validUntil.toLocalDate());
     Map<String, Object> balance;
     try {
       balance =

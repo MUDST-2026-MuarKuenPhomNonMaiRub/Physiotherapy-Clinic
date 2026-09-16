@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getPatientFullNameTh, today } from "@/lib/domain";
+import { getPatientFullNameTh, remainingSessions, today } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +71,11 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
   const [newDate, setNewDate] = useState("");
   const [newStart, setNewStart] = useState("");
   const [rescheduleReason, setRescheduleReason] = useState("");
+  const [completeOpen, setCompleteOpen] = useState(false);
+  // PER_VISIT = pay at checkout; otherwise the patient course to charge.
+  const PER_VISIT = "PER_VISIT";
+  const [completeCourseId, setCompleteCourseId] = useState(PER_VISIT);
+  const [completing, setCompleting] = useState(false);
 
   const apt = appointments.find((a) => a.id === id);
   if (!apt) notFound();
@@ -86,8 +92,41 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
     ? courseTemplates.find((c) => c.id === usedCourse.courseId)
     : undefined;
   const isTerminalAlt = ["CANCELLED", "NO_SHOW", "RESCHEDULED"].includes(apt.status);
+  // The gates mirror the API: status moves need appointment.edit, a new
+  // booking (which is what a reschedule is) needs appointment.create, and
+  // cancelling or marking a no-show needs appointment.cancel.
   const canOperate = can("appointment.edit");
+  const canRebook = can("appointment.create");
   const canFrontDeskOps = can("appointment.cancel");
+  // Courses this patient could spend a session from for this visit. The
+  // choice is the counter's, never automatic: the course may be for another
+  // treatment, or the patient may be paying this visit per visit.
+  const spendableCourses = patientCourses.filter(
+    (pc) =>
+      pc.patientId === apt.patientId &&
+      pc.status === "ACTIVE" &&
+      remainingSessions(pc) > 0 &&
+      (!pc.expiryDate || pc.expiryDate >= today())
+  );
+
+  function openComplete() {
+    setCompleteCourseId(PER_VISIT);
+    setCompleteOpen(true);
+  }
+
+  async function doComplete() {
+    setCompleting(true);
+    try {
+      const chosen = completeCourseId === PER_VISIT ? undefined : completeCourseId;
+      await completeService(apt!.id, chosen);
+      setCompleteOpen(false);
+      toast.success(chosen ? "Service completed — 1 course session used" : "Service completed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not complete this appointment");
+    } finally {
+      setCompleting(false);
+    }
+  }
 
   /** Runs a status change and reports it, so a rejected move is never silent. */
   async function runTransition(action: Promise<void>, message: string, onDone?: () => void) {
@@ -196,12 +235,12 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
             <div className="flex flex-col gap-2">
               {apt.status === "CONFIRMED" && (
                 <>
-                  {canFrontDeskOps && (
+                  {canOperate && (
                     <Button onClick={() => void runTransition(checkInAppointment(apt.id), "Patient checked in")}>
                       <Check className="h-4 w-4" /> Check-in
                     </Button>
                   )}
-                  {canFrontDeskOps && (
+                  {canRebook && (
                     <Button variant="outline" onClick={() => { setNewDate(apt.date); setNewStart(apt.startTime); setRescheduleReason(""); setRescheduleOpen(true); }}>
                       Reschedule
                     </Button>
@@ -229,7 +268,7 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
               )}
               {apt.status === "IN_SERVICE" && (
                 canOperate ? (
-                  <Button onClick={() => void runTransition(completeService(apt.id), "Service completed")}>
+                  <Button onClick={openComplete}>
                     <Check className="h-4 w-4" /> Complete Service
                   </Button>
                 ) : (
@@ -273,6 +312,56 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
       </div>
+
+      <Dialog open={completeOpen} onOpenChange={(open) => !open && !completing && setCompleteOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete Service</DialogTitle>
+          </DialogHeader>
+          {spendableCourses.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {patient ? getPatientFullNameTh(patient) : "This patient"} has no active course, so this visit
+              will be paid per visit at checkout.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                How is this visit paid for? A course session is only deducted from the course you choose here.
+              </p>
+              <RadioGroup value={completeCourseId} onValueChange={setCompleteCourseId} className="gap-2">
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 text-sm has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                  <RadioGroupItem value={PER_VISIT} id="complete-per-visit" className="mt-0.5" />
+                  <span>
+                    <span className="font-medium text-foreground">Pay per visit</span>
+                    <span className="block text-xs text-muted-foreground">No course session is used; bill {service?.name ?? "the service"} at checkout.</span>
+                  </span>
+                </label>
+                {spendableCourses.map((pc) => {
+                  const tpl = courseTemplates.find((c) => c.id === pc.courseId);
+                  const rem = remainingSessions(pc);
+                  return (
+                    <label key={pc.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 text-sm has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+                      <RadioGroupItem value={pc.id} id={`complete-course-${pc.id}`} className="mt-0.5" />
+                      <span>
+                        <span className="font-medium text-foreground">Use 1 session from {tpl?.name ?? "course"}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {rem} remaining → {rem - 1} after · expires {formatDate(pc.expiryDate)}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </RadioGroup>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompleteOpen(false)} disabled={completing}>Back</Button>
+            <Button onClick={() => void doComplete()} disabled={completing}>
+              <Check className="h-4 w-4" /> {completing ? "Completing..." : "Complete Service"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={noShowOpen}

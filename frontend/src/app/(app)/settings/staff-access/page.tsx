@@ -84,6 +84,7 @@ const permissionGroups: { label: string; keys: { key: Permission; label: string 
       { key: "course.view", label: "View course balances" },
       { key: "course.use", label: "Deduct a session" },
       { key: "course.transfer", label: "Transfer sessions between patients" },
+      { key: "course.share", label: "Share a course with another patient" },
     ],
   },
   {
@@ -101,6 +102,8 @@ const permissionGroups: { label: string; keys: { key: Permission; label: string 
       { key: "report.view.all", label: "See clinic-wide figures (all staff, all branches)" },
       { key: "commission.view.own", label: "See own commission" },
       { key: "commission.view.all", label: "See everyone's commission" },
+      { key: "commission.close", label: "Close the monthly commission period" },
+      { key: "commission.adjust", label: "Refund unused sessions / adjust course commission" },
     ],
   },
   {

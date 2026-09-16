@@ -12,13 +12,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { ClosingHistoryRow, ClosingPreviewRow } from "@/types";
 
+function toMonthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function currentMonth() {
+  return toMonthKey(new Date());
+}
+
+/** The most recent month that is over — the one the screen opens on, since it is the one that can be closed. */
+function previousMonth() {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  return toMonthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
 }
 
 /**
@@ -28,7 +37,8 @@ function currentMonth() {
  * "alreadyClosed" on each preview row.
  */
 export default function MonthlyClosingPage() {
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth] = useState(previousMonth());
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [preview, setPreview] = useState<ClosingPreviewRow[]>([]);
   const [history, setHistory] = useState<ClosingHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,6 +80,7 @@ export default function MonthlyClosingPage() {
     setClosing(true);
     try {
       const result = await closeMonth(month);
+      setConfirmOpen(false);
       toast.success(`Closed commission for ${result.closedEmployees} employee(s)`);
       await loadPreview();
       await loadHistory();
@@ -105,6 +116,14 @@ export default function MonthlyClosingPage() {
   }
 
   const closable = preview.filter((row) => !row.alreadyClosed);
+  // A month is only closeable once it is over: the tier is the seller's
+  // total for the whole month, and a course sold after an early close would
+  // be refused at the counter. The API enforces the same rule.
+  const monthStillRunning = month >= currentMonth();
+  const uncovered = closable.filter((row) => row.suggestedRate === null);
+  const totalSales = closable.reduce((sum, row) => sum + row.monthlySales, 0);
+  const totalPool = closable.reduce((sum, row) => sum + (row.suggestedPool ?? 0), 0);
+  const canClose = !closing && closable.length > 0 && !monthStillRunning && uncovered.length === 0;
 
   return (
     <>
@@ -112,14 +131,26 @@ export default function MonthlyClosingPage() {
         title="Monthly Closing"
         description="Freezes every Seller's course-sales tier for the month onto every course they sold — after this, a course's rate never moves, no matter how much they sell later."
         actions={
-          <Button onClick={runClose} disabled={closing || closable.length === 0}>
+          <Button onClick={() => setConfirmOpen(true)} disabled={!canClose}>
             <Lock className="h-4 w-4" /> {closing ? "Closing..." : `Close ${month}`}
           </Button>
         }
       />
 
-      <div className="mb-5 flex items-center gap-2">
-        <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-44" />
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <Input type="month" value={month} max={previousMonth()} onChange={(e) => setMonth(e.target.value)} className="w-44" />
+        {monthStillRunning && (
+          <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-[#8A5A00]">
+            {month} has not ended yet. Closing it now would freeze every seller&apos;s tier on a partial month and block
+            their course sales for the rest of it — it can be closed from the 1st of next month.
+          </p>
+        )}
+        {!monthStillRunning && uncovered.length > 0 && (
+          <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+            No commission tier covers the sales of {uncovered.map((row) => row.employeeName).join(", ")}. Fix the tier
+            table under Commission Tiers before closing — a missing tier is never treated as 0%.
+          </p>
+        )}
       </div>
 
       {!loading && preview.length === 0 ? (
@@ -142,8 +173,14 @@ export default function MonthlyClosingPage() {
                 <TableRow key={row.employeeId}>
                   <TableCell className="font-medium text-foreground">{row.employeeName}</TableCell>
                   <TableCell className="text-right">{formatCurrency(row.monthlySales)}</TableCell>
-                  <TableCell className="text-right font-mono">{(row.suggestedRate * 100).toFixed(2)}%</TableCell>
-                  <TableCell className="text-right">{formatCurrency(row.suggestedPool)}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {row.suggestedRate === null ? (
+                      <span className="text-destructive">No tier</span>
+                    ) : (
+                      `${(row.suggestedRate * 100).toFixed(2)}%`
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">{row.suggestedPool === null ? "—" : formatCurrency(row.suggestedPool)}</TableCell>
                   <TableCell className="font-mono text-xs">{row.schemeId ? `${row.schemeId} / v${row.schemeVersion ?? "-"}` : "-"}</TableCell>
                   <TableCell>
                     {row.alreadyClosed ? (
@@ -194,6 +231,39 @@ export default function MonthlyClosingPage() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog open={confirmOpen} onOpenChange={(open) => !open && !closing && setConfirmOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Close commission for {month}?</DialogTitle>
+            <DialogDescription>
+              This freezes the tier rate onto every course sold in {month} and cannot be undone — a later correction
+              needs an audited override.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+            <div className="flex justify-between"><span className="text-muted-foreground">Sellers to close</span><span className="font-medium">{closable.length}</span></div>
+            <div className="mt-1 flex justify-between"><span className="text-muted-foreground">Course sales</span><span className="font-medium">{formatCurrency(totalSales)}</span></div>
+            <div className="mt-1 flex justify-between"><span className="text-muted-foreground">Commission pool to freeze</span><span className="font-medium">{formatCurrency(totalPool)}</span></div>
+          </div>
+          <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+            {closable.map((row) => (
+              <li key={row.employeeId} className="flex justify-between gap-3">
+                <span>{row.employeeName}</span>
+                <span className="font-mono text-muted-foreground">
+                  {formatCurrency(row.monthlySales)} · {row.suggestedRate === null ? "—" : `${(row.suggestedRate * 100).toFixed(2)}%`}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={closing}>Cancel</Button>
+            <Button onClick={() => void runClose()} disabled={closing}>
+              <Lock className="h-4 w-4" /> {closing ? "Closing..." : "Close Month"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={overrideRow !== null} onOpenChange={(open) => !open && setOverrideRow(null)}>
         <DialogContent>

@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.physiocare.clinic.appointment.AppointmentController;
+import com.physiocare.clinic.auth.AuthController;
+import com.physiocare.clinic.commission.CommissionClosingController;
+import com.physiocare.clinic.commission.CommissionCourseActionsController;
 import com.physiocare.clinic.branch.BranchService;
 import com.physiocare.clinic.catalog.CatalogController;
 import com.physiocare.clinic.patient.PatientController;
@@ -37,6 +40,18 @@ class SecurityAnnotationsTest {
   @Test void delegatedSettingsServicesDoNotOverrideControllerSettingsPermission() throws Exception {
     assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(BranchService.class, "create"));
     assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(RoomService.class, "create"));
+  }
+
+  @Test void accountCreationIsAnAdministrationAction() throws Exception {
+    // Every signed-in user could once call this and mint an ADMIN login.
+    assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(AuthController.class, "createUser"));
+  }
+
+  @Test void commissionWritesDoNotHideBehindViewPermissions() throws Exception {
+    assertEquals("@permissionGuard.hasAny(authentication, 'commission.close')", policy(CommissionClosingController.class, "close"));
+    assertEquals("@permissionGuard.hasAny(authentication, 'commission.adjust')", policy(CommissionCourseActionsController.class, "refundRemaining"));
+    assertEquals("@permissionGuard.hasAny(authentication, 'course.share')", policy(CommissionCourseActionsController.class, "addMember"));
+    assertEquals("@permissionGuard.hasAny(authentication, 'course.share')", policy(CommissionCourseActionsController.class, "removeMember"));
   }
 
   @Test void catalogWritesUseTheConfigurableSettingsPermission() throws Exception {

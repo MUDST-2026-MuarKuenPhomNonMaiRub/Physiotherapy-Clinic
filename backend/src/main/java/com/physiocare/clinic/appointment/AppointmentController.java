@@ -34,7 +34,13 @@ public class AppointmentController {
   public record RescheduleRequest(
       @NotNull OffsetDateTime startsAt, @NotNull OffsetDateTime endsAt, String reason) {}
 
-  public record ReasonRequest(String reason) {}
+  /**
+   * Body of a status change. {@code usePatientCourseId} is read only by
+   * {@code complete}: the course the visit is to be charged against. Absent
+   * means the visit is paid per visit at checkout — nothing is ever deducted
+   * from a course the counter did not name.
+   */
+  public record ReasonRequest(String reason, Long usePatientCourseId) {}
 
   @GetMapping
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.view')")

@@ -2,6 +2,7 @@ package com.physiocare.clinic.checkout;
 
 import com.physiocare.clinic.commission.CommissionAdjustmentService;
 import com.physiocare.clinic.commission.CourseUsageService;
+import com.physiocare.clinic.common.AuditService;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.common.InputRules;
@@ -39,6 +40,7 @@ public class CheckoutService {
   private final CourseUsageService courseUsage;
   private final CommissionAdjustmentService adjustments;
   private final CheckoutCommissionService commissions;
+  private final AuditService audit;
 
   public CheckoutService(
       JdbcTemplate db,
@@ -48,7 +50,8 @@ public class CheckoutService {
       TransactionReader reader,
       CourseUsageService courseUsage,
       CommissionAdjustmentService adjustments,
-      CheckoutCommissionService commissions) {
+      CheckoutCommissionService commissions,
+      AuditService audit) {
     this.db = db;
     this.repository = repository;
     this.branches = branches;
@@ -57,6 +60,7 @@ public class CheckoutService {
     this.courseUsage = courseUsage;
     this.adjustments = adjustments;
     this.commissions = commissions;
+    this.audit = audit;
   }
 
   @Transactional
@@ -77,6 +81,10 @@ public class CheckoutService {
         && !r.useNewlyPurchasedSession()) {
       throw new IllegalArgumentException("Nothing to check out");
     }
+    // A course sale is what the monthly commission close is built on: it
+    // needs a seller to be totalled under, or it silently never closes.
+    if (r.purchaseCourseId() != null && r.salespersonId() == null)
+      throw new IllegalArgumentException("A salesperson is required to sell a course");
 
     LocalDate today = LocalDate.now();
     String actor = currentUser.displayName(authentication);
@@ -324,10 +332,16 @@ public class CheckoutService {
       repository.lockPatientCourse(patientCourseId);
 
       switch (entryType) {
-        case "PURCHASE" -> db.update(
-            "UPDATE patient_courses SET total_visits=total_visits-? WHERE id=?", quantity, patientCourseId);
-        case "BONUS" -> db.update(
-            "UPDATE patient_courses SET bonus_visits=bonus_visits-? WHERE id=?", quantity, patientCourseId);
+        case "PURCHASE" -> {
+          db.update(
+              "UPDATE patient_courses SET total_visits=total_visits-? WHERE id=?", quantity, patientCourseId);
+          withdrawOwnerEntitlement(patientCourseId, quantity);
+        }
+        case "BONUS" -> {
+          db.update(
+              "UPDATE patient_courses SET bonus_visits=bonus_visits-? WHERE id=?", quantity, patientCourseId);
+          withdrawOwnerEntitlement(patientCourseId, quantity);
+        }
         case "TREATMENT" -> {
           db.update(
               "UPDATE patient_courses SET visits_used=visits_used+? WHERE id=?", quantity, patientCourseId);
@@ -357,16 +371,82 @@ public class CheckoutService {
     db.update(
         "UPDATE sales_transactions SET status='CANCELLED',cancelled_at=now() WHERE id=?", transactionId);
     db.update("UPDATE payments SET status='VOID' WHERE sales_transaction_id=?", transactionId);
-    db.update(
-        "UPDATE patient_courses SET status='REFUNDED',commission_status='CANCELLED' WHERE"
-            + " sales_transaction_id=? AND visits_used=0",
-        transactionId);
+    cancelSoldCourses(transactionId, actorUserId, reason);
     db.update(
         "INSERT INTO transaction_cancellations(transaction_id,reason_code,reason_text,cancelled_by)"
             + " VALUES(?,'USER_REQUEST',?,?)",
         transactionId, reason, actorUserId);
 
     return reader.get(transactionId);
+  }
+
+  /**
+   * The owner's spendable balance mirrors the course's purchased and bonus
+   * sessions, so taking those back has to come off the same row — otherwise
+   * the balance row would still say the sessions were there to spend.
+   */
+  private void withdrawOwnerEntitlement(long patientCourseId, int quantity) {
+    int rows =
+        db.update(
+            "UPDATE course_member_balances SET allocated_visits=allocated_visits-?,updated_at=now()"
+                + " WHERE patient_course_id=? AND patient_id=(SELECT patient_id FROM patient_courses"
+                + " WHERE id=?) AND allocated_visits-used_visits>=?",
+            quantity, patientCourseId, patientCourseId, quantity);
+    if (rows != 1)
+      throw new IllegalArgumentException(
+          "This sale cannot be voided: the course's sessions are no longer all on the owner's"
+              + " balance (some were shared or used).");
+  }
+
+  /**
+   * A course whose sale is voided is finished: no sessions were spent (the
+   * void is refused otherwise), so it is refunded and drops out of commission.
+   * If its month was already closed, its frozen pool is still counted as
+   * outstanding for the seller, so the pool is written down to zero through
+   * the same append-only adjustment a refund uses, and the fact that a closed
+   * month's sales figure no longer holds is put on the audit log for Finance
+   * to decide whether the seller's tier should be revisited — the closing
+   * row itself is never edited.
+   */
+  private void cancelSoldCourses(long transactionId, Long actorUserId, String reason) {
+    List<Map<String, Object>> sold =
+        db.queryForList(
+            "SELECT id,course_id,commission_status,monthly_closing_id,net_course_sale_amount,"
+                + "seller_employee_id,sale_month,branch_id FROM"
+                + " patient_courses WHERE sales_transaction_id=? AND visits_used=0 FOR UPDATE",
+            transactionId);
+    for (Map<String, Object> course : sold) {
+      long courseId = ((Number) course.get("id")).longValue();
+      boolean closed = "LOCKED".equals(course.get("commission_status"));
+      BigDecimal poolWrittenDown = BigDecimal.ZERO;
+      if (closed) {
+        // Written off while still LOCKED: the pool math only applies to a frozen course.
+        poolWrittenDown =
+            adjustments.writeOffOutstandingPool(courseId, actorUserId, "Course sale voided: " + reason);
+      }
+      db.update(
+          "UPDATE patient_courses SET status='REFUNDED',commission_status='CANCELLED' WHERE id=?",
+          courseId);
+      Map<String, Object> after = new java.util.LinkedHashMap<>();
+      after.put("courseId", course.get("course_id"));
+      after.put("status", "REFUNDED");
+      after.put("commissionStatus", "CANCELLED");
+      after.put("netCourseSaleAmount", course.get("net_course_sale_amount"));
+      after.put("sellerEmployeeId", course.get("seller_employee_id"));
+      after.put("saleMonth", String.valueOf(course.get("sale_month")));
+      after.put("monthlyClosingId", course.get("monthly_closing_id"));
+      after.put("poolWrittenDown", poolWrittenDown);
+      after.put("closedMonthSalesAffected", closed);
+      audit.record(
+          actorUserId,
+          course.get("branch_id") == null ? null : ((Number) course.get("branch_id")).longValue(),
+          closed ? "COURSE_SALE_VOIDED_AFTER_CLOSE" : "COURSE_SALE_VOIDED",
+          "patient_courses",
+          String.valueOf(courseId),
+          Map.of("commissionStatus", String.valueOf(course.get("commission_status"))),
+          after,
+          reason);
+    }
   }
 
   /**

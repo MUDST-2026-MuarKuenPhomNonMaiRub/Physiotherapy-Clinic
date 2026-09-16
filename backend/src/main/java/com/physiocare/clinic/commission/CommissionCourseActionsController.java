@@ -36,6 +36,7 @@ public class CommissionCourseActionsController {
   public record RefundRemainingRequest(@Positive int visits, @NotBlank String reason, @Positive Long memberPatientId) {}
 
   @GetMapping("/members")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.view')")
   public List<Map<String, Object>> members(@PathVariable long id, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);
     return sharedCourse.listMembers(id);
@@ -43,7 +44,7 @@ public class CommissionCourseActionsController {
 
   @PostMapping("/members")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.view')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.share')")
   public void addMember(
       @PathVariable long id, @RequestBody AddMemberRequest request, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);
@@ -52,7 +53,7 @@ public class CommissionCourseActionsController {
   }
 
   @DeleteMapping("/members/{patientId}")
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.use')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.share')")
   public void removeMember(
       @PathVariable long id, @PathVariable long patientId, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);
@@ -60,7 +61,7 @@ public class CommissionCourseActionsController {
   }
 
   @PostMapping("/refund-remaining")
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.all')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.adjust')")
   public void refundRemaining(
       @PathVariable long id, @RequestBody RefundRemainingRequest request, Authentication authentication) {
     branches.requireCourseAccess(authentication, id);

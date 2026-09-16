@@ -15,12 +15,15 @@ export type Permission =
   | "course.view"
   | "course.use"
   | "course.transfer"
+  | "course.share"
   | "transaction.view"
   | "transaction.void"
   | "report.view"
   | "dashboard.view"
   | "commission.view.own"
   | "commission.view.all"
+  | "commission.close"
+  | "commission.adjust"
   | "report.view.all"
   | "settings.manage";
 
@@ -339,8 +342,9 @@ export interface ClosingPreviewRow {
   monthlySales: number;
   schemeId: string | null;
   schemeVersion: number | null;
-  suggestedRate: number;
-  suggestedPool: number;
+  /** Null when no tier in the scheme covers the seller's sales — a configuration gap, not 0%. */
+  suggestedRate: number | null;
+  suggestedPool: number | null;
   alreadyClosed: boolean;
 }
 

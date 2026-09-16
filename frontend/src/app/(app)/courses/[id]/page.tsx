@@ -156,8 +156,8 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 <ArrowRightLeft className="h-4 w-4" /> Transfer Course
               </Button>
             )}
-            {pc.status === "ACTIVE" && rem > 0 && can("course.transfer") && <Button variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Share</Button>}
-            {can("transaction.void") && rem > 0 && <Button variant="outline" onClick={() => { setRefundOpen(true); setRefundVisits(1); setRefundReason(""); }}><HandCoins className="h-4 w-4" /> Refund Unused</Button>}
+            {pc.status === "ACTIVE" && rem > 0 && can("course.share") && <Button variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Share</Button>}
+            {can("commission.adjust") && rem > 0 && <Button variant="outline" onClick={() => { setRefundOpen(true); setRefundVisits(1); setRefundReason(""); }}><HandCoins className="h-4 w-4" /> Refund Unused</Button>}
           </div>
         }
       />
@@ -232,7 +232,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
 
       <div className="mb-5 rounded-xl border border-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between"><div><h3 className="text-sm font-semibold text-foreground">Shared Course Members</h3><p className="text-xs text-muted-foreground">Members share one course balance and one commission pool</p></div>{can("course.transfer") && <Button size="sm" variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Add Member</Button>}</div>
-        {members.length === 0 ? <p className="text-sm text-muted-foreground">No shared members</p> : <div className="space-y-2">{members.map((m) => { const p = patients.find((x) => x.id === m.patientId); return <div key={m.patientId} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm"><span>{p ? getPatientFullNameTh(p) : `Patient #${m.patientId}`} <span className="ml-2 text-xs text-muted-foreground">{m.allocatedVisits - m.usedVisits} remaining</span></span>{m.role === "SHARED_MEMBER" && can("course.transfer") && <Button variant="ghost" size="sm" onClick={() => void removeMember(m.patientId)}>Remove</Button>}</div>; })}</div>}
+        {members.length === 0 ? <p className="text-sm text-muted-foreground">No shared members</p> : <div className="space-y-2">{members.map((m) => { const p = patients.find((x) => x.id === m.patientId); return <div key={m.patientId} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2 text-sm"><span>{p ? getPatientFullNameTh(p) : `Patient #${m.patientId}`} <span className="ml-2 text-xs text-muted-foreground">{m.allocatedVisits - m.usedVisits} remaining</span></span>{m.role === "SHARED_MEMBER" && can("course.share") && <Button variant="ghost" size="sm" onClick={() => void removeMember(m.patientId)}>Remove</Button>}</div>; })}</div>}
       </div>
 
       <div className="mb-2 flex items-center justify-between">

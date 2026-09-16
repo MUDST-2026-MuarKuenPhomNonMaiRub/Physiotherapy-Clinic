@@ -93,13 +93,14 @@ public class AppointmentRepository {
             + " status='COMPLETED',completed_at=now()", appointmentId);
   }
 
+  /** Every course this patient could spend a session from today, soonest to expire first. */
   public List<Long> findEligibleCourseIds(long patientId) {
     return db.queryForList(
         "SELECT cmb.patient_course_id FROM course_member_balances cmb JOIN patient_courses pc"
             + " ON pc.id=cmb.patient_course_id WHERE cmb.patient_id=? AND pc.status='ACTIVE'"
             + " AND cmb.allocated_visits>cmb.used_visits AND (pc.valid_until IS NULL OR"
-            + " pc.valid_until>=CURRENT_DATE) ORDER BY pc.valid_until NULLS LAST, pc.sale_date, pc.id"
-            + " LIMIT 1", Long.class, patientId);
+            + " pc.valid_until>=CURRENT_DATE) ORDER BY pc.valid_until NULLS LAST, pc.sale_date, pc.id",
+        Long.class, patientId);
   }
 
   public Long nextAppointmentNumber() {
