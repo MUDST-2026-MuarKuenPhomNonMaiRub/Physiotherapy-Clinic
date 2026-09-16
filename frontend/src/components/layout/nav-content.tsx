@@ -29,7 +29,7 @@ function NavLink({
       aria-current={active ? "page" : undefined}
       style={{ "--sidebar-delay": `${delay}ms` } as React.CSSProperties}
       className={cn(
-        "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors",
+        "flex items-center gap-3 rounded-xl px-3 py-2 text-[15px] font-medium transition-colors",
         "motion-sidebar-item",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sidebar-ring",
         active
@@ -49,9 +49,9 @@ export function NavContent({ role, permissions, onNavigate }: { role: Role; perm
   const groups = navigationForUser(role, permissions);
 
   return (
-    <nav className="flex-1 overflow-y-auto px-4 py-4">
+    <nav className="flex-1 overflow-y-auto px-3 py-2">
       {groups.map((group, groupIndex) => (
-        <div key={group.title} className="mt-5 first:mt-6">
+        <div key={group.title} className="mt-3 first:mt-4">
           {group.title && (
             <p className="px-3 pb-1.5 text-[11px] font-bold uppercase tracking-[0.1em] text-sidebar-section">
               {group.title}
