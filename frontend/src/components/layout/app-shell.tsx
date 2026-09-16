@@ -62,6 +62,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [hasHydrated, isAuthenticated, dataLoaded, loading, loadError, refresh]);
 
+  // Permissions can be changed by an administrator in another tab. Re-read
+  // the profile when this tab becomes active so menus and route guards do not
+  // continue using stale access for the rest of the session.
+  useEffect(() => {
+    const revalidate = () => {
+      if (document.visibilityState === "visible" && isAuthenticated && dataLoaded) void refresh();
+    };
+    window.addEventListener("focus", revalidate);
+    document.addEventListener("visibilitychange", revalidate);
+    return () => {
+      window.removeEventListener("focus", revalidate);
+      document.removeEventListener("visibilitychange", revalidate);
+    };
+  }, [isAuthenticated, dataLoaded, refresh]);
+
   if (!hasHydrated) return <FullScreenLoader />;
   if (!user || !isAuthenticated) return <FullScreenLoader />;
   if (loadError && !dataLoaded) return <LoadFailure message={loadError} onRetry={() => void refresh()} />;

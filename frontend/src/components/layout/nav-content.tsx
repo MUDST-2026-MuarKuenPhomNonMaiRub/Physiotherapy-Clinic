@@ -45,7 +45,7 @@ function NavLink({
 
 export function NavContent({ role, permissions, onNavigate }: { role: Role; permissions?: string[]; onNavigate?: () => void }) {
   const pathname = usePathname();
-  const activeHref = findActiveHref(role, pathname);
+  const activeHref = findActiveHref(role, pathname, permissions);
   const groups = navigationForUser(role, permissions);
 
   return (

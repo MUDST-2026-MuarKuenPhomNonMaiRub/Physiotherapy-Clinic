@@ -94,7 +94,11 @@ const permissionByHref: Record<string, string> = {
 };
 
 export function navigationForUser(role: Role, permissions?: string[]): NavGroup[] {
-  const groups = navigationByRole[role] ?? [];
+  // Custom roles inherit a navigation surface and are then filtered by their
+  // database-configured permissions below.
+  const groups = navigationByRole[role] ?? (
+    permissions?.includes("settings.manage") ? navigationByRole.ADMIN : navigationByRole.PHYSIOTHERAPIST
+  );
   if (permissions === undefined) return groups;
   return groups.map((group) => ({
     ...group,
@@ -111,8 +115,8 @@ export const defaultRouteByRole: Record<Role, string> = {
  * Longest-prefix match across the role's own menu, so "/courses/transfer"
  * highlights Courses Transfer rather than its parent Patient Courses.
  */
-export function findActiveHref(role: Role, pathname: string): string | null {
-  const hrefs = navigationForUser(role).flatMap((g) => g.items.map((i) => i.href));
+export function findActiveHref(role: Role, pathname: string, permissions?: string[]): string | null {
+  const hrefs = navigationForUser(role, permissions).flatMap((g) => g.items.map((i) => i.href));
   return (
     hrefs
       .filter((href) => pathname === href || pathname.startsWith(href + "/"))

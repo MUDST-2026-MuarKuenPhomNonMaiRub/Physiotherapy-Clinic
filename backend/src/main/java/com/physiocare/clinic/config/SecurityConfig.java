@@ -55,9 +55,6 @@ public class SecurityConfig {
                 authorize
                     .requestMatchers("/api/v1/auth/login", "/actuator/health")
                     .permitAll()
-                    .requestMatchers("/api/v1/auth/users")
-                    .access((authentication, context) -> new org.springframework.security.authorization.AuthorizationDecision(
-                        authentication.get().getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("PERM_SETTINGS_MANAGE"))))
                     // Everything else is checked per endpoint with @PreAuthorize, so
                     // that a read the whole clinic needs is not locked behind the
                     // same rule as the write that only an admin may make.

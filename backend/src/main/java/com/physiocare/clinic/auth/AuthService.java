@@ -10,8 +10,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.Duration;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 public class AuthService {
@@ -21,15 +19,8 @@ public class AuthService {
   private final RoleRepository roles;
   private final PasswordEncoder encoder;
   private final JdbcTemplate db;
-  private final ConcurrentHashMap<String, LoginAttempt> loginAttempts = new ConcurrentHashMap<>();
   private static final int MAX_FAILED_ATTEMPTS = 5;
   private static final Duration LOCKOUT = Duration.ofMinutes(10);
-  // A failed/typo'd email is otherwise never removed, so this map would
-  // otherwise grow forever; once it's large enough to matter, each login
-  // sweeps out anything nobody has touched for a full lockout window.
-  private static final int SWEEP_THRESHOLD = 10_000;
-
-  private record LoginAttempt(AtomicInteger failures, long blockedUntil, long lastAttemptAt) {}
 
   public AuthService(
       AuthenticationManager authenticationManager,
@@ -48,22 +39,16 @@ public class AuthService {
 
   public AuthDtos.LoginResponse login(AuthDtos.LoginRequest request) {
     String email = request.email().trim().toLowerCase();
-    long now = System.currentTimeMillis();
-    sweepStaleAttempts(now);
-    LoginAttempt attempt = loginAttempts.get(email);
-    if (attempt != null && attempt.blockedUntil() > now) {
+    Integer blocked = db.queryForObject("SELECT count(*) FROM login_rate_limits WHERE email=? AND blocked_until > now()", Integer.class, email);
+    if (blocked != null && blocked > 0) {
       throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Too many login attempts");
     }
     try {
       authenticationManager.authenticate(
           new UsernamePasswordAuthenticationToken(email, request.password()));
-      loginAttempts.remove(email);
+      db.update("DELETE FROM login_rate_limits WHERE email=?", email);
     } catch (org.springframework.security.core.AuthenticationException e) {
-      LoginAttempt current =
-          loginAttempts.computeIfAbsent(email, k -> new LoginAttempt(new AtomicInteger(), 0, now));
-      int failures = current.failures().incrementAndGet();
-      long blockedUntil = failures >= MAX_FAILED_ATTEMPTS ? now + LOCKOUT.toMillis() : current.blockedUntil();
-      loginAttempts.put(email, new LoginAttempt(current.failures(), blockedUntil, now));
+      db.update("INSERT INTO login_rate_limits(email,failure_count,blocked_until,last_attempt_at) VALUES(?,1,NULL,now()) ON CONFLICT(email) DO UPDATE SET failure_count=CASE WHEN login_rate_limits.last_attempt_at < now() - (? * interval '1 second') THEN 1 ELSE login_rate_limits.failure_count + 1 END, blocked_until=CASE WHEN (CASE WHEN login_rate_limits.last_attempt_at < now() - (? * interval '1 second') THEN 1 ELSE login_rate_limits.failure_count + 1 END) >= ? THEN now() + (? * interval '1 second') ELSE login_rate_limits.blocked_until END, last_attempt_at=now()", email, LOCKOUT.toSeconds(), LOCKOUT.toSeconds(), MAX_FAILED_ATTEMPTS, LOCKOUT.toSeconds());
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
     }
 
@@ -71,11 +56,6 @@ public class AuthService {
     db.update("UPDATE users SET last_login=now() WHERE id=?", user.getId());
     return new AuthDtos.LoginResponse(
         jwt.generateToken(user), "Bearer", jwt.getExpirationMs() / 1000);
-  }
-
-  private void sweepStaleAttempts(long now) {
-    if (loginAttempts.size() < SWEEP_THRESHOLD) return;
-    loginAttempts.entrySet().removeIf(e -> now - e.getValue().lastAttemptAt() > LOCKOUT.toMillis());
   }
 
   public AuthDtos.MeResponse me(String email) {

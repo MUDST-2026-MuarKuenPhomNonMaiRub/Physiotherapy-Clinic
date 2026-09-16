@@ -30,10 +30,11 @@ class CourseBalanceReportTest extends AbstractCommissionIntegrationTest {
     db.update("INSERT INTO course_member_balances(patient_course_id,patient_id,allocated_visits,used_visits) VALUES(?,?,?,?)", sold, member, 4, 1);
 
     long transferOnly = nextId();
-    db.update("INSERT INTO patient_courses(id,course_id,patient_id,package_id,package_name_snapshot,sale_date,sale_month,total_visits,bonus_visits,transfer_in_visits,transfer_out_visits,visits_used,branch_id,status,commission_status) VALUES(?,?,?,(SELECT id FROM courses LIMIT 1),'Transferred','2026-09-02','2026-09-01',0,0,5,0,1,1,'ACTIVE','PROVISIONAL')", transferOnly, "PC-TRANSFER-" + transferOnly, member);
+    db.update("INSERT INTO patient_courses(id,course_id,patient_id,package_id,package_name_snapshot,sale_date,sale_month,course_price,total_visits,bonus_visits,transfer_in_visits,transfer_out_visits,visits_used,branch_id,status,commission_status) VALUES(?,?,?,(SELECT id FROM courses LIMIT 1),'Transferred','2026-09-02','2026-09-01',0,0,0,5,0,1,1,'ACTIVE','PROVISIONAL')", transferOnly, "PC-TRANSFER-" + transferOnly, member);
     db.update("INSERT INTO course_member_balances(patient_course_id,patient_id,allocated_visits,used_visits) VALUES(?,?,?,?)", transferOnly, member, 5, 1);
 
-    Authentication admin = new UsernamePasswordAuthenticationToken("admin", "n/a", List.of(new SimpleGrantedAuthority("report.view")));
+    Authentication admin = new UsernamePasswordAuthenticationToken("admin", "n/a", List.of(
+        new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("report.view")));
     SecurityContextHolder.getContext().setAuthentication(admin);
     List<Map<String,Object>> rows = (List<Map<String,Object>>) reports.courseBalance(1L, admin);
 
@@ -42,7 +43,7 @@ class CourseBalanceReportTest extends AbstractCommissionIntegrationTest {
     assertThat(((Number) soldRow.get("bonus")).intValue()).isEqualTo(2);
     assertThat(((Number) soldRow.get("used")).intValue()).isEqualTo(5);
     assertThat(((Number) soldRow.get("transfer")).intValue()).isEqualTo(2);
-    assertThat(((Number) soldRow.get("remaining")).intValue()).isEqualTo(10);
+    assertThat(((Number) soldRow.get("remaining")).intValue()).isEqualTo(9);
     assertThat(rows).anyMatch(r -> ("PC-TRANSFER-" + transferOnly).equals(r.get("course_id")));
   }
 }

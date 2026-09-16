@@ -395,9 +395,11 @@ export default function StaffAccessPage() {
               <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ALL">All access levels</SelectItem>
-                {allRoles.map((r) => (
-                  <SelectItem key={r} value={r}>{roleLabels[r]}</SelectItem>
-                ))}
+                {(configuredRoles.length
+                  ? configuredRoles.map((r) => ({ code: r.code === "PHYSIO" ? "PHYSIOTHERAPIST" : r.code, name: r.name }))
+                  : allRoles.map((r) => ({ code: r, name: roleLabels[r] }))).map((r) => (
+                    <SelectItem key={r.code} value={r.code}>{r.name}</SelectItem>
+                  ))}
                 <SelectItem value="NO_ACCOUNT">No login account</SelectItem>
               </SelectContent>
             </Select>
@@ -445,8 +447,8 @@ export default function StaffAccessPage() {
                         </TableCell>
                         <TableCell>
                           {account && account.status === "ACTIVE" ? (
-                            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${roleStyles[account.role]}`}>
-                              {roleLabels[account.role]}
+                            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${roleStyles[account.role] ?? "border-border bg-muted text-muted-foreground"}`}>
+                              {configuredRoles.find((r) => r.code === account.role || (r.code === "PHYSIO" && account.role === "PHYSIOTHERAPIST"))?.name ?? roleLabels[account.role] ?? account.role.replaceAll("_", " ")}
                             </span>
                           ) : account ? (
                             <span className="text-xs text-muted-foreground">Access revoked</span>
@@ -711,12 +713,16 @@ export default function StaffAccessPage() {
                     <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
                       <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {allRoles.map((r) => <SelectItem key={r} value={r}>{roleLabels[r]}</SelectItem>)}
+                        {(configuredRoles.length
+                          ? configuredRoles.map((r) => ({ code: r.code === "PHYSIO" ? "PHYSIOTHERAPIST" : r.code, name: r.name }))
+                          : allRoles.map((r) => ({ code: r, name: roleLabels[r] }))).map((r) => (
+                            <SelectItem key={r.code} value={r.code}>{r.name}</SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   </Field>
                   <p className="sm:col-span-2 text-xs leading-relaxed text-muted-foreground">
-                    {roleDescriptions[form.role]}
+                    {roleDescriptions[form.role] ?? "Custom access level configured by an administrator."}
                   </p>
                 </div>
               )}
