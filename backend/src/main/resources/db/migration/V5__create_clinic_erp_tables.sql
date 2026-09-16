@@ -54,6 +54,7 @@ CREATE INDEX idx_course_ledger_course ON course_ledger_entries(patient_course_id
 CREATE INDEX idx_allocations_date ON commission_allocations(visit_date, treating_employee_id);
 CREATE INDEX idx_audit_entity ON audit_logs(entity_type, entity_id, occurred_at);
 
+INSERT INTO roles(code,name) VALUES ('RECEPTIONIST','Receptionist'),('FINANCE','Finance'),('REPORT_VIEWER','Report Viewer') ON CONFLICT(code) DO NOTHING;
 INSERT INTO payment_methods(code,name,requires_reference) VALUES ('CASH','Cash',false),('TRANSFER','Bank Transfer',true),('QR','QR Payment',true),('CARD','Credit Card',true) ON CONFLICT(code) DO NOTHING;
 INSERT INTO commission_schemes(code,version,effective_from) VALUES ('DEFAULT',1,'2026-01-01') ON CONFLICT(code,version) DO NOTHING;
 INSERT INTO commission_tiers(scheme_id,tier_order,minimum_monthly_sales,maximum_monthly_sales,commission_rate) SELECT id,1,0,59999,0.05 FROM commission_schemes WHERE code='DEFAULT' AND version=1 ON CONFLICT DO NOTHING;

@@ -73,6 +73,13 @@ because it can no longer prove the new files describe the same history.
   before running it against the shared one, so it isn't repaired twice at
   once). Afterwards `docker compose up -d --build` starts normally.
 
+**Rule for everyone:** once a migration file is on `dev3`, never edit it
+again — add a new `V<next>__*.sql` instead. (Commit `9dd42e3` edited `V5` and
+`V20` after they had shipped; those files were restored and the change moved
+to `V23`, so a database that ran the original `V5`/`V20` starts cleanly. A
+database that ran the *edited* `V5`/`V20` — one first created between that
+commit and `V23` — needs the `repair` command above once.)
+
 Avoid this in future: once a migration has shipped to the shared database,
 treat its file as frozen — add a new migration to change course instead of
 editing or deleting one that already ran.
