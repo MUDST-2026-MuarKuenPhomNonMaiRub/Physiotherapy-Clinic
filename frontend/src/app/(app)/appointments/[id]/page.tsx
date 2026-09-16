@@ -24,6 +24,7 @@ import { getPatientFullNameTh, remainingSessions, today } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { AppointmentCalendarSyncBadge } from "@/components/integrations/appointment-calendar-sync";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -195,6 +196,7 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
                 />
               )}
             </dl>
+            <AppointmentCalendarSyncBadge appointmentId={apt.id} canRetry={canOperate} />
             {apt.note && (
               <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
                 <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0" />

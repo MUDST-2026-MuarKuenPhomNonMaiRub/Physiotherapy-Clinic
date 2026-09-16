@@ -44,7 +44,7 @@ fi
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
 ./mvnw -Pintegration test \
-  -Dtest="${1:-com.physiocare.clinic.commission.CommissionFlowTest,com.physiocare.clinic.commission.CourseBalanceReportTest,com.physiocare.clinic.checkout.LegacyTransferReconciliationServiceTest}" \
+  -Dtest="${1:-com.physiocare.clinic.commission.CommissionFlowTest,com.physiocare.clinic.commission.CourseBalanceReportTest,com.physiocare.clinic.checkout.LegacyTransferReconciliationServiceTest,com.physiocare.clinic.integration.google.GoogleCalendarSyncTest}" \
   -Dit.db.url="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}" \
   -Dit.db.username="$DB_USER" \
   -Dit.db.password="$DB_PASSWORD"

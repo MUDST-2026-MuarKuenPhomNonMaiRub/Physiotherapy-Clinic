@@ -12,7 +12,9 @@ ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY package*.json ./
 RUN npm ci
 COPY . .
-RUN npm run build
+# Turbopack can stall during production builds in the local Docker runtime;
+# Webpack is the stable production builder for this image.
+RUN npm run build -- --webpack
 
 FROM node:22-alpine
 WORKDIR /app

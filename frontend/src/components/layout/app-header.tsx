@@ -9,6 +9,7 @@ import { getRoleLabel } from "@/lib/permissions";
 import { getPatientFullNameTh, today } from "@/lib/domain";
 import { daysUntil } from "@/lib/format";
 import { BranchSelector } from "@/components/layout/branch-selector";
+import { GoogleCalendarMenu } from "@/components/integrations/google-calendar-menu";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -272,6 +273,7 @@ export function AppHeader() {
             <p className="text-sm font-medium">{user.displayName}</p>
             <p className="text-xs font-normal text-muted-foreground">{getRoleLabel(user.role)}</p>
           </DropdownMenuLabel>
+          <GoogleCalendarMenu />
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout} className="flex items-center gap-2 text-destructive focus:text-destructive">
             <LogOut className="h-4 w-4" /> Log out

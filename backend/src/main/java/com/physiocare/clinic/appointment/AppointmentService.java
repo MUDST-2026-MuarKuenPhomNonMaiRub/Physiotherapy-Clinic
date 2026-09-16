@@ -3,6 +3,7 @@ package com.physiocare.clinic.appointment;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.commission.CourseUsageService;
+import com.physiocare.clinic.integration.google.GoogleCalendarSyncService;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -20,16 +21,18 @@ public class AppointmentService {
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
   private final CourseUsageService courseUsage;
+  private final GoogleCalendarSyncService calendarSync;
 
   public AppointmentService(AppointmentRepository appointments, AppointmentValidator validator,
       AppointmentConflictService conflicts, BranchAccessService branches, CurrentUser currentUser,
-      CourseUsageService courseUsage) {
+      CourseUsageService courseUsage, GoogleCalendarSyncService calendarSync) {
     this.appointments = appointments;
     this.validator = validator;
     this.conflicts = conflicts;
     this.branches = branches;
     this.currentUser = currentUser;
     this.courseUsage = courseUsage;
+    this.calendarSync = calendarSync;
   }
 
   public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId,
@@ -53,6 +56,7 @@ public class AppointmentService {
     conflicts.requireFreeSlot(r, null);
     long id = appointments.insert(r, nextAppointmentNo(), currentUser.id(auth));
     appointments.addInitialEvent(id, currentUser.id(auth));
+    calendarSync.appointmentChanged(id);
     return get(id, auth);
   }
 
@@ -76,6 +80,7 @@ public class AppointmentService {
         ? "Rescheduled from " + originalStart : "Rescheduled from " + originalStart + " — " + r.reason();
     long newId = appointments.insertRescheduled(moved, nextAppointmentNo(), currentUser.id(auth), note);
     appointments.addEvent(newId, null, "CONFIRMED", note, currentUser.id(auth));
+    calendarSync.appointmentChanged(newId);
     return get(newId, auth);
   }
 
@@ -114,6 +119,9 @@ public class AppointmentService {
       appointments.createCompletedVisit(id);
       if (usePatientCourseId != null) recordAppointmentCourseUsage(id, usePatientCourseId, auth);
     }
+    // Every status change reaches the therapist's Google Calendar: a live
+    // status refreshes the event, cancel / no-show / reschedule removes it.
+    calendarSync.appointmentChanged(id);
   }
 
   /**

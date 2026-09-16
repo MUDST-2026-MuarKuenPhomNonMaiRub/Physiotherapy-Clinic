@@ -336,6 +336,38 @@ export interface CommissionScheme {
   active?: boolean;
 }
 
+/** One physiotherapist's link to their own Google Calendar (push only). */
+export interface GoogleCalendarStatus {
+  staffId: string;
+  /** False when the server has no Google client configured — the feature is off. */
+  configured: boolean;
+  connected: boolean;
+  googleEmail: string | null;
+  connectedAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  /** Events still waiting to reach Google (queued or retrying). */
+  pending: number;
+}
+
+export interface GoogleCalendarConnection {
+  staffId: string;
+  googleEmail: string | null;
+  connectedAt: string | null;
+  lastError: string | null;
+  pending: number;
+}
+
+export type CalendarSyncStatus = "PENDING" | "SYNCED" | "FAILED" | "DELETED";
+
+export interface AppointmentCalendarSync {
+  status: CalendarSyncStatus;
+  pendingAction: "UPSERT" | "DELETE";
+  attempts: number;
+  lastError: string | null;
+  updatedAt: string | null;
+}
+
 export interface ClosingPreviewRow {
   employeeId: string;
   employeeName: string;

@@ -53,7 +53,10 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             authorize ->
                 authorize
-                    .requestMatchers("/api/v1/auth/login", "/actuator/health")
+                    // Google redirects the browser to the OAuth callback without
+                    // the app's token; the one-time state in the query is its proof.
+                    .requestMatchers(
+                        "/api/v1/auth/login", "/actuator/health", "/api/v1/integrations/google/callback")
                     .permitAll()
                     // Everything else is checked per endpoint with @PreAuthorize, so
                     // that a read the whole clinic needs is not locked behind the

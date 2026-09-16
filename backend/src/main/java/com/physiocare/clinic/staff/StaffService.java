@@ -3,6 +3,8 @@ package com.physiocare.clinic.staff;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.physiocare.clinic.auth.*;
 import com.physiocare.clinic.common.InputRules;
+import com.physiocare.clinic.integration.google.GoogleCalendarSyncService;
+import com.physiocare.clinic.integration.google.GoogleCalendarSyncService;
 import jakarta.transaction.Transactional;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -22,6 +24,7 @@ public class StaffService {
   private final PasswordEncoder encoder;
   private final JdbcTemplate db;
   private final ObjectMapper objectMapper;
+  private final GoogleCalendarSyncService calendarSync;
 
   public StaffService(
       StaffRepository s,
@@ -29,13 +32,15 @@ public class StaffService {
       RoleRepository r,
       PasswordEncoder e,
       JdbcTemplate db,
-      ObjectMapper objectMapper) {
+      ObjectMapper objectMapper,
+      GoogleCalendarSyncService calendarSync) {
     staff = s;
     users = u;
     roles = r;
     encoder = e;
     this.db = db;
     this.objectMapper = objectMapper;
+    this.calendarSync = calendarSync;
   }
 
   @Transactional
@@ -205,6 +210,10 @@ public class StaffService {
       user.setActive("ACTIVE".equals(person.getStatus()));
       users.save(user);
     }
+    // Someone no longer on staff keeps nothing of the clinic's schedule in
+    // their personal Google account.
+    if (statusChanged && !"ACTIVE".equals(person.getStatus()))
+      calendarSync.disconnect(id, null, "Staff member set to " + person.getStatus());
     return toRow(person);
   }
 
@@ -215,6 +224,7 @@ public class StaffService {
             .findById(id)
             .filter(candidate -> candidate.getDeletedAt() == null)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff not found"));
+    calendarSync.disconnect(id, null, "Staff member archived");
     OffsetDateTime now = OffsetDateTime.now();
     person.setDeletedAt(now);
     person.setStatus("INACTIVE");

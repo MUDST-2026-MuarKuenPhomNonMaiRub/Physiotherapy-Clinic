@@ -1,5 +1,6 @@
 package com.physiocare.clinic.auth;
 
+import com.physiocare.clinic.integration.google.GoogleCalendarSyncService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
@@ -17,10 +18,12 @@ import org.springframework.web.bind.annotation.*;
 public class UserService {
   private final JdbcTemplate db;
   private final RoleRepository roles;
+  private final GoogleCalendarSyncService calendarSync;
 
-  public UserService(JdbcTemplate db, RoleRepository roles) {
+  public UserService(JdbcTemplate db, RoleRepository roles, GoogleCalendarSyncService calendarSync) {
     this.db = db;
     this.roles = roles;
+    this.calendarSync = calendarSync;
   }
 
   public record UpdateRequest(String role, Boolean active) {}
@@ -88,6 +91,8 @@ public class UserService {
     if (isLastActiveAdmin(id))
       throw new IllegalArgumentException("The clinic must keep at least one active admin");
     db.update("UPDATE users SET active=false,deleted_at=now(),updated_at=now() WHERE id=?", id);
+    for (Long staffId : db.queryForList("SELECT id FROM staff WHERE user_id=? AND deleted_at IS NULL", Long.class, id))
+      calendarSync.disconnect(staffId, null, "Login removed");
     db.update("UPDATE staff SET deleted_at=now(),status='INACTIVE' WHERE user_id=?", id);
   }
 

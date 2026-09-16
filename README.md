@@ -107,6 +107,38 @@ cd frontend && npm install && npm run dev
 running `./mvnw spring-boot:run` directly fails with `Could not resolve
 placeholder 'APP_JWT_SECRET'`.
 
+## Google Calendar (optional)
+
+Each physiotherapist can have their appointments pushed into their own Google
+Calendar. It is one-way: the clinic system stays the source of truth, nothing is
+read back from Google, and an event edited in Google is overwritten by the next
+push. Events carry the patient's nickname (or HN), the service, room and branch,
+and a link back into the system — never the full name or phone number.
+
+Setup, once per deployment:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create a project,
+   enable the **Google Calendar API**, and configure the OAuth consent screen
+   (choose *Internal* if the clinic uses Google Workspace — then no verification
+   is needed and tokens do not expire after seven days).
+2. Create an **OAuth client ID** of type *Web application* whose authorised
+   redirect URI is the API's `/api/v1/integrations/google/callback` (for local
+   work: `http://localhost:8080/api/v1/integrations/google/callback`).
+3. Put the client id and secret in `.env` as `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET`, plus `GOOGLE_REDIRECT_URI` and `APP_FRONTEND_URL`
+   (see `.env.example`), then restart the backend.
+
+Each physiotherapist then opens the account menu (top right) and chooses
+**Connect Google Calendar**; their upcoming appointments are added straight
+away, and every later booking, reschedule, cancellation and completion follows.
+Disconnecting (from the same menu, or by an administrator from Staff & Access)
+removes every clinic event from that calendar; deactivating or archiving a
+staff member does the same automatically.
+
+Pushes run after the booking is saved, with retries, so a Google outage never
+stops the counter. An appointment's sync state and a **Retry** button are shown
+on its detail screen.
+
 ## Backend tests
 
 From `backend/`, the standard command runs unit and request-validation tests
