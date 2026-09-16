@@ -212,7 +212,9 @@ export default function EditPatientPage({ params }: { params: Promise<{ id: stri
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
               <div className="space-y-1.5">
-                <Label>Title ({form.customerType === "THAI" ? "TH" : "EN"})</Label>
+                <Label>
+                  Title ({form.customerType === "THAI" ? "TH" : "EN"}) <span className="text-destructive">*</span>
+                </Label>
                 <Select value={form.titleTh} onValueChange={(v) => update("titleTh", v)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
