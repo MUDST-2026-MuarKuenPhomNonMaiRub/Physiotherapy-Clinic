@@ -24,7 +24,7 @@ public class CommissionClosingController {
     this.currentUser = currentUser;
   }
 
-  public record CloseRequest(@NotNull YearMonth month) {}
+  public record CloseRequest(@NotNull YearMonth month, boolean earlyClose, String reason) {}
 
   public record OverrideRequest(@NotNull BigDecimal newRate, String reason) {}
 
@@ -37,7 +37,9 @@ public class CommissionClosingController {
   @PostMapping("/close")
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.close')")
   public Map<String, Object> close(@Valid @RequestBody CloseRequest request, Authentication authentication) {
-    int count = closing.close(request.month(), currentUser.id(authentication));
+    if (request.earlyClose() && (request.reason() == null || request.reason().isBlank()))
+      throw new IllegalArgumentException("A reason is required for an early commission close");
+    int count = closing.close(request.month(), currentUser.id(authentication), request.earlyClose(), request.reason());
     return Map.of("closedEmployees", count);
   }
 

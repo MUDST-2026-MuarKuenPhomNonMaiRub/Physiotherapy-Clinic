@@ -475,10 +475,10 @@ export const previewClosing = (month: string): Promise<ClosingPreviewRow[]> =>
     rows.map(toClosingPreviewRow)
   );
 
-export const closeMonth = (month: string) =>
+export const closeMonth = (month: string, earlyClose = false, reason?: string) =>
   apiRequest<{ closedEmployees: number }>("/api/v1/commission/closing/close", {
     method: "POST",
-    body: { month },
+    body: { month, earlyClose, reason: reason ?? null },
   });
 
 export const listClosingHistory = (month?: string, employeeId?: string): Promise<ClosingHistoryRow[]> =>

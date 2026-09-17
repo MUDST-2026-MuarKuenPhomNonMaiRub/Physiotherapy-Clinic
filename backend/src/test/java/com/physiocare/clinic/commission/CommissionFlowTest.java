@@ -567,6 +567,25 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
         Long.class, seller, month.atDay(1))).isEqualTo(1);
   }
 
+  @Test
+  void adminCanCloseCurrentMonthEarlyWithReasonAndLockPendingCourse() {
+    long seller = seedStaff("Early Close Seller");
+    long patient = seedPatient("Early Close Patient");
+    seedFlatScheme("T_EARLY_CLOSE", new BigDecimal("0.07"), null);
+    long course = seedCourse(seller, seller, patient, new BigDecimal("10000"), 10, LocalDate.now());
+
+    assertThat(closing.close(YearMonth.now(), seedActorUserId(), true, "Finance requested an early close"))
+        .isEqualTo(1);
+
+    Map<String, Object> locked = db.queryForMap(
+        "SELECT commission_status,early_close,close_reason FROM patient_courses pc"
+            + " JOIN monthly_commission_closings mc ON mc.id=pc.monthly_closing_id WHERE pc.id=?",
+        course);
+    assertThat(locked.get("commission_status")).isEqualTo("LOCKED");
+    assertThat(locked.get("early_close")).isEqualTo(true);
+    assertThat(locked.get("close_reason")).isEqualTo("Finance requested an early close");
+  }
+
   // ---- Transfer integration: transferred balance remains spendable ----------
   @Test
   void transferredCourseCanBeUsedByRecipientWithoutANewSale() {

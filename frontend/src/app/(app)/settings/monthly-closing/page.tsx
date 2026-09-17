@@ -43,6 +43,7 @@ export default function MonthlyClosingPage() {
   const [history, setHistory] = useState<ClosingHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
   const [overrideRow, setOverrideRow] = useState<ClosingHistoryRow | null>(null);
   const [overrideRate, setOverrideRate] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
@@ -77,10 +78,16 @@ export default function MonthlyClosingPage() {
   }, [month]);
 
   async function runClose() {
+    const earlyClose = month === currentMonth();
+    if (earlyClose && !closeReason.trim()) {
+      toast.error("A reason is required for an early close");
+      return;
+    }
     setClosing(true);
     try {
-      const result = await closeMonth(month);
+      const result = await closeMonth(month, earlyClose, closeReason.trim() || undefined);
       setConfirmOpen(false);
+      setCloseReason("");
       toast.success(`Closed commission for ${result.closedEmployees} employee(s)`);
       await loadPreview();
       await loadHistory();
@@ -116,14 +123,15 @@ export default function MonthlyClosingPage() {
   }
 
   const closable = preview.filter((row) => !row.alreadyClosed);
-  // A month is only closeable once it is over: the tier is the seller's
-  // total for the whole month, and a course sold after an early close would
-  // be refused at the counter. The API enforces the same rule.
-  const monthStillRunning = month >= currentMonth();
+  // The current month can be closed early by the Admin through the same
+  // button, but the API requires a reason and records an audit event.
+  const monthStillRunning = month === currentMonth();
+  const monthInFuture = month > currentMonth();
   const uncovered = closable.filter((row) => row.suggestedRate === null);
   const totalSales = closable.reduce((sum, row) => sum + row.monthlySales, 0);
   const totalPool = closable.reduce((sum, row) => sum + (row.suggestedPool ?? 0), 0);
-  const canClose = !closing && closable.length > 0 && !monthStillRunning && uncovered.length === 0;
+  const canClose = !closing && closable.length > 0 && !monthInFuture && uncovered.length === 0;
+  const earlyClose = monthStillRunning;
 
   return (
     <>
@@ -132,17 +140,16 @@ export default function MonthlyClosingPage() {
         description="Freezes every Seller's course-sales tier for the month onto every course they sold — after this, a course's rate never moves, no matter how much they sell later."
         actions={
           <Button onClick={() => setConfirmOpen(true)} disabled={!canClose}>
-            <Lock className="h-4 w-4" /> {closing ? "Closing..." : `Close ${month}`}
+            <Lock className="h-4 w-4" /> {closing ? "Closing..." : earlyClose ? `Close Early ${month}` : `Close ${month}`}
           </Button>
         }
       />
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        <Input type="month" value={month} max={previousMonth()} onChange={(e) => setMonth(e.target.value)} className="w-44" />
+        <Input type="month" value={month} max={currentMonth()} onChange={(e) => setMonth(e.target.value)} className="w-44" />
         {monthStillRunning && (
           <p className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-1.5 text-xs text-[#8A5A00]">
-            {month} has not ended yet. Closing it now would freeze every seller&apos;s tier on a partial month and block
-            their course sales for the rest of it — it can be closed from the 1st of next month.
+            {month} is still running. Closing it now is an Admin early close and freezes the tier on sales recorded so far.
           </p>
         )}
         {!monthStillRunning && uncovered.length > 0 && (
@@ -235,12 +242,19 @@ export default function MonthlyClosingPage() {
       <Dialog open={confirmOpen} onOpenChange={(open) => !open && !closing && setConfirmOpen(false)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Close commission for {month}?</DialogTitle>
+            <DialogTitle>{earlyClose ? `Close commission early for ${month}?` : `Close commission for ${month}?`}</DialogTitle>
             <DialogDescription>
-              This freezes the tier rate onto every course sold in {month} and cannot be undone — a later correction
-              needs an audited override.
+              {earlyClose
+                ? "This freezes the tier using sales recorded so far. New course sales in this month will be blocked unless an Admin uses an audited override."
+                : "This freezes the tier rate onto every course sold in this month and cannot be undone — a later correction needs an audited override."}
             </DialogDescription>
           </DialogHeader>
+          {earlyClose && (
+            <div className="space-y-1.5">
+              <Label htmlFor="early-close-reason">Reason for early close</Label>
+              <Textarea id="early-close-reason" value={closeReason} onChange={(e) => setCloseReason(e.target.value)} placeholder="Explain why Finance is closing this month early" />
+            </div>
+          )}
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Sellers to close</span><span className="font-medium">{closable.length}</span></div>
             <div className="mt-1 flex justify-between"><span className="text-muted-foreground">Course sales</span><span className="font-medium">{formatCurrency(totalSales)}</span></div>
@@ -259,7 +273,7 @@ export default function MonthlyClosingPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={closing}>Cancel</Button>
             <Button onClick={() => void runClose()} disabled={closing}>
-              <Lock className="h-4 w-4" /> {closing ? "Closing..." : "Close Month"}
+              <Lock className="h-4 w-4" /> {closing ? "Closing..." : earlyClose ? "Close Early" : "Close Month"}
             </Button>
           </DialogFooter>
         </DialogContent>

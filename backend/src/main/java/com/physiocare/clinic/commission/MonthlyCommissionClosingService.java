@@ -81,13 +81,15 @@ public class MonthlyCommissionClosingService {
         .toList();
   }
 
-  /**
-   * A month can only be closed once it is over: the tier is the seller's total
-   * for the whole month, and a course sold after a premature close would be
-   * refused at the counter (see CheckoutRepository.createPatientCourse).
-   */
+  /** Normal closing requires a completed month; early closing is allowed only for the current month. */
   static void requireMonthEnded(YearMonth month, YearMonth today) {
-    if (!month.isBefore(today))
+    requireMonthEnded(month, today, false);
+  }
+
+  static void requireMonthEnded(YearMonth month, YearMonth today, boolean earlyClose) {
+    if (month.isAfter(today))
+      throw new IllegalArgumentException("Commission for " + month + " cannot be closed before that month starts");
+    if (!month.isBefore(today) && !earlyClose)
       throw new IllegalArgumentException(
           "Commission for " + month + " can only be closed after the month has ended");
   }
@@ -95,7 +97,13 @@ public class MonthlyCommissionClosingService {
   /** Closes every seller with unclosed course sales for the month. Already-closed employees are skipped. */
   @Transactional
   public int close(YearMonth month, Long actorUserId) {
-    requireMonthEnded(month, YearMonth.now());
+    return close(month, actorUserId, false, null);
+  }
+
+  /** Closes an ended month normally, or the current month with an audited early-close reason. */
+  @Transactional
+  public int close(YearMonth month, Long actorUserId, boolean earlyClose, String reason) {
+    requireMonthEnded(month, YearMonth.now(), earlyClose);
     List<Long> employees =
         db.queryForList(
             "SELECT DISTINCT seller_employee_id FROM patient_courses WHERE sale_month=? AND"
@@ -104,13 +112,13 @@ public class MonthlyCommissionClosingService {
             month.atDay(1));
     int closedCount = 0;
     for (Long employee : employees) {
-      if (closeEmployee(month, employee, actorUserId)) closedCount++;
+      if (closeEmployee(month, employee, actorUserId, earlyClose, reason)) closedCount++;
     }
     return closedCount;
   }
 
   /** @return false when this employee/month was already closed (idempotent, not an error). */
-  private boolean closeEmployee(YearMonth month, long employee, Long actorUserId) {
+  private boolean closeEmployee(YearMonth month, long employee, Long actorUserId, boolean earlyClose, String reason) {
     db.queryForList(
         "SELECT pg_advisory_xact_lock(hashtext(?))",
         Object.class,
@@ -134,8 +142,8 @@ public class MonthlyCommissionClosingService {
         db.queryForList(
             "INSERT INTO monthly_commission_closings(closing_month,employee_id,monthly_course_sales,"
                 + "scheme_id,commission_scheme_version,calculated_commission_rate,"
-                + "locked_commission_rate,status,closed_at,closed_by) VALUES"
-                + "(?,?,?,?,?,?,?,'CLOSED',now(),?) ON CONFLICT(closing_month,employee_id) DO NOTHING"
+                + "locked_commission_rate,status,closed_at,closed_by,early_close,close_reason) VALUES"
+                + "(?,?,?,?,?,?,?,'CLOSED',now(),?,?,?) ON CONFLICT(closing_month,employee_id) DO NOTHING"
                 + " RETURNING id",
             Long.class,
             month.atDay(1),
@@ -145,7 +153,9 @@ public class MonthlyCommissionClosingService {
             schemeVersion,
             rate,
             rate,
-            actorUserId);
+            actorUserId,
+            earlyClose,
+            earlyClose ? reason : null);
     if (closingIds.isEmpty()) return false; // already closed — idempotent no-op
 
     long closingId = closingIds.get(0);
@@ -178,7 +188,7 @@ public class MonthlyCommissionClosingService {
     audit.record(
         actorUserId,
         null,
-        "COMMISSION_MONTH_CLOSED",
+        earlyClose ? "COMMISSION_MONTH_EARLY_CLOSED" : "COMMISSION_MONTH_CLOSED",
         "monthly_commission_closings",
         String.valueOf(closingId),
         Map.of("status", "OPEN"),
@@ -189,7 +199,7 @@ public class MonthlyCommissionClosingService {
             "monthlyCourseSales", sales,
             "lockedCommissionRate", rate,
             "schemeVersion", schemeVersion),
-        "Monthly commission closing");
+        earlyClose ? reason : "Monthly commission closing");
 
     return true;
   }
