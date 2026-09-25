@@ -13,10 +13,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final JwtService jwt;
   private final CustomUserDetailsService users;
+  private final AuthCookieService cookies;
 
-  public JwtAuthenticationFilter(JwtService jwt, CustomUserDetailsService users) {
+  public JwtAuthenticationFilter(
+      JwtService jwt, CustomUserDetailsService users, AuthCookieService cookies) {
     this.jwt = jwt;
     this.users = users;
+    this.cookies = cookies;
   }
 
   @Override
@@ -25,11 +28,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       jakarta.servlet.http.HttpServletResponse response,
       FilterChain chain)
       throws ServletException, IOException {
-    String header = request.getHeader("Authorization");
+    String token = cookies.resolveToken(request);
 
-    if (header != null && header.startsWith("Bearer ")) {
-      String token = header.substring(7);
-
+    if (token != null) {
       if (jwt.isValid(token) && SecurityContextHolder.getContext().getAuthentication() == null) {
         try {
           UserDetails details = users.loadUserByUsername(jwt.subject(token));

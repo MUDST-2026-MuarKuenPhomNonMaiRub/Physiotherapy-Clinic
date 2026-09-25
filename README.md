@@ -174,4 +174,4 @@ Do not point these tests at the application's normal database.
 ## Structure
 
 - `frontend/`: Next.js, React and TypeScript clinic ERP UI.
-- `backend/`: Spring Boot 3 REST API with PostgreSQL, Flyway, Spring Security and JWT authentication.
+- `backend/`: Spring Boot 3 REST API with PostgreSQL, Flyway, Spring Security and JWT authentication. The JWT is issued in an HttpOnly, SameSite=Strict cookie (`physiocare_session`), so browser script never sees it; open the app as `http://localhost:3000` locally so the cookie reaches the API on `localhost:8080`.

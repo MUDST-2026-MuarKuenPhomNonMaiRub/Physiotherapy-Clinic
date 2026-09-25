@@ -1,7 +1,7 @@
 /**
- * The single door to the clinic API. Every request carries the signed-in
- * session's bearer token, and every failure arrives as an ApiError whose
- * message is safe to show at the counter.
+ * The single door to the clinic API. Every request carries the browser's
+ * HttpOnly session cookie — page script never sees the token — and every
+ * failure arrives as an ApiError whose message is safe to show at the counter.
  */
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -16,17 +16,6 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Set once the session is known. Reading the token through a getter rather than
- * importing the store keeps this module free of a cycle: the store imports the
- * API, not the other way round.
- */
-let tokenReader: () => string | null = () => null;
-
-export function setTokenReader(reader: () => string | null) {
-  tokenReader = reader;
-}
-
 /** Called when the API rejects the token, so the app can send the user back to sign in. */
 let onUnauthenticated: () => void = () => {};
 
@@ -37,23 +26,24 @@ export function setUnauthenticatedHandler(handler: () => void) {
 interface RequestOptions {
   method?: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   body?: unknown;
-  /** Skips the sign-out handler — used by login itself. */
+  /** Skips the sign-out handler — used by login and logout themselves. */
   anonymous?: boolean;
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, anonymous = false } = options;
-  const token = anonymous ? null : tokenReader();
 
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
       method,
       headers,
+      // The API is on another origin in development, where the cookie is only
+      // sent and accepted when the request asks for credentials.
+      credentials: "include",
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {

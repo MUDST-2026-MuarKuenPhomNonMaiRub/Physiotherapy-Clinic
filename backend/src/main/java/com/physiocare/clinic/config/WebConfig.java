@@ -16,6 +16,9 @@ public class WebConfig implements WebMvcConfigurer {
         .addMapping("/api/**")
         .allowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).toArray(String[]::new))
         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-        .allowedHeaders("*");
+        .allowedHeaders("*")
+        // The browser sends the HttpOnly session cookie cross-origin only when
+        // the API allows credentials; the origins above stay an explicit list.
+        .allowCredentials(true);
   }
 }

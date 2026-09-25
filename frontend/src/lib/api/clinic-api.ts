@@ -93,25 +93,22 @@ async function forBranches<T>(
 }
 
 export interface LoginResult {
-  accessToken: string;
   user: AppUser;
 }
 
 export async function login(email: string, password: string): Promise<LoginResult> {
-  const session = await apiRequest<{ accessToken: string; tokenType: string }>(
+  // The API answers with the session in an HttpOnly cookie; the body carries no token.
+  await apiRequest<{ expiresIn: number }>(
     "/api/v1/auth/login",
     { method: "POST", body: { email, password }, anonymous: true }
   );
 
-  // The profile is fetched with the token login just issued, before the store
-  // has had a chance to record it.
-  const profile = await fetchMe(session.accessToken);
+  const profile = await fetchMe();
   // The backend now orders roles with the highest-privilege one first, but
   // picking ADMIN explicitly when present costs nothing and keeps this
   // correct even if that ordering ever regresses.
   const role = primaryRole(profile.roles);
   return {
-    accessToken: session.accessToken,
     user: {
       id: String(profile.id),
       username: profile.email,
@@ -149,16 +146,18 @@ interface MeResponse {
   branchIds: number[];
 }
 
-async function fetchMe(accessToken: string): Promise<MeResponse> {
-  const response = await fetch(`${API_URL}/api/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+/** Read straight after sign-in, outside apiRequest so a failure here does not trigger a sign-out. */
+async function fetchMe(): Promise<MeResponse> {
+  const response = await fetch(`${API_URL}/api/v1/auth/me`, { credentials: "include" });
   if (!response.ok) throw new Error("Unable to load your profile");
   return (await response.json()) as MeResponse;
 }
 
-/** Re-reads the signed-in account, used after a refresh restores a saved token. */
+/** Re-reads the signed-in account, used after a refresh to check the cookie is still valid. */
 export const me = () => apiRequest<MeResponse>("/api/v1/auth/me");
+
+/** Asks the API to drop the HttpOnly cookie, which page script cannot clear itself. */
+export const logout = () => apiRequest<void>("/api/v1/auth/logout", { method: "POST", anonymous: true });
 
 export interface ConfiguredRole { id: number; code: string; name: string; permissions: string[] }
 export interface ConfiguredPermission { id: number; code: string; name: string }

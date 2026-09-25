@@ -42,7 +42,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const result = await loginWithApi(u, p);
-      setAuthenticatedSession(result.user, result.accessToken);
+      setAuthenticatedSession(result.user);
       setLoading(false);
       router.replace(defaultRouteByRole[result.user.role] ?? "/login");
     } catch (err) {

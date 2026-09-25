@@ -24,7 +24,11 @@ public final class AuthDtos {
       @NotBlank String lastName,
       @NotBlank String role) {}
 
-  public record LoginResponse(String accessToken, String tokenType, long expiresIn) {}
+  /** What the service hands the controller; the token itself never reaches the response body. */
+  public record LoginResult(String token, long expiresIn) {}
+
+  /** The body of a sign-in. The token travels only in the HttpOnly session cookie. */
+  public record LoginResponse(long expiresIn) {}
 
   public record MeResponse(
       Long id,

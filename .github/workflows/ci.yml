@@ -120,7 +120,10 @@ jobs:
       - name: Run full-stack E2E flow
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          # localhost, not 127.0.0.1: the frontend calls the API on
+          # localhost:8080, and the SameSite session cookie is only sent when
+          # the page and the API are the same site.
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
           E2E_ADMIN_EMAIL: admin.e2e@example.com
           E2E_ADMIN_PASSWORD: AdminE2E!123456
         run: npx playwright test e2e/full-stack.spec.ts

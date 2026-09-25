@@ -41,6 +41,9 @@ public class SecurityConfig {
   SecurityFilterChain securityFilterChain(
       HttpSecurity http, JwtAuthenticationFilter jwtFilter, AuthenticationProvider provider)
       throws Exception {
+    // The session cookie is SameSite=Strict and CORS names the allowed origins,
+    // so another site can neither make the browser attach the cookie nor read
+    // a response. That is the CSRF defence; a CSRF token would repeat it.
     return http.csrf(csrf -> csrf.disable())
         .cors(cors -> {})
         .sessionManagement(
@@ -56,7 +59,10 @@ public class SecurityConfig {
                     // Google redirects the browser to the OAuth callback without
                     // the app's token; the one-time state in the query is its proof.
                     .requestMatchers(
-                        "/api/v1/auth/login", "/actuator/health", "/api/v1/integrations/google/callback")
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/logout",
+                        "/actuator/health",
+                        "/api/v1/integrations/google/callback")
                     .permitAll()
                     // Everything else is checked per endpoint with @PreAuthorize, so
                     // that a read the whole clinic needs is not locked behind the
