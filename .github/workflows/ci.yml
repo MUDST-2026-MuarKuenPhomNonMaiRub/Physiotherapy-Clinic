@@ -87,7 +87,10 @@ jobs:
           cp .env.example .env
           sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-local-password/' .env
           sed -i 's/^DATABASE_PASSWORD_DOCKER=.*/DATABASE_PASSWORD_DOCKER=ci-local-password/' .env
-          sed -i "s#^APP_JWT_SECRET=.*#APP_JWT_SECRET=$(openssl rand -base64 32 | tr -d '\\n')#" .env
+          # Keep the CI JWT fixture as valid standard Base64. Generating it inline
+          # through sed can corrupt padding/special characters and prevent the
+          # backend from starting before the browser tests even begin.
+          sed -i 's#^APP_JWT_SECRET=.*#APP_JWT_SECRET=Gm3BtrgxmwVdnZiACjeuxzEZBQ4UZV2h45hD6XQhbZ4=#' .env
           sed -i 's/^BOOTSTRAP_ADMIN_EMAIL=.*/BOOTSTRAP_ADMIN_EMAIL=admin.e2e@example.com/' .env
           sed -i 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=AdminE2E!123456/' .env
 
