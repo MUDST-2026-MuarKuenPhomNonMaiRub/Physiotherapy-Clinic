@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Sarabun } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { LanguageProvider } from "@/components/i18n/language-provider";
 import "./globals.css";
 
 const inter = Inter({
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="th"
+      lang="en"
       className={`${inter.variable} ${sarabun.variable} h-full antialiased`}
     >
       {/*
@@ -34,10 +35,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         mismatch anywhere inside the app is still reported.
       */}
       <body className="min-h-full" suppressHydrationWarning>
-        <TooltipProvider delayDuration={200}>
-          {children}
-          <Toaster position="top-right" richColors closeButton />
-        </TooltipProvider>
+        <LanguageProvider>
+          <TooltipProvider delayDuration={200}>
+            {children}
+            <Toaster position="top-right" richColors closeButton />
+          </TooltipProvider>
+        </LanguageProvider>
       </body>
     </html>
   );
