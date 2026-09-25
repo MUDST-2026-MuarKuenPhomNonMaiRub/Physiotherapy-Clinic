@@ -209,6 +209,40 @@ export interface Appointment {
   checkedOut?: boolean;
   /** The course a completed visit already drew a session from, if any. */
   usedPatientCourseId?: string;
+  /** Copy in the physiotherapist's Google Calendar; absent while the integration is off. */
+  googleSync?: GoogleSyncState;
+}
+
+export type GoogleSyncStatus = "PENDING" | "SYNCED" | "FAILED" | "SKIPPED" | "REMOVED" | "MOVED";
+
+export interface GoogleSyncState {
+  status: GoogleSyncStatus;
+  syncedAt?: string;
+  error?: string;
+}
+
+/** The signed-in person's own link to Google Calendar. */
+export interface GoogleCalendarStatus {
+  /** Whether the clinic server has the integration configured at all. */
+  enabled: boolean;
+  /** False for an account with no staff profile — it has no appointments to sync. */
+  staffLinked: boolean;
+  connected: boolean;
+  googleEmail?: string;
+  status?: "ACTIVE" | "REAUTH_REQUIRED";
+  connectedAt?: string;
+  lastError?: string;
+}
+
+export interface StaffGoogleConnection {
+  staffId: string;
+  staffName: string;
+  position: string;
+  connected: boolean;
+  googleEmail?: string;
+  status?: "ACTIVE" | "REAUTH_REQUIRED";
+  connectedAt?: string;
+  lastError?: string;
 }
 
 export type TransactionType =

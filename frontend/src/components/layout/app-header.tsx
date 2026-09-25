@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut, Search } from "lucide-react";
+import { Bell, CalendarSync, LogOut, Search } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { getRoleLabel } from "@/lib/permissions";
@@ -26,6 +26,7 @@ const labelMap: Record<string, string> = {
   calendar: "Calendar",
   patients: "Patient",
   appointments: "Appointment & Visits",
+  "google-calendar": "Google Calendar",
   visits: "Visit",
   checkout: "Checkout",
   courses: "Patient Courses",
@@ -272,6 +273,10 @@ export function AppHeader() {
             <p className="text-sm font-medium">{user.displayName}</p>
             <p className="text-xs font-normal text-muted-foreground">{getRoleLabel(user.role)}</p>
           </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => router.push("/google-calendar")} className="flex items-center gap-2">
+            <CalendarSync className="h-4 w-4" /> Google Calendar
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout} className="flex items-center gap-2 text-destructive focus:text-destructive">
             <LogOut className="h-4 w-4" /> Log out

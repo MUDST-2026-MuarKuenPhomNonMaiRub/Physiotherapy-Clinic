@@ -42,6 +42,8 @@ import type {
   CourseCommissionReportRow,
   CourseLedgerEntry,
   CourseTemplate,
+  GoogleCalendarStatus,
+  GoogleSyncState,
   MasterDataItem,
   Patient,
   PatientCourse,
@@ -51,6 +53,7 @@ import type {
   Service,
   SharedCourseMember,
   Staff,
+  StaffGoogleConnection,
   Transaction,
   TreatmentFeeRule,
 } from "@/types";
@@ -710,6 +713,67 @@ export const rescheduleAppointment = (
       reason: reason ?? null,
     },
   }).then(toAppointment);
+
+export const getAppointment = (id: string) =>
+  apiRequest<Row>(`/api/v1/appointments/${id}`).then(toAppointment);
+
+// ------------------------------------------------------ google calendar sync
+
+const GOOGLE_CALENDAR = "/api/v1/integrations/google-calendar";
+const optional = (value: unknown) => (value == null ? undefined : String(value));
+
+export const getGoogleCalendarStatus = () =>
+  apiRequest<Row>(`${GOOGLE_CALENDAR}/status`).then(
+    (row): GoogleCalendarStatus => ({
+      enabled: Boolean(row.enabled),
+      staffLinked: Boolean(row.staffLinked),
+      connected: Boolean(row.connected),
+      googleEmail: optional(row.googleEmail),
+      status: optional(row.status) as GoogleCalendarStatus["status"],
+      connectedAt: optional(row.connectedAt),
+      lastError: optional(row.lastError),
+    })
+  );
+
+/** Returns Google's consent URL; the caller sends the browser there. */
+export const startGoogleCalendarConnect = () =>
+  apiRequest<{ authorizationUrl: string }>(`${GOOGLE_CALENDAR}/connect`, { method: "POST" }).then(
+    (r) => r.authorizationUrl
+  );
+
+export const disconnectGoogleCalendar = () =>
+  apiRequest<void>(`${GOOGLE_CALENDAR}/connection`, { method: "DELETE" });
+
+export const listStaffGoogleConnections = () =>
+  apiRequest<Row[]>(`${GOOGLE_CALENDAR}/connections`).then((rows) =>
+    rows.map(
+      (row): StaffGoogleConnection => ({
+        staffId: String(row.staffId),
+        staffName: String(row.staffName ?? ""),
+        position: String(row.position ?? ""),
+        connected: Boolean(row.connected),
+        googleEmail: optional(row.googleEmail),
+        status: optional(row.status) as StaffGoogleConnection["status"],
+        connectedAt: optional(row.connectedAt),
+        lastError: optional(row.lastError),
+      })
+    )
+  );
+
+export const disconnectStaffGoogleCalendar = (staffId: string) =>
+  apiRequest<void>(`${GOOGLE_CALENDAR}/connections/${staffId}`, { method: "DELETE" });
+
+export const retryGoogleSync = (appointmentId: string) =>
+  apiRequest<Row>(`${GOOGLE_CALENDAR}/appointments/${appointmentId}/sync`, { method: "POST" }).then(
+    (row): GoogleSyncState | undefined =>
+      row.status == null
+        ? undefined
+        : {
+            status: String(row.status) as GoogleSyncState["status"],
+            syncedAt: optional(row.syncedAt),
+            error: optional(row.error),
+          }
+  );
 
 // ------------------------------------------------------- courses and ledger
 

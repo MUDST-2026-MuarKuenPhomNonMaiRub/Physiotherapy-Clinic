@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.physiocare.clinic.appointment.AppointmentController;
 import com.physiocare.clinic.branch.BranchService;
 import com.physiocare.clinic.catalog.CatalogController;
+import com.physiocare.clinic.googlecalendar.controller.GoogleCalendarController;
 import com.physiocare.clinic.patient.PatientController;
 import com.physiocare.clinic.room.RoomService;
 import java.lang.reflect.Method;
@@ -42,5 +43,12 @@ class SecurityAnnotationsTest {
   @Test void catalogWritesUseTheConfigurableSettingsPermission() throws Exception {
     assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(CatalogController.class, "addService"));
     assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(CatalogController.class, "addCourse"));
+  }
+
+  @Test void googleCalendarAdminAndSyncEndpointsNeedTheirPermissions() throws Exception {
+    assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(GoogleCalendarController.class, "listConnections"));
+    assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(GoogleCalendarController.class, "disconnectStaff"));
+    assertEquals("@permissionGuard.hasAny(authentication, 'appointment.edit')", policy(GoogleCalendarController.class, "retrySync"));
+    assertEquals("isAuthenticated()", policy(GoogleCalendarController.class, "connect"));
   }
 }

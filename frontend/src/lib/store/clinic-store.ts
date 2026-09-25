@@ -173,6 +173,10 @@ interface ClinicState {
     endTime: string,
     reason?: string
   ) => Promise<Appointment | null>;
+  /** Re-reads one appointment, e.g. to pick up its Google Calendar sync result. */
+  refreshAppointment: (id: string) => Promise<void>;
+  /** Pushes one appointment to Google Calendar again and stores the outcome. */
+  retryGoogleSync: (id: string) => Promise<void>;
 
   // checkout / transactions
   createTransaction: (input: CheckoutInput) => Promise<Transaction>;
@@ -744,6 +748,18 @@ export const useClinicStore = create<ClinicState>()(
           s.appointments = appointments;
         });
         return moved;
+      },
+
+      refreshAppointment: async (id) => {
+        const appointment = await api.getAppointment(id);
+        set((s) => {
+          upsert(s.appointments, appointment);
+        });
+      },
+
+      retryGoogleSync: async (id) => {
+        await api.retryGoogleSync(id);
+        await get().refreshAppointment(id);
       },
 
       // --------------------------------------------------- checkout / voids

@@ -8,6 +8,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,16 +21,18 @@ public class AppointmentService {
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
   private final CourseUsageService courseUsage;
+  private final ApplicationEventPublisher events;
 
   public AppointmentService(AppointmentRepository appointments, AppointmentValidator validator,
       AppointmentConflictService conflicts, BranchAccessService branches, CurrentUser currentUser,
-      CourseUsageService courseUsage) {
+      CourseUsageService courseUsage, ApplicationEventPublisher events) {
     this.appointments = appointments;
     this.validator = validator;
     this.conflicts = conflicts;
     this.branches = branches;
     this.currentUser = currentUser;
     this.courseUsage = courseUsage;
+    this.events = events;
   }
 
   public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId,
@@ -53,6 +56,7 @@ public class AppointmentService {
     conflicts.requireFreeSlot(r, null);
     long id = appointments.insert(r, nextAppointmentNo(), currentUser.id(auth));
     appointments.addInitialEvent(id, currentUser.id(auth));
+    events.publishEvent(AppointmentChangedEvent.created(id));
     return get(id, auth);
   }
 
@@ -76,6 +80,7 @@ public class AppointmentService {
         ? "Rescheduled from " + originalStart : "Rescheduled from " + originalStart + " — " + r.reason();
     long newId = appointments.insertRescheduled(moved, nextAppointmentNo(), currentUser.id(auth), note);
     appointments.addEvent(newId, null, "CONFIRMED", note, currentUser.id(auth));
+    events.publishEvent(AppointmentChangedEvent.rescheduled(id, newId));
     return get(newId, auth);
   }
 
@@ -92,6 +97,7 @@ public class AppointmentService {
       default -> throw new IllegalArgumentException("Invalid appointment action");
     };
     transitionTo(id, status, body == null ? null : body.reason(), auth);
+    events.publishEvent(AppointmentChangedEvent.statusChanged(id));
     return get(id, auth);
   }
 

@@ -12,7 +12,7 @@ public class AppointmentRepository {
   private static final String COLUMNS =
       "a.id,a.appointment_no,a.patient_id,a.branch_id,a.provider_staff_id,a.service_id,a.room_id,"
           + "a.starts_at,a.ends_at,a.status,a.patient_note,a.internal_note,a.cancel_reason_code,"
-          + "a.created_at,EXISTS(SELECT 1 FROM sales_transactions st WHERE st.appointment_id=a.id"
+          + "a.created_at,a.google_sync_status,a.google_synced_at,a.google_sync_error,EXISTS(SELECT 1 FROM sales_transactions st WHERE st.appointment_id=a.id"
           + " AND st.status<>'CANCELLED') AS checked_out,"
           // Completing a visit spends one session from the patient's course
           // (see AppointmentService); checkout has to know which course so it

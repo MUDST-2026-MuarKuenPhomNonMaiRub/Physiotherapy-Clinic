@@ -25,6 +25,7 @@ import { formatDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { GoogleSyncPanel } from "@/components/appointments/google-sync-panel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -271,6 +272,7 @@ export default function AppointmentDetailPage({ params }: { params: Promise<{ id
               )}
             </div>
           </div>
+          <GoogleSyncPanel appointment={apt} canRetry={canOperate} />
         </div>
       </div>
 
