@@ -25,7 +25,9 @@ class CalendarEventFactoryTest {
 
     assertThat(event.get("id")).isEqualTo("labalance42");
     assertThat(event.get("summary")).isEqualTo("เอ · Office Syndrome Treatment");
-    assertThat(((Map<String, Object>) event.get("start")).get("dateTime")).isEqualTo("2026-10-01T10:00+07:00");
+    // Seconds must be present: Google rejects "10:00+07:00" with 400 Bad Request.
+    assertThat(((Map<String, Object>) event.get("start")).get("dateTime")).isEqualTo("2026-10-01T10:00:00+07:00");
+    assertThat(((Map<String, Object>) event.get("end")).get("dateTime")).isEqualTo("2026-10-01T10:45:00+07:00");
     assertThat(((Map<String, Object>) event.get("start")).get("timeZone")).isEqualTo("Asia/Bangkok");
     assertThat((String) event.get("description"))
         .contains("HN 26R9090003", "Room: Treatment Room 1", "http://clinic.test/appointments/42");

@@ -17,6 +17,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class CalendarEventFactory {
   private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
+  /**
+   * RFC 3339 with seconds always present. {@code OffsetDateTime.toString()}
+   * drops ":00" seconds ("10:00+07:00"), which Google rejects as 400 Bad Request.
+   */
+  private static final DateTimeFormatter RFC_3339 = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
   private final GoogleSettings settings;
 
@@ -55,8 +60,8 @@ public class CalendarEventFactory {
     event.put("summary", summary);
     event.put("description", description.toString());
     if (a.branchAddress() != null) event.put("location", a.branchAddress());
-    event.put("start", Map.of("dateTime", starts.toString(), "timeZone", zone));
-    event.put("end", Map.of("dateTime", ends.toString(), "timeZone", zone));
+    event.put("start", Map.of("dateTime", RFC_3339.format(starts), "timeZone", zone));
+    event.put("end", Map.of("dateTime", RFC_3339.format(ends), "timeZone", zone));
     event.put("reminders", Map.of("useDefault", true));
     event.put(
         "extendedProperties",
