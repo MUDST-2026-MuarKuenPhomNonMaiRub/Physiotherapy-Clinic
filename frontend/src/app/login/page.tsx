@@ -15,6 +15,7 @@ import { login as loginWithApi } from "@/lib/api/clinic-api";
 import { useSession } from "@/lib/auth/use-session";
 import { defaultRouteByRole } from "@/lib/permissions/navigation";
 import { ClinicLogo } from "@/components/layout/clinic-logo";
+import { LanguageToggle } from "@/components/i18n/language-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -98,7 +99,8 @@ export default function LoginPage() {
       </div>
 
       {/* Form panel */}
-      <div className="flex w-full flex-1 items-center justify-center px-6 py-12 lg:w-[54%]">
+      <div className="relative flex w-full flex-1 items-center justify-center px-6 py-12 lg:w-[54%]">
+        <LanguageToggle className="absolute right-4 top-4 sm:right-6 sm:top-6" />
         <div className="w-full max-w-sm">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <ClinicLogo className="h-10 w-10 text-primary" />

@@ -11,6 +11,7 @@ import { daysUntil } from "@/lib/format";
 import { BranchSelector } from "@/components/layout/branch-selector";
 import { GoogleCalendarMenu } from "@/components/integrations/google-calendar-menu";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
+import { LanguageToggle } from "@/components/i18n/language-toggle";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -216,6 +217,7 @@ export function AppHeader() {
       )}
 
       <BranchSelector />
+      <LanguageToggle />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

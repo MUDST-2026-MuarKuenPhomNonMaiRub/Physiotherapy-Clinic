@@ -1,7 +1,13 @@
 import { today } from "@/lib/domain";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
+
+function formattingLocale(): "en-GB" | "th-TH" {
+  if (typeof window === "undefined") return "en-GB";
+  return window.localStorage.getItem(LANGUAGE_STORAGE_KEY) === "th" ? "th-TH" : "en-GB";
+}
 
 export function formatCurrency(amount: number): string {
-  return `฿${amount.toLocaleString("en-US")}`;
+  return `฿${amount.toLocaleString(formattingLocale())}`;
 }
 
 /** "-฿250" / "+฿150" — keeps the sign in front of the symbol, not after it. */
@@ -13,7 +19,7 @@ export function formatCurrencySigned(amount: number): string {
 export function formatDate(dateStr: string): string {
   if (!dateStr) return "-";
   const d = new Date(dateStr.length <= 10 ? `${dateStr}T00:00:00` : dateStr);
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString(formattingLocale(), { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function formatThaiNationalId(value: string): string {
@@ -33,8 +39,9 @@ export function formatPhone(value: string): string {
 export function formatDateTime(dateStr: string): string {
   if (!dateStr) return "-";
   const d = new Date(dateStr);
-  return `${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })} ${d.toLocaleTimeString(
-    "en-GB",
+  const locale = formattingLocale();
+  return `${d.toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" })} ${d.toLocaleTimeString(
+    locale,
     { hour: "2-digit", minute: "2-digit" }
   )}`;
 }
