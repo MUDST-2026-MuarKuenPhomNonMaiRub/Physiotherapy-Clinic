@@ -1,6 +1,14 @@
-package com.physiocare.clinic.integration.google;
+package com.physiocare.clinic.integration.google.service;
 
 import com.physiocare.clinic.common.AuditService;
+import com.physiocare.clinic.integration.google.client.GoogleApiClient;
+import com.physiocare.clinic.integration.google.config.GoogleSettings;
+import com.physiocare.clinic.integration.google.model.CalendarConnection;
+import com.physiocare.clinic.integration.google.model.ConnectionStatus;
+import com.physiocare.clinic.integration.google.model.GoogleCalendarDtos.ConnectionRow;
+import com.physiocare.clinic.integration.google.model.GoogleTokens;
+import com.physiocare.clinic.integration.google.model.OAuthState;
+import com.physiocare.clinic.integration.google.repository.GoogleConnectionRepository;
 import com.physiocare.clinic.patient.PiiCryptoService;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -12,7 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.http.HttpStatus;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -29,19 +36,9 @@ public class GoogleCalendarConnectionService {
   static final String SCOPES = "https://www.googleapis.com/auth/calendar.events openid email";
   private static final long STATE_TTL_SECONDS = 600;
 
-  public record Connection(long staffId, String calendarId, String refreshToken) {}
-
-  public record Status(
-      boolean configured,
-      boolean connected,
-      String googleEmail,
-      Instant connectedAt,
-      String lastError,
-      Instant lastErrorAt) {}
-
   private record CachedToken(String accessToken, Instant expiresAt) {}
 
-  private final JdbcTemplate db;
+  private final GoogleConnectionRepository connections;
   private final GoogleSettings settings;
   private final GoogleApiClient google;
   private final PiiCryptoService crypto;
@@ -50,33 +47,32 @@ public class GoogleCalendarConnectionService {
   private final Map<Long, CachedToken> accessTokens = new ConcurrentHashMap<>();
 
   public GoogleCalendarConnectionService(
-      JdbcTemplate db,
+      GoogleConnectionRepository connections,
       GoogleSettings settings,
       GoogleApiClient google,
       PiiCryptoService crypto,
       AuditService audit) {
-    this.db = db;
+    this.connections = connections;
     this.settings = settings;
     this.google = google;
     this.crypto = crypto;
     this.audit = audit;
   }
 
-  public Status status(long staffId) {
-    List<Map<String, Object>> rows =
-        db.queryForList(
-            "SELECT google_email,connected_at,last_error,last_error_at FROM staff_google_calendars"
-                + " WHERE staff_id=?",
-            staffId);
-    if (rows.isEmpty()) return new Status(settings.configured(), false, null, null, null, null);
-    Map<String, Object> row = rows.get(0);
-    return new Status(
-        settings.configured(),
-        true,
-        (String) row.get("google_email"),
-        instant(row.get("connected_at")),
-        (String) row.get("last_error"),
-        instant(row.get("last_error_at")));
+  public ConnectionStatus status(long staffId) {
+    return connections.findStatusRow(staffId)
+        .map(row -> new ConnectionStatus(
+            settings.configured(),
+            true,
+            (String) row.get("google_email"),
+            instant(row.get("connected_at")),
+            (String) row.get("last_error"),
+            instant(row.get("last_error_at"))))
+        .orElse(new ConnectionStatus(settings.configured(), false, null, null, null, null));
+  }
+
+  public List<ConnectionRow> listConnections() {
+    return connections.listConnections();
   }
 
   /** The Google consent page for this staff member, with a one-time state tying the answer back to them. */
@@ -86,11 +82,7 @@ public class GoogleCalendarConnectionService {
     byte[] bytes = new byte[32];
     random.nextBytes(bytes);
     String state = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-    db.update(
-        "DELETE FROM google_oauth_states WHERE created_at < now() - interval '1 hour' OR staff_id=?",
-        staffId);
-    db.update(
-        "INSERT INTO google_oauth_states(state,staff_id,user_id) VALUES(?,?,?)", state, staffId, userId);
+    connections.saveState(state, staffId, userId);
     return "https://accounts.google.com/o/oauth2/v2/auth"
         + "?client_id=" + encode(settings.clientId())
         + "&redirect_uri=" + encode(settings.redirectUri())
@@ -110,17 +102,11 @@ public class GoogleCalendarConnectionService {
   @Transactional
   public long completeConnection(String state, String code) {
     requireConfigured();
-    List<Map<String, Object>> rows =
-        db.queryForList(
-            "DELETE FROM google_oauth_states WHERE state=? AND created_at > now() - (? * interval '1 second')"
-                + " RETURNING staff_id,user_id",
-            state, STATE_TTL_SECONDS);
-    if (rows.isEmpty())
-      throw new IllegalArgumentException("This Google sign-in link has expired. Start the connection again.");
-    long staffId = ((Number) rows.get(0).get("staff_id")).longValue();
-    long userId = ((Number) rows.get(0).get("user_id")).longValue();
+    OAuthState started = connections.consumeState(state, STATE_TTL_SECONDS)
+        .orElseThrow(() -> new IllegalArgumentException(
+            "This Google sign-in link has expired. Start the connection again."));
 
-    GoogleApiClient.Tokens tokens = google.exchangeCode(code);
+    GoogleTokens tokens = google.exchangeCode(code);
     if (tokens.refreshToken() == null || tokens.refreshToken().isBlank())
       throw new IllegalArgumentException(
           "Google did not grant offline access. Remove LA BALANCE from your Google account's"
@@ -132,61 +118,41 @@ public class GoogleCalendarConnectionService {
       // The address is informational; the connection works without it.
     }
 
-    db.update(
-        "INSERT INTO staff_google_calendars(staff_id,google_email,refresh_token_ciphertext,connected_by,"
-            + "connected_at,last_error,last_error_at) VALUES(?,?,?,?,now(),NULL,NULL)"
-            + " ON CONFLICT (staff_id) DO UPDATE SET google_email=EXCLUDED.google_email,"
-            + " refresh_token_ciphertext=EXCLUDED.refresh_token_ciphertext,"
-            + " connected_by=EXCLUDED.connected_by, connected_at=now(), last_error=NULL, last_error_at=NULL",
-        staffId, email, crypto.encrypt(tokens.refreshToken()), userId);
-    accessTokens.put(
-        staffId,
-        new CachedToken(tokens.accessToken(), Instant.now().plusSeconds(tokens.expiresInSeconds() - 60)));
-    audit.record(userId, null, "GOOGLE_CALENDAR_CONNECTED", "staff", String.valueOf(staffId), null,
-        Map.of("googleEmail", email == null ? "" : email), "Google Calendar connected");
-    return staffId;
+    connections.upsert(started.staffId(), email, crypto.encrypt(tokens.refreshToken()), started.userId());
+    cache(started.staffId(), tokens);
+    audit.record(started.userId(), null, "GOOGLE_CALENDAR_CONNECTED", "staff", String.valueOf(started.staffId()),
+        null, Map.of("googleEmail", email == null ? "" : email), "Google Calendar connected");
+    return started.staffId();
   }
 
   /** Drops the stored grant. The caller removes the events first while the token still works. */
   @Transactional
   public void disconnect(long staffId, Long actorUserId, String reason) {
-    Optional<Connection> connection = connection(staffId);
+    Optional<CalendarConnection> connection = connection(staffId);
     if (connection.isEmpty()) return;
     google.revoke(connection.get().refreshToken());
-    db.update("DELETE FROM staff_google_calendars WHERE staff_id=?", staffId);
+    connections.delete(staffId);
     accessTokens.remove(staffId);
     audit.record(actorUserId, null, "GOOGLE_CALENDAR_DISCONNECTED", "staff", String.valueOf(staffId),
         null, null, reason);
   }
 
-  public Optional<Connection> connection(long staffId) {
-    return db.queryForList(
-            "SELECT calendar_id,refresh_token_ciphertext FROM staff_google_calendars WHERE staff_id=?",
-            staffId)
-        .stream()
-        .findFirst()
-        .map(
-            row ->
-                new Connection(
-                    staffId,
-                    (String) row.get("calendar_id"),
-                    crypto.decrypt((String) row.get("refresh_token_ciphertext"))));
+  public Optional<CalendarConnection> connection(long staffId) {
+    return connections.find(staffId)
+        .map(stored -> new CalendarConnection(
+            staffId, stored.calendarId(), crypto.decrypt(stored.refreshTokenCiphertext())));
   }
 
   public boolean isConnected(long staffId) {
-    return Boolean.TRUE.equals(
-        db.queryForObject(
-            "SELECT EXISTS(SELECT 1 FROM staff_google_calendars WHERE staff_id=?)", Boolean.class, staffId));
+    return connections.exists(staffId);
   }
 
   /** A usable access token, refreshed from the stored grant when the cached one is about to lapse. */
-  public String accessToken(Connection connection) {
+  public String accessToken(CalendarConnection connection) {
     CachedToken cached = accessTokens.get(connection.staffId());
     if (cached != null && cached.expiresAt().isAfter(Instant.now())) return cached.accessToken();
-    GoogleApiClient.Tokens tokens = google.refresh(connection.refreshToken());
-    accessTokens.put(
-        connection.staffId(),
-        new CachedToken(tokens.accessToken(), Instant.now().plusSeconds(tokens.expiresInSeconds() - 60)));
+    GoogleTokens tokens = google.refresh(connection.refreshToken());
+    cache(connection.staffId(), tokens);
     return tokens.accessToken();
   }
 
@@ -195,20 +161,20 @@ public class GoogleCalendarConnectionService {
   }
 
   public void recordError(long staffId, String message) {
-    db.update(
-        "UPDATE staff_google_calendars SET last_error=?, last_error_at=now() WHERE staff_id=?",
-        message, staffId);
+    connections.recordError(staffId, message);
   }
 
   public void clearError(long staffId) {
-    db.update(
-        "UPDATE staff_google_calendars SET last_error=NULL, last_error_at=NULL WHERE staff_id=?"
-            + " AND last_error IS NOT NULL",
-        staffId);
+    connections.clearError(staffId);
   }
 
   public String frontendUrl() {
     return settings.frontendUrl();
+  }
+
+  private void cache(long staffId, GoogleTokens tokens) {
+    accessTokens.put(
+        staffId, new CachedToken(tokens.accessToken(), Instant.now().plusSeconds(tokens.expiresInSeconds() - 60)));
   }
 
   private void requireConfigured() {

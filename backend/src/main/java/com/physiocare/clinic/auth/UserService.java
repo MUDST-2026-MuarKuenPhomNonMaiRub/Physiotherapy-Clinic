@@ -1,6 +1,6 @@
 package com.physiocare.clinic.auth;
 
-import com.physiocare.clinic.integration.google.GoogleCalendarSyncService;
+import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;

@@ -27,6 +27,7 @@ const labelMap: Record<string, string> = {
   calendar: "Calendar",
   patients: "Patient",
   appointments: "Appointment & Visits",
+  "google-calendar": "Google Calendar",
   visits: "Visit",
   checkout: "Checkout",
   courses: "Patient Courses",

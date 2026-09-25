@@ -120,7 +120,11 @@ Setup, once per deployment:
 1. In [Google Cloud Console](https://console.cloud.google.com/) create a project,
    enable the **Google Calendar API**, and configure the OAuth consent screen
    (choose *Internal* if the clinic uses Google Workspace — then no verification
-   is needed and tokens do not expire after seven days).
+   is needed and tokens do not expire after seven days). With *External* (plain
+   Gmail accounts) the app starts in *Testing*: only the Gmail addresses listed
+   under **Audience → Test users** can connect, and Google expires their access
+   after seven days. For real use press **Publish app** on the same screen;
+   people then see a one-time "unverified app" warning until Google verifies it.
 2. Create an **OAuth client ID** of type *Web application* whose authorised
    redirect URI is the API's `/api/v1/integrations/google/callback` (for local
    work: `http://localhost:8080/api/v1/integrations/google/callback`).
@@ -137,7 +141,15 @@ staff member does the same automatically.
 
 Pushes run after the booking is saved, with retries, so a Google outage never
 stops the counter. An appointment's sync state and a **Retry** button are shown
-on its detail screen.
+on its detail screen. **Google Calendar settings** in the account menu opens
+`/google-calendar`: the person's own link, what is shared with Google, and for
+an administrator every connected staff member. If a push keeps failing because
+access expired, **Reconnect** there fixes it.
+
+The backend lives in `integration/google`, split by layer: `controller` (HTTP
+only), `service` (rules and the push worker), `repository` (all SQL), `client`
+(the Google endpoints), `model` and `config`. The PostgreSQL-backed test is
+`GoogleCalendarSyncTest`, run by `bash backend/run-commission-tests.sh`.
 
 ## Backend tests
 

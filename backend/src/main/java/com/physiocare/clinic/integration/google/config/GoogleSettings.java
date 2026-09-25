@@ -1,4 +1,4 @@
-package com.physiocare.clinic.integration.google;
+package com.physiocare.clinic.integration.google.config;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;

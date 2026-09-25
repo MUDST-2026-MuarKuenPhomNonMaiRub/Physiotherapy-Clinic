@@ -1,4 +1,4 @@
-package com.physiocare.clinic.integration.google;
+package com.physiocare.clinic.integration.google.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -10,6 +10,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.physiocare.clinic.commission.AbstractCommissionIntegrationTest;
+import com.physiocare.clinic.integration.google.client.GoogleApiClient;
+import com.physiocare.clinic.integration.google.client.GoogleApiException;
+import com.physiocare.clinic.integration.google.model.GoogleTokens;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -39,7 +42,7 @@ class GoogleCalendarSyncTest extends AbstractCommissionIntegrationTest {
 
   private long connect(long staffId) {
     long userId = seedActorUserId();
-    when(google.exchangeCode("the-code")).thenReturn(new GoogleApiClient.Tokens("access-1", "refresh-1", 3600));
+    when(google.exchangeCode("the-code")).thenReturn(new GoogleTokens("access-1", "refresh-1", 3600));
     when(google.email("access-1")).thenReturn("dr@example.com");
     String url = connections.authorizationUrl(staffId, userId);
     Matcher state = Pattern.compile("state=([A-Za-z0-9_-]+)").matcher(url);
@@ -139,7 +142,7 @@ class GoogleCalendarSyncTest extends AbstractCommissionIntegrationTest {
     long patientId = seedPatient("Repeat");
     connect(staffId);
     long appointmentId = seedAppointment(staffId, patientId, "COMPLETED");
-    doThrow(new GoogleApiClient.GoogleApiException(409, "exists"))
+    doThrow(new GoogleApiException(409, "exists"))
         .when(google).insertEvent(anyString(), anyString(), any());
 
     sync.appointmentChanged(appointmentId);
@@ -157,7 +160,7 @@ class GoogleCalendarSyncTest extends AbstractCommissionIntegrationTest {
     long patientId = seedPatient("Waiting");
     connect(staffId);
     long appointmentId = seedAppointment(staffId, patientId, "CONFIRMED");
-    doThrow(new GoogleApiClient.GoogleApiException(503, "Google answered 503"))
+    doThrow(new GoogleApiException(503, "Google answered 503"))
         .when(google).insertEvent(anyString(), anyString(), any());
 
     sync.appointmentChanged(appointmentId);

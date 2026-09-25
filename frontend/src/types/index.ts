@@ -352,6 +352,8 @@ export interface GoogleCalendarStatus {
 
 export interface GoogleCalendarConnection {
   staffId: string;
+  staffName: string;
+  position: string;
   googleEmail: string | null;
   connectedAt: string | null;
   lastError: string | null;

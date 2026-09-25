@@ -3,7 +3,7 @@ package com.physiocare.clinic.appointment;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.commission.CourseUsageService;
-import com.physiocare.clinic.integration.google.GoogleCalendarSyncService;
+import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;

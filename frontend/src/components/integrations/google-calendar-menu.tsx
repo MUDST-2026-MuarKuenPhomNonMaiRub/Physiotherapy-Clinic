@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CalendarSync, Unplug } from "lucide-react";
+import { CalendarSync, Settings2, Unplug } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   disconnectGoogleCalendar,
@@ -19,7 +20,8 @@ import type { GoogleCalendarStatus } from "@/types";
  * read back from Google.
  */
 export function GoogleCalendarMenu() {
-  const { user } = useSession();
+  const router = useRouter();
+  const { user, can } = useSession();
   const [status, setStatus] = useState<GoogleCalendarStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const staffId = user?.staffId;
@@ -35,7 +37,22 @@ export function GoogleCalendarMenu() {
     load();
   }, [load]);
 
-  if (!staffId || !status) return null;
+  const settingsItem = (
+    <DropdownMenuItem onSelect={() => router.push("/google-calendar")} className="flex items-center gap-2">
+      <Settings2 className="h-4 w-4" /> Google Calendar settings
+    </DropdownMenuItem>
+  );
+
+  // An administrator without a staff record has no calendar of their own,
+  // but can still open the page to see who is connected.
+  if (!staffId || !status) {
+    return can("settings.manage") ? (
+      <>
+        <DropdownMenuSeparator />
+        {settingsItem}
+      </>
+    ) : null;
+  }
 
   async function connect() {
     setBusy(true);
@@ -104,6 +121,7 @@ export function GoogleCalendarMenu() {
           <CalendarSync className="h-4 w-4" /> {busy ? "Opening Google…" : "Connect Google Calendar"}
         </DropdownMenuItem>
       )}
+      {settingsItem}
     </>
   );
 }

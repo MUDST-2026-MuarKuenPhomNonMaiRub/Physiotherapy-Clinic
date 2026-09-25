@@ -1,5 +1,9 @@
-package com.physiocare.clinic.integration.google;
+package com.physiocare.clinic.integration.google.client;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.physiocare.clinic.integration.google.config.GoogleSettings;
+import com.physiocare.clinic.integration.google.model.GoogleTokens;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -23,31 +27,8 @@ public class GoogleApiClient {
   static final String USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo";
   static final String CALENDAR_URL = "https://www.googleapis.com/calendar/v3/calendars";
 
-  /** Thrown for any answer Google gives other than success; the status decides whether a retry can help. */
-  public static class GoogleApiException extends RuntimeException {
-    private final int status;
 
-    public GoogleApiException(int status, String message) {
-      super(message);
-      this.status = status;
-    }
-
-    public int status() {
-      return status;
-    }
-
-    /** 4xx other than 429 is a request Google will never accept — retrying it is pointless. */
-    public boolean permanent() {
-      return status >= 400 && status < 500 && status != 429;
-    }
-
-    /** The account withdrew access (or the token was revoked): the connection is dead. */
-    public boolean unauthorised() {
-      return status == 401 || status == 403;
-    }
-  }
-
-  public record Tokens(String accessToken, String refreshToken, long expiresInSeconds) {}
+  private static final ObjectMapper JSON = new ObjectMapper();
 
   private final RestClient http;
   private final GoogleSettings settings;
@@ -63,7 +44,7 @@ public class GoogleApiClient {
   }
 
   /** Swaps the one-time code Google sent back for a refresh token (and a first access token). */
-  public Tokens exchangeCode(String code) {
+  public GoogleTokens exchangeCode(String code) {
     MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
     form.add("code", code);
     form.add("client_id", settings.clientId());
@@ -71,21 +52,21 @@ public class GoogleApiClient {
     form.add("redirect_uri", settings.redirectUri());
     form.add("grant_type", "authorization_code");
     Map<?, ?> body = postForm(TOKEN_URL, form);
-    return new Tokens(
+    return new GoogleTokens(
         String.valueOf(body.get("access_token")),
         body.get("refresh_token") == null ? null : String.valueOf(body.get("refresh_token")),
         body.get("expires_in") == null ? 3600 : ((Number) body.get("expires_in")).longValue());
   }
 
   /** A fresh short-lived access token from the stored refresh token. */
-  public Tokens refresh(String refreshToken) {
+  public GoogleTokens refresh(String refreshToken) {
     MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
     form.add("refresh_token", refreshToken);
     form.add("client_id", settings.clientId());
     form.add("client_secret", settings.clientSecret());
     form.add("grant_type", "refresh_token");
     Map<?, ?> body = postForm(TOKEN_URL, form);
-    return new Tokens(
+    return new GoogleTokens(
         String.valueOf(body.get("access_token")),
         refreshToken,
         body.get("expires_in") == null ? 3600 : ((Number) body.get("expires_in")).longValue());
@@ -185,11 +166,37 @@ public class GoogleApiClient {
   }
 
   private static GoogleApiException translate(HttpStatusCodeException e) {
+    int status = e.getStatusCode().value();
     String detail = e.getResponseBodyAsString();
-    return new GoogleApiException(
-        e.getStatusCode().value(),
-        "Google answered " + e.getStatusCode().value()
-            + (detail == null || detail.isBlank() ? "" : ": " + abbreviate(detail)));
+    String reason = reason(detail);
+    String message;
+    if ("invalid_grant".equals(reason)) {
+      message = "Google access has expired or was removed. Disconnect and connect Google Calendar again.";
+    } else if ("invalid_client".equals(reason) || "unauthorized_client".equals(reason)) {
+      message = "Google rejected the clinic's OAuth client. Check GOOGLE_CLIENT_ID and"
+          + " GOOGLE_CLIENT_SECRET on the server.";
+    } else {
+      message = "Google answered " + status
+          + (detail == null || detail.isBlank() ? "" : ": " + abbreviate(detail));
+    }
+    return new GoogleApiException(status, reason, message);
+  }
+
+  /**
+   * Google's reason code: the OAuth endpoints send {@code {"error":"invalid_grant"}},
+   * the Calendar API {@code {"error":{"errors":[{"reason":"rateLimitExceeded"}]}}}.
+   */
+  static String reason(String body) {
+    if (body == null || body.isBlank()) return null;
+    try {
+      JsonNode error = JSON.readTree(body).path("error");
+      if (error.isTextual()) return error.asText();
+      JsonNode first = error.path("errors").path(0).path("reason");
+      if (first.isTextual()) return first.asText();
+      return error.path("status").isTextual() ? error.path("status").asText() : null;
+    } catch (Exception notJson) {
+      return null;
+    }
   }
 
   private static String abbreviate(String value) {

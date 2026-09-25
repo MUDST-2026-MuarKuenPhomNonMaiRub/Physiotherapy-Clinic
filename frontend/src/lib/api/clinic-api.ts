@@ -859,6 +859,8 @@ export const listGoogleCalendarConnections = (): Promise<GoogleCalendarConnectio
   apiRequest<Row[]>("/api/v1/integrations/google/connections").then((rows) =>
     rows.map((row) => ({
       staffId: String(row.staff_id),
+      staffName: row.staff_name == null ? "" : String(row.staff_name),
+      position: row.position == null ? "" : String(row.position),
       googleEmail: row.google_email == null ? null : String(row.google_email),
       connectedAt: row.connected_at == null ? null : String(row.connected_at),
       lastError: row.last_error == null ? null : String(row.last_error),
