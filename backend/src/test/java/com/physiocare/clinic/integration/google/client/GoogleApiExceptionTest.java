@@ -17,6 +17,17 @@ class GoogleApiExceptionTest {
   }
 
   @Test
+  void showsGooglesOwnMessageInsteadOfTheRawBody() {
+    assertThat(GoogleApiClient.googleMessage(
+            "{\"error\":{\"errors\":[{\"domain\":\"global\",\"reason\":\"badRequest\",\"message\":\"Bad Request\"}],"
+                + "\"code\":400,\"message\":\"Bad Request\"}}"))
+        .isEqualTo("Bad Request (badRequest)");
+    assertThat(GoogleApiClient.googleMessage("{\"error\":\"invalid_grant\",\"error_description\":\"Token has been expired or revoked.\"}"))
+        .isEqualTo("Token has been expired or revoked.");
+    assertThat(GoogleApiClient.googleMessage("<html>Bad Gateway</html>")).isNull();
+  }
+
+  @Test
   void aRateLimitIsRetriedSoonRatherThanParkedForADay() {
     GoogleApiException slowDown = new GoogleApiException(403, "rateLimitExceeded", "Rate Limit Exceeded");
     assertThat(slowDown.rateLimited()).isTrue();

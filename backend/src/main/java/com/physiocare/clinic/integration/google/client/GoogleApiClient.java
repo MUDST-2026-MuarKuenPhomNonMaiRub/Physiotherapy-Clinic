@@ -176,8 +176,10 @@ public class GoogleApiClient {
       message = "Google rejected the clinic's OAuth client. Check GOOGLE_CLIENT_ID and"
           + " GOOGLE_CLIENT_SECRET on the server.";
     } else {
+      String googleMessage = googleMessage(detail);
       message = "Google answered " + status
-          + (detail == null || detail.isBlank() ? "" : ": " + abbreviate(detail));
+          + (googleMessage != null ? ": " + googleMessage
+              : detail == null || detail.isBlank() ? "" : ": " + abbreviate(detail));
     }
     return new GoogleApiException(status, reason, message);
   }
@@ -186,6 +188,23 @@ public class GoogleApiClient {
    * Google's reason code: the OAuth endpoints send {@code {"error":"invalid_grant"}},
    * the Calendar API {@code {"error":{"errors":[{"reason":"rateLimitExceeded"}]}}}.
    */
+  /** Google's human-readable message, or null when the body carries none. */
+  static String googleMessage(String body) {
+    if (body == null || body.isBlank()) return null;
+    try {
+      JsonNode root = JSON.readTree(body);
+      JsonNode error = root.path("error");
+      if (error.isObject() && error.path("message").isTextual()) {
+        String reason = error.path("errors").path(0).path("reason").asText("");
+        return error.path("message").asText() + (reason.isBlank() ? "" : " (" + reason + ")");
+      }
+      if (root.path("error_description").isTextual()) return root.path("error_description").asText();
+      return null;
+    } catch (Exception notJson) {
+      return null;
+    }
+  }
+
   static String reason(String body) {
     if (body == null || body.isBlank()) return null;
     try {

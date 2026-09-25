@@ -242,6 +242,8 @@ function OwnConnection({
   }
 
   const failing = Boolean(status.lastError);
+  // Reconnecting only helps when Google stopped accepting the stored grant.
+  const accessLost = /expired or was removed|invalid_grant|answered 401/i.test(status.lastError ?? "");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -258,7 +260,7 @@ function OwnConnection({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {failing && <Button onClick={onConnect} disabled={busy}>Reconnect</Button>}
+          {accessLost && <Button onClick={onConnect} disabled={busy}>Reconnect</Button>}
           <Button variant="outline" onClick={onDisconnect} disabled={busy}>
             <Link2Off className="h-4 w-4" /> Disconnect
           </Button>
@@ -266,7 +268,8 @@ function OwnConnection({
       </div>
       {failing && (
         <Notice icon={AlertTriangle} tone="destructive">
-          Last push failed: {status.lastError} If Google access expired, press Reconnect.
+          Last push failed: {status.lastError}
+          {accessLost ? " Press Reconnect to give access again." : " Use Retry on the appointment once the cause is fixed."}
         </Notice>
       )}
     </div>
