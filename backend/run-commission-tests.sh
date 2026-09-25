@@ -28,15 +28,24 @@ docker run -d --name "$CONTAINER_NAME" \
   -p "${DB_PORT}:5432" postgres:16-alpine >/dev/null
 
 echo "Waiting for $CONTAINER_NAME to accept connections on port $DB_PORT..."
-for _ in $(seq 1 30); do
+ready=0
+for _ in $(seq 1 90); do
+  state="$(docker inspect -f '{{.State.Status}}' "$CONTAINER_NAME" 2>/dev/null || true)"
+  if [[ "$state" == "exited" || "$state" == "dead" ]]; then
+    echo "PostgreSQL container stopped before becoming ready:" >&2
+    docker logs "$CONTAINER_NAME" >&2 || true
+    exit 1
+  fi
   if docker exec "$CONTAINER_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
+    ready=1
     break
   fi
   sleep 1
 done
 
-if ! docker exec "$CONTAINER_NAME" pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; then
+if [[ "$ready" != "1" ]]; then
   echo "PostgreSQL did not become ready on localhost:$DB_PORT." >&2
+  docker logs "$CONTAINER_NAME" >&2 || true
   echo "Check Docker is running, then retry: bash run-commission-tests.sh" >&2
   exit 1
 fi
