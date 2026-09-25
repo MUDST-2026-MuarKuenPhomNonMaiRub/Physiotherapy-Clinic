@@ -47,6 +47,8 @@ export interface CheckoutInput {
   useNewlyPurchasedSession?: boolean;
   treatingStaffId?: string;
   salespersonId?: string;
+  /** Owner of the course's commission pool; defaults to the salesperson when omitted. */
+  caseOwnerEmployeeId?: string;
   paymentMethodId: string;
   /** Cash handed over at the counter. Only meaningful when paying by cash. */
   cashReceived?: number;
@@ -163,7 +165,8 @@ interface ClinicState {
   ) => Promise<{ ok: boolean; error?: string; appointment?: Appointment }>;
   checkInAppointment: (id: string) => Promise<void>;
   startService: (id: string) => Promise<void>;
-  completeService: (id: string) => Promise<void>;
+  /** Completes the visit, spending a session from the named course if one is given. */
+  completeService: (id: string, usePatientCourseId?: string) => Promise<void>;
   cancelAppointment: (id: string, reason: string) => Promise<void>;
   markNoShow: (id: string) => Promise<void>;
   rescheduleAppointment: (
@@ -173,10 +176,6 @@ interface ClinicState {
     endTime: string,
     reason?: string
   ) => Promise<Appointment | null>;
-  /** Re-reads one appointment, e.g. to pick up its Google Calendar sync result. */
-  refreshAppointment: (id: string) => Promise<void>;
-  /** Pushes one appointment to Google Calendar again and stores the outcome. */
-  retryGoogleSync: (id: string) => Promise<void>;
 
   // checkout / transactions
   createTransaction: (input: CheckoutInput) => Promise<Transaction>;
@@ -712,11 +711,13 @@ export const useClinicStore = create<ClinicState>()(
         });
       },
 
-      completeService: async (id) => {
-        const appointment = await api.transitionAppointment(id, "complete");
-        // Completing a visit spends a session from the patient's course, so
+      completeService: async (id, usePatientCourseId) => {
+        const appointment = await api.transitionAppointment(id, "complete", undefined, usePatientCourseId);
+        // Completing a visit may spend a session from the chosen course, so
         // the course balances are re-read along with the appointment.
-        const courses = await api.listPatientCoursesFor(branchScope()).catch(() => null);
+        const courses = usePatientCourseId
+          ? await api.listPatientCoursesFor(branchScope()).catch(() => null)
+          : null;
         set((s) => {
           upsert(s.appointments, appointment);
           if (courses) {
@@ -748,18 +749,6 @@ export const useClinicStore = create<ClinicState>()(
           s.appointments = appointments;
         });
         return moved;
-      },
-
-      refreshAppointment: async (id) => {
-        const appointment = await api.getAppointment(id);
-        set((s) => {
-          upsert(s.appointments, appointment);
-        });
-      },
-
-      retryGoogleSync: async (id) => {
-        await api.retryGoogleSync(id);
-        await get().refreshAppointment(id);
       },
 
       // --------------------------------------------------- checkout / voids

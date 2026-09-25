@@ -3,12 +3,12 @@ package com.physiocare.clinic.appointment;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.commission.CourseUsageService;
+import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,18 +21,18 @@ public class AppointmentService {
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
   private final CourseUsageService courseUsage;
-  private final ApplicationEventPublisher events;
+  private final GoogleCalendarSyncService calendarSync;
 
   public AppointmentService(AppointmentRepository appointments, AppointmentValidator validator,
       AppointmentConflictService conflicts, BranchAccessService branches, CurrentUser currentUser,
-      CourseUsageService courseUsage, ApplicationEventPublisher events) {
+      CourseUsageService courseUsage, GoogleCalendarSyncService calendarSync) {
     this.appointments = appointments;
     this.validator = validator;
     this.conflicts = conflicts;
     this.branches = branches;
     this.currentUser = currentUser;
     this.courseUsage = courseUsage;
-    this.events = events;
+    this.calendarSync = calendarSync;
   }
 
   public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId,
@@ -56,7 +56,7 @@ public class AppointmentService {
     conflicts.requireFreeSlot(r, null);
     long id = appointments.insert(r, nextAppointmentNo(), currentUser.id(auth));
     appointments.addInitialEvent(id, currentUser.id(auth));
-    events.publishEvent(AppointmentChangedEvent.created(id));
+    calendarSync.appointmentChanged(id);
     return get(id, auth);
   }
 
@@ -80,7 +80,7 @@ public class AppointmentService {
         ? "Rescheduled from " + originalStart : "Rescheduled from " + originalStart + " — " + r.reason();
     long newId = appointments.insertRescheduled(moved, nextAppointmentNo(), currentUser.id(auth), note);
     appointments.addEvent(newId, null, "CONFIRMED", note, currentUser.id(auth));
-    events.publishEvent(AppointmentChangedEvent.rescheduled(id, newId));
+    calendarSync.appointmentChanged(newId);
     return get(newId, auth);
   }
 
@@ -96,12 +96,17 @@ public class AppointmentService {
       case "noshow" -> "NO_SHOW";
       default -> throw new IllegalArgumentException("Invalid appointment action");
     };
-    transitionTo(id, status, body == null ? null : body.reason(), auth);
-    events.publishEvent(AppointmentChangedEvent.statusChanged(id));
+    transitionTo(id, status, body == null ? null : body.reason(),
+        body == null ? null : body.usePatientCourseId(), auth);
     return get(id, auth);
   }
 
   private void transitionTo(long id, String status, String reason, Authentication auth) {
+    transitionTo(id, status, reason, null, auth);
+  }
+
+  private void transitionTo(
+      long id, String status, String reason, Long usePatientCourseId, Authentication auth) {
     Map<String, Object> current = appointments.lockForUpdate(id);
     branches.requireAccess(auth, ((Number) current.get("branch_id")).longValue());
     String from = (String) current.get("status");
@@ -112,16 +117,30 @@ public class AppointmentService {
     appointments.addEvent(id, from, status, reason, currentUser.id(auth));
     if ("COMPLETED".equals(status)) {
       appointments.createCompletedVisit(id);
-      recordAppointmentCourseUsage(id, auth);
+      if (usePatientCourseId != null) recordAppointmentCourseUsage(id, usePatientCourseId, auth);
     }
+    // Every status change reaches the therapist's Google Calendar: a live
+    // status refreshes the event, cancel / no-show / reschedule removes it.
+    calendarSync.appointmentChanged(id);
   }
 
-  private void recordAppointmentCourseUsage(long appointmentId, Authentication auth) {
+  /**
+   * Spends one session from the course the caller chose. The choice is
+   * explicit because a patient may hold a course for a different treatment
+   * than the one booked, or may simply be paying this visit per visit; the
+   * server only checks that the named course is one the patient can spend
+   * from right now (active, not expired, sessions left on their balance).
+   */
+  private void recordAppointmentCourseUsage(
+      long appointmentId, long patientCourseId, Authentication auth) {
     Map<String, Object> appointment = appointments.get(appointmentId);
-    List<Long> courseIds = appointments.findEligibleCourseIds(((Number) appointment.get("patient_id")).longValue());
-    if (courseIds.isEmpty()) return;
-    courseUsage.recordAppointmentUsage(courseIds.get(0),
-        ((Number) appointment.get("patient_id")).longValue(), 1,
+    long patientId = ((Number) appointment.get("patient_id")).longValue();
+    List<Long> eligible = appointments.findEligibleCourseIds(patientId);
+    if (!eligible.contains(patientCourseId))
+      throw new IllegalArgumentException(
+          "That course cannot be used for this visit: it is not active for this patient or has no"
+              + " sessions left");
+    courseUsage.recordAppointmentUsage(patientCourseId, patientId, 1,
         ((Number) appointment.get("branch_id")).longValue(), appointmentId,
         ((Number) appointment.get("provider_staff_id")).longValue(), currentUser.displayName(auth),
         currentUser.id(auth), LocalDate.now());

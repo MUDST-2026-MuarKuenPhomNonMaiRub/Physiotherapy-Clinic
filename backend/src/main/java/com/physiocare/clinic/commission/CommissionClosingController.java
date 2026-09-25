@@ -1,6 +1,7 @@
 package com.physiocare.clinic.commission;
 
 import com.physiocare.clinic.common.CurrentUser;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.YearMonth;
@@ -23,7 +24,7 @@ public class CommissionClosingController {
     this.currentUser = currentUser;
   }
 
-  public record CloseRequest(@NotNull YearMonth month) {}
+  public record CloseRequest(@NotNull YearMonth month, boolean earlyClose, String reason) {}
 
   public record OverrideRequest(@NotNull BigDecimal newRate, String reason) {}
 
@@ -34,8 +35,11 @@ public class CommissionClosingController {
   }
 
   @PostMapping("/close")
-  public Map<String, Object> close(@RequestBody CloseRequest request, Authentication authentication) {
-    int count = closing.close(request.month(), currentUser.id(authentication));
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.close')")
+  public Map<String, Object> close(@Valid @RequestBody CloseRequest request, Authentication authentication) {
+    if (request.earlyClose() && (request.reason() == null || request.reason().isBlank()))
+      throw new IllegalArgumentException("A reason is required for an early commission close");
+    int count = closing.close(request.month(), currentUser.id(authentication), request.earlyClose(), request.reason());
     return Map.of("closedEmployees", count);
   }
 
@@ -48,7 +52,7 @@ public class CommissionClosingController {
   @PostMapping("/{id}/override")
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public void override(
-      @PathVariable long id, @RequestBody OverrideRequest request, Authentication authentication) {
+      @PathVariable long id, @Valid @RequestBody OverrideRequest request, Authentication authentication) {
     if (request.reason() == null || request.reason().isBlank())
       throw new IllegalArgumentException("A reason is required to override a closed month's rate");
     closing.override(id, request.newRate(), request.reason(), currentUser.id(authentication));

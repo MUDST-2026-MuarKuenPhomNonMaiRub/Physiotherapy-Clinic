@@ -32,7 +32,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { AppUser, Permission, Role, Staff, StaffPosition } from "@/types";
+import type { AppUser, Permission, Role, Staff, StaffPosition, GoogleCalendarConnection } from "@/types";
 import { toast } from "sonner";
 import * as api from "@/lib/api/clinic-api";
 
@@ -84,6 +84,7 @@ const permissionGroups: { label: string; keys: { key: Permission; label: string 
       { key: "course.view", label: "View course balances" },
       { key: "course.use", label: "Deduct a session" },
       { key: "course.transfer", label: "Transfer sessions between patients" },
+      { key: "course.share", label: "Share a course with another patient" },
     ],
   },
   {
@@ -101,6 +102,8 @@ const permissionGroups: { label: string; keys: { key: Permission; label: string 
       { key: "report.view.all", label: "See clinic-wide figures (all staff, all branches)" },
       { key: "commission.view.own", label: "See own commission" },
       { key: "commission.view.all", label: "See everyone's commission" },
+      { key: "commission.close", label: "Close the monthly commission period" },
+      { key: "commission.adjust", label: "Refund unused sessions / adjust course commission" },
     ],
   },
   {
@@ -180,6 +183,27 @@ export default function StaffAccessPage() {
   useEffect(() => {
     void api.listConfiguredRoles().then(setConfiguredRoles).catch(() => toast.error("Unable to load roles"));
   }, []);
+
+  // Who has linked their own Google Calendar. Only the person can connect
+  // one (it is their Google login); an administrator can cut it here.
+  const [googleConnections, setGoogleConnections] = useState<Record<string, GoogleCalendarConnection>>({});
+  const loadGoogleConnections = () =>
+    api.listGoogleCalendarConnections()
+      .then((rows) => setGoogleConnections(Object.fromEntries(rows.map((r) => [r.staffId, r]))))
+      .catch(() => setGoogleConnections({}));
+  useEffect(() => {
+    void loadGoogleConnections();
+  }, []);
+  async function disconnectGoogle(s: Staff) {
+    if (!window.confirm(`Disconnect ${s.name}'s Google Calendar? Every clinic appointment placed there will be removed.`)) return;
+    try {
+      await api.disconnectGoogleCalendar(s.id);
+      toast.success("Google Calendar disconnected");
+      await loadGoogleConnections();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to disconnect");
+    }
+  }
 
   async function createRole() {
     if (!roleCode.trim() || !roleName.trim()) return;
@@ -423,6 +447,7 @@ export default function StaffAccessPage() {
                       <TableHead>Branches</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Last Login</TableHead>
+                      <TableHead>Google Calendar</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -475,6 +500,21 @@ export default function StaffAccessPage() {
                         <TableCell><StatusBadge status={s.status} /></TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {account?.lastLogin ? formatDateTime(account.lastLogin) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {googleConnections[s.id] ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className={googleConnections[s.id].lastError ? "text-destructive" : "text-success"}>
+                                {googleConnections[s.id].lastError ? "Sync failing" : "Connected"}
+                              </span>
+                              <span className="text-muted-foreground">{googleConnections[s.id].googleEmail ?? ""}</span>
+                              <button type="button" onClick={() => void disconnectGoogle(s)} className="w-fit text-left text-muted-foreground underline hover:text-destructive">
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">

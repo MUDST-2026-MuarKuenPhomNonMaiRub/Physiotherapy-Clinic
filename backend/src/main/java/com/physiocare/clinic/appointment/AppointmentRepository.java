@@ -12,7 +12,7 @@ public class AppointmentRepository {
   private static final String COLUMNS =
       "a.id,a.appointment_no,a.patient_id,a.branch_id,a.provider_staff_id,a.service_id,a.room_id,"
           + "a.starts_at,a.ends_at,a.status,a.patient_note,a.internal_note,a.cancel_reason_code,"
-          + "a.created_at,a.google_sync_status,a.google_synced_at,a.google_sync_error,EXISTS(SELECT 1 FROM sales_transactions st WHERE st.appointment_id=a.id"
+          + "a.created_at,EXISTS(SELECT 1 FROM sales_transactions st WHERE st.appointment_id=a.id"
           + " AND st.status<>'CANCELLED') AS checked_out,"
           // Completing a visit spends one session from the patient's course
           // (see AppointmentService); checkout has to know which course so it
@@ -93,13 +93,14 @@ public class AppointmentRepository {
             + " status='COMPLETED',completed_at=now()", appointmentId);
   }
 
+  /** Every course this patient could spend a session from today, soonest to expire first. */
   public List<Long> findEligibleCourseIds(long patientId) {
     return db.queryForList(
         "SELECT cmb.patient_course_id FROM course_member_balances cmb JOIN patient_courses pc"
             + " ON pc.id=cmb.patient_course_id WHERE cmb.patient_id=? AND pc.status='ACTIVE'"
             + " AND cmb.allocated_visits>cmb.used_visits AND (pc.valid_until IS NULL OR"
-            + " pc.valid_until>=CURRENT_DATE) ORDER BY pc.valid_until NULLS LAST, pc.sale_date, pc.id"
-            + " LIMIT 1", Long.class, patientId);
+            + " pc.valid_until>=CURRENT_DATE) ORDER BY pc.valid_until NULLS LAST, pc.sale_date, pc.id",
+        Long.class, patientId);
   }
 
   public Long nextAppointmentNumber() {

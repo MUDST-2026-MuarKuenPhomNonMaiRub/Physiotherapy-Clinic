@@ -2,7 +2,6 @@ package com.physiocare.clinic.config;
 
 import com.physiocare.clinic.auth.JwtAuthenticationFilter;
 import org.springframework.context.annotation.*;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
@@ -54,11 +53,10 @@ public class SecurityConfig {
         .authorizeHttpRequests(
             authorize ->
                 authorize
-                    .requestMatchers("/api/v1/auth/login", "/actuator/health")
-                    .permitAll()
-                    // Google sends the browser back here without the login
-                    // token; the signed OAuth state authenticates it instead.
-                    .requestMatchers(HttpMethod.GET, "/api/v1/integrations/google-calendar/callback")
+                    // Google redirects the browser to the OAuth callback without
+                    // the app's token; the one-time state in the query is its proof.
+                    .requestMatchers(
+                        "/api/v1/auth/login", "/actuator/health", "/api/v1/integrations/google/callback")
                     .permitAll()
                     // Everything else is checked per endpoint with @PreAuthorize, so
                     // that a read the whole clinic needs is not locked behind the

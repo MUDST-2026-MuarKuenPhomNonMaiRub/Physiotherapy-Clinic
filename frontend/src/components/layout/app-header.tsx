@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, CalendarSync, LogOut, Search } from "lucide-react";
+import { Bell, LogOut, Search } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { getRoleLabel } from "@/lib/permissions";
 import { getPatientFullNameTh, today } from "@/lib/domain";
 import { daysUntil } from "@/lib/format";
 import { BranchSelector } from "@/components/layout/branch-selector";
+import { GoogleCalendarMenu } from "@/components/integrations/google-calendar-menu";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -273,10 +274,7 @@ export function AppHeader() {
             <p className="text-sm font-medium">{user.displayName}</p>
             <p className="text-xs font-normal text-muted-foreground">{getRoleLabel(user.role)}</p>
           </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => router.push("/google-calendar")} className="flex items-center gap-2">
-            <CalendarSync className="h-4 w-4" /> Google Calendar
-          </DropdownMenuItem>
+          <GoogleCalendarMenu />
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={logout} className="flex items-center gap-2 text-destructive focus:text-destructive">
             <LogOut className="h-4 w-4" /> Log out

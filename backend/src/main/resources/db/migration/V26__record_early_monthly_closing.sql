@@ -1,0 +1,3 @@
+ALTER TABLE monthly_commission_closings
+  ADD COLUMN IF NOT EXISTS early_close BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS close_reason TEXT;

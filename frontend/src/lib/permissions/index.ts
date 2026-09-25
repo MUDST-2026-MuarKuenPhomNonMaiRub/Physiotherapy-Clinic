@@ -20,6 +20,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "course.view",
     "course.use",
     "course.transfer",
+    "course.share",
     "transaction.view",
     "transaction.void",
     "report.view",
@@ -28,6 +29,8 @@ export const rolePermissions: Record<Role, Permission[]> = {
     // An admin sees everyone's commission, which includes their own.
     "commission.view.own",
     "commission.view.all",
+    "commission.close",
+    "commission.adjust",
     "settings.manage",
   ],
   PHYSIOTHERAPIST: [
@@ -42,6 +45,7 @@ export const rolePermissions: Record<Role, Permission[]> = {
     "course.view",
     "course.use",
     "course.transfer",
+    "course.share",
     "transaction.view",
     "report.view",
     "commission.view.own",

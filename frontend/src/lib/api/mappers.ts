@@ -16,8 +16,6 @@ import type {
   CourseTemplate,
   CustomerType,
   Gender,
-  GoogleSyncState,
-  GoogleSyncStatus,
   LedgerEntryType,
   MasterDataItem,
   Patient,
@@ -287,16 +285,6 @@ export function toAppointment(row: Row): Appointment {
     checkedOut: bool(row.checked_out),
     usedPatientCourseId:
       row.used_patient_course_id == null ? undefined : id(row.used_patient_course_id),
-    googleSync: toGoogleSync(row),
-  };
-}
-
-function toGoogleSync(row: Row): GoogleSyncState | undefined {
-  if (row.google_sync_status == null) return undefined;
-  return {
-    status: str(row.google_sync_status) as GoogleSyncStatus,
-    syncedAt: row.google_synced_at == null ? undefined : str(row.google_synced_at),
-    error: row.google_sync_error == null ? undefined : str(row.google_sync_error),
   };
 }
 
@@ -462,8 +450,8 @@ export function toClosingPreviewRow(row: Row): ClosingPreviewRow {
     monthlySales: num(row.monthlySales),
     schemeId: row.schemeId == null ? null : id(row.schemeId),
     schemeVersion: row.schemeVersion == null ? null : num(row.schemeVersion),
-    suggestedRate: num(row.suggestedRate),
-    suggestedPool: num(row.suggestedPool),
+    suggestedRate: row.suggestedRate == null ? null : num(row.suggestedRate),
+    suggestedPool: row.suggestedPool == null ? null : num(row.suggestedPool),
     alreadyClosed: bool(row.alreadyClosed),
   };
 }

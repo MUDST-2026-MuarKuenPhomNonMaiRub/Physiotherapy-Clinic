@@ -1,6 +1,7 @@
 package com.physiocare.clinic.auth;
 
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,7 +20,9 @@ public class AuthController {
     return auth.login(request);
   }
 
+  /** Account creation is an administration action, never open to every signed-in user. */
   @PostMapping("/users")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public void createUser(@Valid @RequestBody AuthDtos.CreateUserRequest request) {
     auth.createUser(request);
   }

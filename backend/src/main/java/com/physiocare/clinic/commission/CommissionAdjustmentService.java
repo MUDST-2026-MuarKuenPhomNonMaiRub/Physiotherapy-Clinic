@@ -177,6 +177,21 @@ public class CommissionAdjustmentService {
   @Transactional
   public BigDecimal reduceOutstandingPool(
       long patientCourseId, int visitsRemoved, Long actorUserId, String reason) {
+    return reduceOutstandingPool(patientCourseId, visitsRemoved, false, actorUserId, reason);
+  }
+
+  /**
+   * The whole of a course's not-yet-allocated pool, written off in one
+   * adjustment — what a voided sale needs, where no per-visit figure applies
+   * because the course is being cancelled outright.
+   */
+  @Transactional
+  public BigDecimal writeOffOutstandingPool(long patientCourseId, Long actorUserId, String reason) {
+    return reduceOutstandingPool(patientCourseId, 0, true, actorUserId, reason);
+  }
+
+  private BigDecimal reduceOutstandingPool(
+      long patientCourseId, int visitsRemoved, boolean entirely, Long actorUserId, String reason) {
     Map<String, Object> course =
         db.queryForMap("SELECT * FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
     if (!"LOCKED".equals(course.get("commission_status"))) return BigDecimal.ZERO;
@@ -185,7 +200,8 @@ public class CommissionAdjustmentService {
     if (perVisit == null || pool == null) return BigDecimal.ZERO;
     BigDecimal allocated = (BigDecimal) course.get("gross_commission_allocated_total");
     BigDecimal outstanding = pool.subtract(allocated).max(BigDecimal.ZERO);
-    BigDecimal reduction = perVisit.multiply(BigDecimal.valueOf(visitsRemoved)).min(outstanding);
+    BigDecimal reduction =
+        entirely ? outstanding : perVisit.multiply(BigDecimal.valueOf(visitsRemoved)).min(outstanding);
     if (reduction.signum() <= 0) return BigDecimal.ZERO;
 
     db.update(

@@ -9,6 +9,7 @@ import { canAccessRoute, defaultRouteByRole } from "@/lib/permissions/navigation
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppHeader } from "@/components/layout/app-header";
 import { Forbidden } from "@/components/shared/forbidden";
+import { GoogleReturnNotice } from "@/components/integrations/google-return-notice";
 import { ClinicLogo } from "@/components/layout/clinic-logo";
 import { Button } from "@/components/ui/button";
 
@@ -99,6 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         Skip to main content
       </a>
+      <GoogleReturnNotice />
       <AppSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppHeader />

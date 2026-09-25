@@ -53,8 +53,10 @@ public class MonthlyCommissionClosingService {
         .map(
             employee -> {
               BigDecimal sales = monthlySales(month, employee);
+              // Null rather than 0%: a sale no tier covers must show as a
+              // configuration problem on the preview, never as a zero payout.
               BigDecimal rate =
-                  scheme == null ? BigDecimal.ZERO : resolveTierRate((Long) scheme.get("id"), sales);
+                  scheme == null ? null : resolveTierRate((Long) scheme.get("id"), sales).orElse(null);
               String name =
                   db.queryForList("SELECT name FROM staff WHERE id=?", String.class, employee).stream()
                       .findFirst()
@@ -73,15 +75,35 @@ public class MonthlyCommissionClosingService {
                   scheme == null ? null : (Long) scheme.get("id"),
                   scheme == null ? null : (Integer) scheme.get("version"),
                   rate,
-                  sales.multiply(rate).setScale(2, RoundingMode.HALF_UP),
+                  rate == null ? null : sales.multiply(rate).setScale(2, RoundingMode.HALF_UP),
                   closed);
             })
         .toList();
   }
 
+  /** Normal closing requires a completed month; early closing is allowed only for the current month. */
+  static void requireMonthEnded(YearMonth month, YearMonth today) {
+    requireMonthEnded(month, today, false);
+  }
+
+  static void requireMonthEnded(YearMonth month, YearMonth today, boolean earlyClose) {
+    if (month.isAfter(today))
+      throw new IllegalArgumentException("Commission for " + month + " cannot be closed before that month starts");
+    if (!month.isBefore(today) && !earlyClose)
+      throw new IllegalArgumentException(
+          "Commission for " + month + " can only be closed after the month has ended");
+  }
+
   /** Closes every seller with unclosed course sales for the month. Already-closed employees are skipped. */
   @Transactional
   public int close(YearMonth month, Long actorUserId) {
+    return close(month, actorUserId, false, null);
+  }
+
+  /** Closes an ended month normally, or the current month with an audited early-close reason. */
+  @Transactional
+  public int close(YearMonth month, Long actorUserId, boolean earlyClose, String reason) {
+    requireMonthEnded(month, YearMonth.now(), earlyClose);
     List<Long> employees =
         db.queryForList(
             "SELECT DISTINCT seller_employee_id FROM patient_courses WHERE sale_month=? AND"
@@ -90,32 +112,38 @@ public class MonthlyCommissionClosingService {
             month.atDay(1));
     int closedCount = 0;
     for (Long employee : employees) {
-      if (closeEmployee(month, employee, actorUserId)) closedCount++;
+      if (closeEmployee(month, employee, actorUserId, earlyClose, reason)) closedCount++;
     }
     return closedCount;
   }
 
   /** @return false when this employee/month was already closed (idempotent, not an error). */
-  private boolean closeEmployee(YearMonth month, long employee, Long actorUserId) {
+  private boolean closeEmployee(YearMonth month, long employee, Long actorUserId, boolean earlyClose, String reason) {
     db.queryForList(
         "SELECT pg_advisory_xact_lock(hashtext(?))",
         Object.class,
         "monthly-commission:" + employee + ":" + month.atDay(1));
     Map<String, Object> scheme = resolveScheme(month);
     if (scheme == null)
-      throw new IllegalStateException("No commission scheme covers " + month + " — configure one first");
+      throw new IllegalArgumentException("No commission scheme covers " + month + " — configure one first");
     long schemeId = (Long) scheme.get("id");
     int schemeVersion = (Integer) scheme.get("version");
 
     BigDecimal sales = monthlySales(month, employee);
-    BigDecimal rate = resolveTierRate(schemeId, sales);
+    BigDecimal rate =
+        resolveTierRate(schemeId, sales)
+            .orElseThrow(
+                () ->
+                    new IllegalArgumentException(
+                        "No commission tier covers monthly course sales of " + sales
+                            + " for employee " + employee + " — fix the tier table before closing"));
 
     List<Long> closingIds =
         db.queryForList(
             "INSERT INTO monthly_commission_closings(closing_month,employee_id,monthly_course_sales,"
                 + "scheme_id,commission_scheme_version,calculated_commission_rate,"
-                + "locked_commission_rate,status,closed_at,closed_by) VALUES"
-                + "(?,?,?,?,?,?,?,'CLOSED',now(),?) ON CONFLICT(closing_month,employee_id) DO NOTHING"
+                + "locked_commission_rate,status,closed_at,closed_by,early_close,close_reason) VALUES"
+                + "(?,?,?,?,?,?,?,'CLOSED',now(),?,?,?) ON CONFLICT(closing_month,employee_id) DO NOTHING"
                 + " RETURNING id",
             Long.class,
             month.atDay(1),
@@ -125,7 +153,9 @@ public class MonthlyCommissionClosingService {
             schemeVersion,
             rate,
             rate,
-            actorUserId);
+            actorUserId,
+            earlyClose,
+            earlyClose ? reason : null);
     if (closingIds.isEmpty()) return false; // already closed — idempotent no-op
 
     long closingId = closingIds.get(0);
@@ -158,7 +188,7 @@ public class MonthlyCommissionClosingService {
     audit.record(
         actorUserId,
         null,
-        "COMMISSION_MONTH_CLOSED",
+        earlyClose ? "COMMISSION_MONTH_EARLY_CLOSED" : "COMMISSION_MONTH_CLOSED",
         "monthly_commission_closings",
         String.valueOf(closingId),
         Map.of("status", "OPEN"),
@@ -169,7 +199,7 @@ public class MonthlyCommissionClosingService {
             "monthlyCourseSales", sales,
             "lockedCommissionRate", rate,
             "schemeVersion", schemeVersion),
-        "Monthly commission closing");
+        earlyClose ? reason : "Monthly commission closing");
 
     return true;
   }
@@ -275,16 +305,21 @@ public class MonthlyCommissionClosingService {
     return rows.isEmpty() ? null : rows.get(0);
   }
 
-  private BigDecimal resolveTierRate(long schemeId, BigDecimal sales) {
+  /**
+   * The highest active tier whose minimum is at or below the sales figure.
+   * Tiers are validated to be contiguous to within one baht, so a sale that
+   * falls in the sub-baht sliver between "59,999" and "60,000" still belongs
+   * to the lower tier rather than to no tier at all. Empty only when the
+   * scheme has no tier at or below the figure (a misconfigured table).
+   */
+  private java.util.Optional<BigDecimal> resolveTierRate(long schemeId, BigDecimal sales) {
     List<BigDecimal> rows =
         db.queryForList(
             "SELECT commission_rate FROM commission_tiers WHERE scheme_id=? AND active AND"
-                + " minimum_monthly_sales<=? AND (maximum_monthly_sales IS NULL OR"
-                + " maximum_monthly_sales>=?) ORDER BY tier_order LIMIT 1",
+                + " minimum_monthly_sales<=? ORDER BY minimum_monthly_sales DESC LIMIT 1",
             BigDecimal.class,
             schemeId,
-            sales,
             sales);
-    return rows.isEmpty() ? BigDecimal.ZERO : rows.get(0);
+    return rows.stream().findFirst();
   }
 }

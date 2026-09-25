@@ -31,6 +31,7 @@ import {
 } from "./mappers";
 import type {
   Appointment,
+  AppointmentCalendarSync,
   AppUser,
   Branch,
   ClosingHistoryRow,
@@ -42,8 +43,8 @@ import type {
   CourseCommissionReportRow,
   CourseLedgerEntry,
   CourseTemplate,
+  GoogleCalendarConnection,
   GoogleCalendarStatus,
-  GoogleSyncState,
   MasterDataItem,
   Patient,
   PatientCourse,
@@ -53,7 +54,6 @@ import type {
   Service,
   SharedCourseMember,
   Staff,
-  StaffGoogleConnection,
   Transaction,
   TreatmentFeeRule,
 } from "@/types";
@@ -475,10 +475,10 @@ export const previewClosing = (month: string): Promise<ClosingPreviewRow[]> =>
     rows.map(toClosingPreviewRow)
   );
 
-export const closeMonth = (month: string) =>
+export const closeMonth = (month: string, earlyClose = false, reason?: string) =>
   apiRequest<{ closedEmployees: number }>("/api/v1/commission/closing/close", {
     method: "POST",
-    body: { month },
+    body: { month, earlyClose, reason: reason ?? null },
   });
 
 export const listClosingHistory = (month?: string, employeeId?: string): Promise<ClosingHistoryRow[]> =>
@@ -523,7 +523,7 @@ export const getCommissionLedgerRecords = (
         ruleId: String(row.patient_course_id),
         ruleName: "Course Commission",
         amount: Number(row.commission_amount ?? 0),
-        reversed: false,
+        reversed: row.allocation_status === "REVERSED",
       }))
       .filter((row) => row.amount !== 0)
   );
@@ -692,10 +692,23 @@ export const createAppointment = (input: AppointmentInput) =>
 
 type AppointmentAction = "confirm" | "arrive" | "start" | "complete" | "cancel" | "noshow";
 
-export const transitionAppointment = (id: string, action: AppointmentAction, reason?: string) =>
+/**
+ * `usePatientCourseId` is only meaningful for "complete": the course the visit
+ * is charged against. Left out, the visit is paid per visit at checkout and
+ * nothing is deducted from any course.
+ */
+export const transitionAppointment = (
+  id: string,
+  action: AppointmentAction,
+  reason?: string,
+  usePatientCourseId?: string
+) =>
   apiRequest<Row>(`/api/v1/appointments/${id}/${action}`, {
     method: "POST",
-    body: { reason: reason ?? null },
+    body: {
+      reason: reason ?? null,
+      usePatientCourseId: usePatientCourseId ? Number(usePatientCourseId) : null,
+    },
   }).then(toAppointment);
 
 export const rescheduleAppointment = (
@@ -713,67 +726,6 @@ export const rescheduleAppointment = (
       reason: reason ?? null,
     },
   }).then(toAppointment);
-
-export const getAppointment = (id: string) =>
-  apiRequest<Row>(`/api/v1/appointments/${id}`).then(toAppointment);
-
-// ------------------------------------------------------ google calendar sync
-
-const GOOGLE_CALENDAR = "/api/v1/integrations/google-calendar";
-const optional = (value: unknown) => (value == null ? undefined : String(value));
-
-export const getGoogleCalendarStatus = () =>
-  apiRequest<Row>(`${GOOGLE_CALENDAR}/status`).then(
-    (row): GoogleCalendarStatus => ({
-      enabled: Boolean(row.enabled),
-      staffLinked: Boolean(row.staffLinked),
-      connected: Boolean(row.connected),
-      googleEmail: optional(row.googleEmail),
-      status: optional(row.status) as GoogleCalendarStatus["status"],
-      connectedAt: optional(row.connectedAt),
-      lastError: optional(row.lastError),
-    })
-  );
-
-/** Returns Google's consent URL; the caller sends the browser there. */
-export const startGoogleCalendarConnect = () =>
-  apiRequest<{ authorizationUrl: string }>(`${GOOGLE_CALENDAR}/connect`, { method: "POST" }).then(
-    (r) => r.authorizationUrl
-  );
-
-export const disconnectGoogleCalendar = () =>
-  apiRequest<void>(`${GOOGLE_CALENDAR}/connection`, { method: "DELETE" });
-
-export const listStaffGoogleConnections = () =>
-  apiRequest<Row[]>(`${GOOGLE_CALENDAR}/connections`).then((rows) =>
-    rows.map(
-      (row): StaffGoogleConnection => ({
-        staffId: String(row.staffId),
-        staffName: String(row.staffName ?? ""),
-        position: String(row.position ?? ""),
-        connected: Boolean(row.connected),
-        googleEmail: optional(row.googleEmail),
-        status: optional(row.status) as StaffGoogleConnection["status"],
-        connectedAt: optional(row.connectedAt),
-        lastError: optional(row.lastError),
-      })
-    )
-  );
-
-export const disconnectStaffGoogleCalendar = (staffId: string) =>
-  apiRequest<void>(`${GOOGLE_CALENDAR}/connections/${staffId}`, { method: "DELETE" });
-
-export const retryGoogleSync = (appointmentId: string) =>
-  apiRequest<Row>(`${GOOGLE_CALENDAR}/appointments/${appointmentId}/sync`, { method: "POST" }).then(
-    (row): GoogleSyncState | undefined =>
-      row.status == null
-        ? undefined
-        : {
-            status: String(row.status) as GoogleSyncState["status"],
-            syncedAt: optional(row.syncedAt),
-            error: optional(row.error),
-          }
-  );
 
 // ------------------------------------------------------- courses and ledger
 
@@ -844,6 +796,8 @@ export interface CheckoutInput {
   useNewlyPurchasedSession?: boolean;
   treatingStaffId?: string;
   salespersonId?: string;
+  /** Owner of the course's commission pool; defaults to the salesperson when omitted. */
+  caseOwnerEmployeeId?: string;
   paymentMethodId: string;
   /** Cash handed over at the counter. Only meaningful when paying by cash. */
   cashReceived?: number;
@@ -870,6 +824,7 @@ export const checkout = (input: CheckoutInput): Promise<Transaction> =>
       useNewlyPurchasedSession: input.useNewlyPurchasedSession ?? false,
       treatingStaffId: input.treatingStaffId ? Number(input.treatingStaffId) : null,
       salespersonId: input.salespersonId ? Number(input.salespersonId) : null,
+      caseOwnerEmployeeId: input.caseOwnerEmployeeId ? Number(input.caseOwnerEmployeeId) : null,
       paymentMethodId: Number(input.paymentMethodId),
       cashReceived: input.cashReceived ?? null,
       servicePrice: input.servicePrice ?? null,
@@ -883,6 +838,58 @@ export const voidTransaction = (id: string, reason: string): Promise<Transaction
     method: "POST",
     body: { reason },
   }).then(toTransaction);
+
+// -------------------------------------------------------- google calendar
+// One-way push into a physiotherapist's own Google Calendar. The clinic
+// stays the source of truth; nothing is ever read back from Google.
+
+export const getGoogleCalendarStatus = (staffId?: string): Promise<GoogleCalendarStatus> =>
+  apiRequest<Row>(`/api/v1/integrations/google/status${query({ staffId })}`).then((row) => ({
+    staffId: String(row.staffId),
+    configured: Boolean(row.configured),
+    connected: Boolean(row.connected),
+    googleEmail: row.googleEmail == null ? null : String(row.googleEmail),
+    connectedAt: row.connectedAt == null ? null : String(row.connectedAt),
+    lastError: row.lastError == null ? null : String(row.lastError),
+    lastErrorAt: row.lastErrorAt == null ? null : String(row.lastErrorAt),
+    pending: Number(row.pending ?? 0),
+  }));
+
+export const listGoogleCalendarConnections = (): Promise<GoogleCalendarConnection[]> =>
+  apiRequest<Row[]>("/api/v1/integrations/google/connections").then((rows) =>
+    rows.map((row) => ({
+      staffId: String(row.staff_id),
+      staffName: row.staff_name == null ? "" : String(row.staff_name),
+      position: row.position == null ? "" : String(row.position),
+      googleEmail: row.google_email == null ? null : String(row.google_email),
+      connectedAt: row.connected_at == null ? null : String(row.connected_at),
+      lastError: row.last_error == null ? null : String(row.last_error),
+      pending: Number(row.pending ?? 0),
+    }))
+  );
+
+/** Returns the Google consent page to send the browser to. */
+export const startGoogleCalendarConnect = () =>
+  apiRequest<{ url: string }>("/api/v1/integrations/google/connect", { method: "POST" }).then((r) => r.url);
+
+export const disconnectGoogleCalendar = (staffId?: string) =>
+  apiRequest<void>(`/api/v1/integrations/google/connection${query({ staffId })}`, { method: "DELETE" });
+
+export const getAppointmentCalendarSync = (appointmentId: string): Promise<AppointmentCalendarSync | null> =>
+  apiRequest<Row | undefined>(`/api/v1/integrations/google/appointments/${appointmentId}`).then((row) =>
+    row
+      ? {
+          status: String(row.sync_status) as AppointmentCalendarSync["status"],
+          pendingAction: String(row.pending_action) as AppointmentCalendarSync["pendingAction"],
+          attempts: Number(row.attempts ?? 0),
+          lastError: row.last_error == null ? null : String(row.last_error),
+          updatedAt: row.updated_at == null ? null : String(row.updated_at),
+        }
+      : null
+  );
+
+export const retryAppointmentCalendarSync = (appointmentId: string) =>
+  apiRequest<void>(`/api/v1/integrations/google/appointments/${appointmentId}/retry`, { method: "POST" });
 
 // ------------------------------------------------------------ full hydration
 

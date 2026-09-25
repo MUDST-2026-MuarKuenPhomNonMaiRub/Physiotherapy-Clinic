@@ -26,7 +26,7 @@ public class CommissionController {
 
   @PostMapping("/courses")
   @ResponseStatus(HttpStatus.CREATED)
-  @PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.all')")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public void createCourse(@Valid @RequestBody CommissionDtos.CreateCourseRequest request) {
     service.createCourse(request);
   }

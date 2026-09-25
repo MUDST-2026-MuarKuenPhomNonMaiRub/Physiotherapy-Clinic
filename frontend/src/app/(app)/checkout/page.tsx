@@ -102,6 +102,10 @@ function CheckoutContent() {
   const [useToday, setUseToday] = useState(false);
   const [treatingStaffId, setTreatingStaffId] = useState(linkedAppointment?.physiotherapistId ?? "");
   const [salespersonId, setSalespersonId] = useState(user?.staffId ?? "");
+  // The person who owns the course's commission pool. Blank = same as the
+  // salesperson, which is the everyday case; only set when the seller hands
+  // the patient to another therapist from day one.
+  const [caseOwnerId, setCaseOwnerId] = useState("");
   const [paymentMethodId, setPaymentMethodId] = useState("");
   // Kept as the typed string so the box can be cleared; "" is "not entered yet"
   // rather than zero.
@@ -284,6 +288,7 @@ function CheckoutContent() {
         useNewlyPurchasedSession: mode === "COURSE" && subMode === "PURCHASE" ? useToday : undefined,
         treatingStaffId: needsTreatingStaff ? treatingStaffId : undefined,
         salespersonId: needsSalesperson ? salespersonId : undefined,
+        caseOwnerEmployeeId: needsSalesperson && caseOwnerId ? caseOwnerId : undefined,
         paymentMethodId,
         cashReceived: isCashPayment && cashReceived !== null ? cashReceived : undefined,
         adjustments: [
@@ -780,6 +785,21 @@ function CheckoutContent() {
                       <SelectTrigger className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
                       <SelectContent>
                         {branchSales.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {needsSalesperson && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Case Owner</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Owns this course&apos;s commission pool. Leave as the salesperson unless the patient is handed to another physiotherapist from the start.
+                    </p>
+                    <Select value={caseOwnerId || "__SAME__"} onValueChange={(v) => setCaseOwnerId(v === "__SAME__" ? "" : v)}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Same as salesperson" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__SAME__">Same as salesperson</SelectItem>
+                        {branchPhysios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
