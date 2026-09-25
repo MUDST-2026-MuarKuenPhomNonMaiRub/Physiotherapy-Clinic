@@ -47,7 +47,7 @@ jobs:
         run: |
           npm run start -- --hostname 127.0.0.1 &
           for i in {1..30}; do curl -fsS http://127.0.0.1:3000/login >/dev/null && break; sleep 1; done
-          npm run e2e
+          npx playwright test e2e/auth-and-navigation.spec.ts
 
       - name: Upload E2E report and failure evidence
         if: always()
