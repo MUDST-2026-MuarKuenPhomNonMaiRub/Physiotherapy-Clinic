@@ -1,6 +1,7 @@
 package com.physiocare.clinic.appointment;
 
 import com.physiocare.clinic.common.BranchAccessService;
+import com.physiocare.clinic.common.PageResponse;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.commission.CourseUsageService;
 import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
@@ -39,6 +40,12 @@ public class AppointmentService {
       int limit, Authentication authentication) {
     branches.requireFilter(authentication, branchId);
     return appointments.list(branchId, date, patientId, Math.min(Math.max(limit, 1), 1000));
+  }
+
+  public PageResponse<Map<String, Object>> page(Long branchId, LocalDate date, Long patientId,
+      int page, int size, Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
+    return appointments.page(branchId, date, patientId, page, size);
   }
 
   public Map<String, Object> get(long id, Authentication authentication) {

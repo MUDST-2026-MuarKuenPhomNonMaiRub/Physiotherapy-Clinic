@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.physiocare.clinic.common.PageResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -35,6 +36,22 @@ public class TransactionReader {
     List<Long> ids = rows.stream().map(row -> ((Number) row.get("id")).longValue()).toList();
     RelatedData related = loadRelatedData(ids);
     return rows.stream().map(row -> toView(row, related)).toList();
+  }
+
+  public PageResponse<CheckoutDtos.TransactionView> page(Long branchId, Long patientId,
+      int requestedPage, int requestedSize) {
+    int size = PageResponse.size(requestedSize);
+    int page = Math.max(requestedPage, 0);
+    String where = " FROM sales_transactions WHERE (?::bigint IS NULL OR branch_id=?) AND"
+        + " (?::bigint IS NULL OR patient_id=?)";
+    long total = db.queryForObject("SELECT count(*)" + where, Long.class,
+        branchId, branchId, patientId, patientId);
+    List<Map<String, Object>> rows = db.queryForList(
+        "SELECT *" + where + " ORDER BY sold_at DESC, id DESC LIMIT ? OFFSET ?",
+        branchId, branchId, patientId, patientId, size, PageResponse.offset(page, size));
+    RelatedData related = loadRelatedData(rows.stream().map(row -> ((Number) row.get("id")).longValue()).toList());
+    List<CheckoutDtos.TransactionView> items = rows.stream().map(row -> toView(row, related)).toList();
+    return PageResponse.of(items, page, size, total);
   }
 
   private CheckoutDtos.TransactionView toView(Map<String, Object> transaction) {

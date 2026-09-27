@@ -3,6 +3,7 @@ package com.physiocare.clinic.patient;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.common.InputRules;
+import com.physiocare.clinic.common.PageResponse;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.nio.charset.StandardCharsets;
@@ -189,6 +190,27 @@ public class PatientService {
         branchId,
         branchId,
         Math.min(Math.max(limit, 1), 1000)).stream().map(this::decode).toList();
+  }
+
+  public PageResponse<Map<String, Object>> page(
+      String search, Long branchId, int requestedPage, int requestedSize, Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
+    int size = PageResponse.size(requestedSize);
+    int page = Math.max(requestedPage, 0);
+    String like = "%" + search + "%";
+    String where = " FROM patients WHERE deleted_at IS NULL AND (?='' OR hn ILIKE ? OR first_name_th"
+        + " ILIKE ? OR last_name_th ILIKE ? OR nickname ILIKE ? OR phone ILIKE ?) AND"
+        + " (?::bigint IS NULL OR registered_branch_id=? OR EXISTS (SELECT 1 FROM appointments a"
+        + " WHERE a.patient_id=patients.id AND a.branch_id=?) OR EXISTS (SELECT 1 FROM sales_transactions st"
+        + " WHERE st.patient_id=patients.id AND st.branch_id=?) OR EXISTS (SELECT 1 FROM patient_courses pc"
+        + " WHERE pc.patient_id=patients.id AND pc.branch_id=?))";
+    Object[] args = {search, like, like, like, like, like, branchId, branchId, branchId, branchId, branchId};
+    long total = db.queryForObject("SELECT count(*)" + where, Long.class, args);
+    List<Map<String, Object>> rows = db.queryForList(
+        "SELECT " + COLUMNS + where + " ORDER BY id DESC LIMIT ? OFFSET ?",
+        search, like, like, like, like, like, branchId, branchId, branchId, branchId, branchId, size,
+        PageResponse.offset(page, size)).stream().map(this::decode).toList();
+    return PageResponse.of(rows, page, size, total);
   }
 
   @GetMapping("/{id}")

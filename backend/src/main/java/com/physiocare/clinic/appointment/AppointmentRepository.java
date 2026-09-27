@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import com.physiocare.clinic.common.PageResponse;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -33,6 +34,20 @@ public class AppointmentRepository {
             + " NULL OR a.starts_at::date=?) AND (?::bigint IS NULL OR a.patient_id=?) ORDER BY"
             + " a.starts_at LIMIT ?",
         branchId, branchId, date, date, patientId, patientId, limit);
+  }
+
+  public PageResponse<Map<String, Object>> page(Long branchId, LocalDate date, Long patientId,
+      int requestedPage, int requestedSize) {
+    int size = PageResponse.size(requestedSize);
+    int page = Math.max(requestedPage, 0);
+    String where = " FROM appointments a WHERE (?::bigint IS NULL OR a.branch_id=?) AND (?::date IS NULL"
+        + " OR a.starts_at::date=?) AND (?::bigint IS NULL OR a.patient_id=?)";
+    long total = db.queryForObject("SELECT count(*)" + where, Long.class,
+        branchId, branchId, date, date, patientId, patientId);
+    List<Map<String, Object>> rows = db.queryForList(
+        "SELECT " + COLUMNS + where + " ORDER BY a.starts_at LIMIT ? OFFSET ?",
+        branchId, branchId, date, date, patientId, patientId, size, PageResponse.offset(page, size));
+    return PageResponse.of(rows, page, size, total);
   }
 
   public Map<String, Object> get(long id) {

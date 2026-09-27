@@ -1,6 +1,7 @@
 package com.physiocare.clinic.appointment;
 
 import jakarta.validation.Valid;
+import com.physiocare.clinic.common.PageResponse;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -51,6 +52,18 @@ public class AppointmentController {
       @RequestParam(defaultValue = "200") int limit,
       Authentication authentication) {
     return service.list(branchId, date, patientId, limit, authentication);
+  }
+
+  @GetMapping("/page")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.view')")
+  public PageResponse<Map<String, Object>> page(
+      @RequestParam(required = false) Long branchId,
+      @RequestParam(required = false) LocalDate date,
+      @RequestParam(required = false) Long patientId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "50") int size,
+      Authentication authentication) {
+    return service.page(branchId, date, patientId, page, size, authentication);
   }
 
   @GetMapping("/{id}")

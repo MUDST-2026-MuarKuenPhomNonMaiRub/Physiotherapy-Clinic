@@ -1,6 +1,7 @@
 package com.physiocare.clinic.checkout;
 
 import com.physiocare.clinic.common.BranchAccessService;
+import com.physiocare.clinic.common.PageResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,18 @@ public class CheckoutController {
       Authentication authentication) {
     branches.requireFilter(authentication, branchId);
     return reader.list(branchId, patientId, Math.min(Math.max(limit, 1), 1000));
+  }
+
+  @GetMapping("/transactions/page")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.view')")
+  public PageResponse<CheckoutDtos.TransactionView> page(
+      @RequestParam(required = false) Long branchId,
+      @RequestParam(required = false) Long patientId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "50") int size,
+      Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
+    return reader.page(branchId, patientId, page, size);
   }
 
   @GetMapping("/transactions/{id}")

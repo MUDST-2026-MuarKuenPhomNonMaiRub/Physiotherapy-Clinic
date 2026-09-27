@@ -1,6 +1,7 @@
 package com.physiocare.clinic.patient;
 
 import jakarta.validation.Valid;
+import com.physiocare.clinic.common.PageResponse;
 import jakarta.validation.constraints.*;
 import java.time.LocalDate;
 import java.util.List;
@@ -38,6 +39,18 @@ public class PatientController {
       @RequestParam(required = false) Long branchId,
       @RequestParam(defaultValue = "200") int limit, Authentication authentication) {
     return service.list(search, branchId, limit, authentication);
+  }
+
+  /** New paginated contract; the legacy array endpoint remains for old clients. */
+  @GetMapping("/page")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
+  public PageResponse<Map<String, Object>> page(
+      @RequestParam(defaultValue = "") String search,
+      @RequestParam(required = false) Long branchId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "50") int size,
+      Authentication authentication) {
+    return service.page(search, branchId, page, size, authentication);
   }
 
   @GetMapping("/{id}")
