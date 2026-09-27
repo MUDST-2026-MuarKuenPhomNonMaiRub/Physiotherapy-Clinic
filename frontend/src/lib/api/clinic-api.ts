@@ -528,8 +528,13 @@ export const getCommissionLedgerRecords = (
       .filter((row) => row.amount !== 0)
   );
 
-export const listCommissionAudit = (): Promise<CommissionAuditLog[]> =>
-  apiRequest<Row[]>("/api/v1/commission/audit").then((rows) =>
+export const listCommissionAudit = (filters?: { action?: string; from?: string; to?: string; limit?: number }): Promise<CommissionAuditLog[]> =>
+  apiRequest<Row[]>(`/api/v1/commission/audit${query({
+    action: filters?.action && filters.action !== "ALL" ? filters.action : undefined,
+    from: filters?.from,
+    to: filters?.to,
+    limit: filters?.limit ?? 200,
+  })}`).then((rows) =>
     rows.map((row) => ({
       id: String(row.id),
       occurredAt: String(row.occurred_at),

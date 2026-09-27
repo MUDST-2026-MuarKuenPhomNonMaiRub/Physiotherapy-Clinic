@@ -16,5 +16,8 @@ public class CommissionAuditController {
   @GetMapping
   public List<Map<String,Object>> list(@RequestParam(required=false) String entityType,
       @RequestParam(required=false) String action,@RequestParam(required=false) OffsetDateTime from,
-      @RequestParam(required=false) OffsetDateTime to){return service.list(entityType,action,from,to);}
+      @RequestParam(required=false) OffsetDateTime to,
+      @RequestParam(defaultValue="200") int limit){
+    return service.list(entityType, action, from, to, Math.min(Math.max(limit, 1), 1000));
+  }
 }

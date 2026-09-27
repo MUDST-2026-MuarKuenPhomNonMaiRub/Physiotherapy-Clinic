@@ -18,12 +18,12 @@ public class CommissionAuditQueryService {
   }
 
   public List<Map<String, Object>> list(
-      String entityType, String action, OffsetDateTime from, OffsetDateTime to) {
+      String entityType, String action, OffsetDateTime from, OffsetDateTime to, int limit) {
     return db.queryForList(
         "SELECT id,occurred_at,actor_user_id,branch_id,action,entity_type,entity_id,before_data,"
             + "after_data,reason,request_id FROM audit_logs WHERE (?::varchar IS NULL OR entity_type=?)"
             + " AND (?::varchar IS NULL OR action=?) AND (?::timestamptz IS NULL OR occurred_at>=?)"
-            + " AND (?::timestamptz IS NULL OR occurred_at<=?) ORDER BY occurred_at DESC,id DESC",
+            + " AND (?::timestamptz IS NULL OR occurred_at<=?) ORDER BY occurred_at DESC,id DESC LIMIT ?",
         entityType,
         entityType,
         action,
@@ -31,6 +31,7 @@ public class CommissionAuditQueryService {
         from,
         from,
         to,
-        to);
+        to,
+        limit);
   }
 }

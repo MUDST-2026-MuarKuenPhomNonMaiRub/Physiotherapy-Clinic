@@ -24,9 +24,11 @@ export default function CommissionAuditPage() {
   const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
-    void listCommissionAudit().then(setRows).catch((error) =>
+    const from = dateFrom ? `${dateFrom}T00:00:00+07:00` : undefined;
+    const to = dateTo ? `${dateTo}T23:59:59.999+07:00` : undefined;
+    void listCommissionAudit({ action: actionFilter, from, to, limit: 200 }).then(setRows).catch((error) =>
       toast.error(error instanceof Error ? error.message : "Could not load commission audit"));
-  }, []);
+  }, [actionFilter, dateFrom, dateTo]);
 
   const actorName = (id?: string) => (id ? users.find((u) => u.id === id)?.displayName ?? `#${id}` : "—");
   const branchName = (id?: string) => (id ? branches.find((b) => b.id === id)?.name ?? `#${id}` : "—");
