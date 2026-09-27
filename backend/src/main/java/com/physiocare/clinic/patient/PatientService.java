@@ -177,7 +177,7 @@ public class PatientService {
             + " (?::bigint IS NULL OR registered_branch_id=? OR EXISTS (SELECT 1 FROM appointments a"
             + " WHERE a.patient_id=patients.id AND a.branch_id=?) OR EXISTS (SELECT 1 FROM sales_transactions st"
             + " WHERE st.patient_id=patients.id AND st.branch_id=?) OR EXISTS (SELECT 1 FROM patient_courses pc"
-            + " WHERE pc.patient_id=patients.id AND pc.branch_id=?)) ORDER BY id DESC",
+            + " WHERE pc.patient_id=patients.id AND pc.branch_id=?)) ORDER BY id DESC LIMIT ?",
         search,
         like,
         like,
