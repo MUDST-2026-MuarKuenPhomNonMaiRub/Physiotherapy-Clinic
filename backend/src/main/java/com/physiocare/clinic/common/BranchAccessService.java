@@ -16,9 +16,7 @@ public class BranchAccessService {
   public void requireAccess(Authentication authentication, long branchId) {
     if (authentication == null || !authentication.isAuthenticated())
       throw new IllegalArgumentException("Authentication is required");
-    boolean admin =
-        authentication.getAuthorities().stream()
-            .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+    boolean admin = isAdmin(authentication);
     if (admin) return;
     Integer allowed =
         db.queryForObject(
@@ -32,10 +30,7 @@ public class BranchAccessService {
   }
 
   public void requireFilter(Authentication authentication, Long branchId) {
-    boolean admin =
-        authentication != null
-            && authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+    boolean admin = isAdmin(authentication);
     if (!admin && branchId == null) throw new IllegalArgumentException("branchId is required");
     if (branchId != null) requireAccess(authentication, branchId);
   }
@@ -77,8 +72,7 @@ public class BranchAccessService {
   public void requirePatientAccess(Authentication authentication, long patientId) {
     if (authentication == null || !authentication.isAuthenticated())
       throw new IllegalArgumentException("Authentication is required");
-    boolean admin = authentication.getAuthorities().stream()
-        .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+    boolean admin = isAdmin(authentication);
     if (admin) return;
     Integer allowed = db.queryForObject(
         "SELECT count(*) FROM patients p JOIN user_branches ub ON ub.branch_id=p.registered_branch_id"
@@ -96,6 +90,26 @@ public class BranchAccessService {
         Integer.class, patientId, authentication.getName(), patientId, authentication.getName(),
         patientId, authentication.getName(), patientId, authentication.getName());
     if (allowed == null || allowed == 0) throw new IllegalArgumentException("Patient access denied");
+  }
+
+  /**
+   * Role authorities are normally present on the JWT authentication. The
+   * database check is a defensive fallback for long-lived tokens or custom
+   * authentication providers that carry permissions but omit the legacy role
+   * authority. It keeps branch-wide admin reads from being mistaken for an
+   * unscoped staff request.
+   */
+  private boolean isAdmin(Authentication authentication) {
+    if (authentication == null || !authentication.isAuthenticated()) return false;
+    if (authentication.getAuthorities().stream()
+        .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()))) return true;
+    Integer count = db.queryForObject(
+        "SELECT count(*) FROM users u JOIN user_roles ur ON ur.user_id=u.id "
+            + "JOIN roles r ON r.id=ur.role_id WHERE lower(u.email)=lower(?) "
+            + "AND u.active AND u.deleted_at IS NULL AND r.code='ADMIN'",
+        Integer.class,
+        authentication.getName());
+    return count != null && count > 0;
   }
 
   public void requireCourseAccess(Authentication authentication, long courseId) {
