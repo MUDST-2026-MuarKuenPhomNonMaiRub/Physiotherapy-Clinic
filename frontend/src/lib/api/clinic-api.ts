@@ -761,7 +761,10 @@ export interface CourseSnapshot {
   courseLedger: CourseLedgerEntry[];
 }
 
-export const listPatientCourses = (branchId?: string | null, limit = 200): Promise<CourseSnapshot> =>
+// The course endpoint returns both balances and ledger rows in one envelope;
+// keep its larger bounded read for now while the operational lists above use
+// the paginated contracts.
+export const listPatientCourses = (branchId?: string | null, limit = 1000): Promise<CourseSnapshot> =>
   apiRequest<{ patientCourses: Row[]; ledger: Row[] }>(
     `/api/v1/patient-courses${query({ branchId, limit })}`
   ).then((response) => ({
