@@ -123,7 +123,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
           E2E_ADMIN_EMAIL: admin.e2e@example.com
           E2E_ADMIN_PASSWORD: AdminE2E!123456
-        run: npx playwright test e2e/full-stack.spec.ts
+        run: npx playwright test e2e/full-stack.spec.ts e2e/critical-pages-and-access.spec.ts
 
       - name: Upload full-stack E2E evidence
         if: always()
