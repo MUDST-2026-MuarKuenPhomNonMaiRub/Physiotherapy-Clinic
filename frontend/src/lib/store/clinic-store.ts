@@ -22,6 +22,13 @@ import type {
 import * as api from "@/lib/api/clinic-api";
 import { setTokenReader, setUnauthenticatedHandler } from "@/lib/api/client";
 
+// Incremented whenever an operational mutation completes. A refresh that was
+// started before that mutation must not overwrite the newer local state.
+let operationalRevision = 0;
+
+function invalidateOperationalRefresh() {
+  operationalRevision += 1;
+}
 
 export interface Session {
   user: AppUser | null;
@@ -241,6 +248,7 @@ export const useClinicStore = create<ClinicState>()(
 
       setAuthenticatedSession: (user, accessToken) =>
         set((s) => {
+          invalidateOperationalRefresh();
           s.session.user = user;
           s.session.accessToken = accessToken;
           s.session.activeBranchId = null;
@@ -254,6 +262,7 @@ export const useClinicStore = create<ClinicState>()(
 
       logout: () =>
         set((s) => {
+          invalidateOperationalRefresh();
           s.session = { user: null, activeBranchId: null, accessToken: null };
           s.dataLoaded = false;
           s.loadError = null;
@@ -327,13 +336,17 @@ export const useClinicStore = create<ClinicState>()(
       },
 
       refreshOperational: async () => {
+        const revision = ++operationalRevision;
         const scope = branchScope();
-        const [courses, appointments, transactions] = await Promise.all([
+        const [patients, courses, appointments, transactions] = await Promise.all([
+          api.listPatientsFor(scope),
           api.listPatientCoursesFor(scope),
           api.listAppointmentsFor(scope),
           api.listTransactionsFor(scope),
         ]);
+        if (revision !== operationalRevision) return;
         set((s) => {
+          s.patients = patients;
           s.patientCourses = courses.patientCourses;
           s.courseLedger = courses.courseLedger;
           s.appointments = appointments;
@@ -638,6 +651,7 @@ export const useClinicStore = create<ClinicState>()(
 
       addPatient: async (data) => {
         const patient = await api.createPatient(data);
+        invalidateOperationalRefresh();
         set((s) => {
           s.patients.unshift(patient);
         });
@@ -647,6 +661,7 @@ export const useClinicStore = create<ClinicState>()(
       updatePatient: async (id, data) => {
         const current = requireItem(get().patients.find((p) => p.id === id), "This patient");
         const patient = await api.updatePatient(id, { ...current, ...data });
+        invalidateOperationalRefresh();
         set((s) => {
           upsert(s.patients, patient);
         });
@@ -685,6 +700,7 @@ export const useClinicStore = create<ClinicState>()(
         if (conflict) return { ok: false, error: conflict };
         try {
           const appointment = await api.createAppointment(input);
+          invalidateOperationalRefresh();
           set((s) => {
             upsert(s.appointments, appointment);
           });
@@ -699,6 +715,7 @@ export const useClinicStore = create<ClinicState>()(
 
       checkInAppointment: async (id) => {
         const appointment = await api.transitionAppointment(id, "arrive");
+        invalidateOperationalRefresh();
         set((s) => {
           upsert(s.appointments, appointment);
         });
@@ -706,6 +723,7 @@ export const useClinicStore = create<ClinicState>()(
 
       startService: async (id) => {
         const appointment = await api.transitionAppointment(id, "start");
+        invalidateOperationalRefresh();
         set((s) => {
           upsert(s.appointments, appointment);
         });
@@ -713,6 +731,7 @@ export const useClinicStore = create<ClinicState>()(
 
       completeService: async (id, usePatientCourseId) => {
         const appointment = await api.transitionAppointment(id, "complete", undefined, usePatientCourseId);
+        invalidateOperationalRefresh();
         // Completing a visit may spend a session from the chosen course, so
         // the course balances are re-read along with the appointment.
         const courses = usePatientCourseId
@@ -729,6 +748,7 @@ export const useClinicStore = create<ClinicState>()(
 
       cancelAppointment: async (id, reason) => {
         const appointment = await api.transitionAppointment(id, "cancel", reason);
+        invalidateOperationalRefresh();
         set((s) => {
           upsert(s.appointments, appointment);
         });
@@ -736,6 +756,7 @@ export const useClinicStore = create<ClinicState>()(
 
       markNoShow: async (id) => {
         const appointment = await api.transitionAppointment(id, "noshow");
+        invalidateOperationalRefresh();
         set((s) => {
           upsert(s.appointments, appointment);
         });
@@ -743,6 +764,7 @@ export const useClinicStore = create<ClinicState>()(
 
       rescheduleAppointment: async (id, date, startTime, endTime, reason) => {
         const moved = await api.rescheduleAppointment(id, date, startTime, endTime, reason);
+        invalidateOperationalRefresh();
         // The original is now RESCHEDULED, so both rows are re-read together.
         const appointments = await api.listAppointmentsFor(branchScope());
         set((s) => {
@@ -755,6 +777,7 @@ export const useClinicStore = create<ClinicState>()(
 
       createTransaction: async (input) => {
         const transaction = await api.checkout(input);
+        invalidateOperationalRefresh();
         // A sale can create a course, spend a session and close an appointment,
         // so the operational collections are re-read rather than patched.
         await get().refreshOperational();
@@ -766,6 +789,7 @@ export const useClinicStore = create<ClinicState>()(
 
       voidTransaction: async (id, reason) => {
         const transaction = await api.voidTransaction(id, reason);
+        invalidateOperationalRefresh();
         await get().refreshOperational();
         set((s) => {
           upsert(s.transactions, transaction);
@@ -777,6 +801,7 @@ export const useClinicStore = create<ClinicState>()(
       transferCourseSessions: async (fromPatientCourseId, toPatientId, sessions) => {
         try {
           await api.transferCourseSessions(fromPatientCourseId, toPatientId, sessions);
+          invalidateOperationalRefresh();
           const courses = await api.listPatientCoursesFor(branchScope());
           set((s) => {
             s.patientCourses = courses.patientCourses;
