@@ -82,7 +82,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // continue using stale access for the rest of the session.
   useEffect(() => {
     const revalidate = () => {
-      if (document.visibilityState === "visible" && isAuthenticated && dataLoaded) void refresh();
+      if (document.visibilityState === "visible" && isAuthenticated && dataLoaded) {
+        void refresh().then(() => refreshOperational());
+      }
     };
     window.addEventListener("focus", revalidate);
     document.addEventListener("visibilitychange", revalidate);
@@ -90,7 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", revalidate);
       document.removeEventListener("visibilitychange", revalidate);
     };
-  }, [isAuthenticated, dataLoaded, refresh]);
+  }, [isAuthenticated, dataLoaded, refresh, refreshOperational]);
 
   if (!hasHydrated) return <FullScreenLoader />;
   if (!user || !isAuthenticated) return <FullScreenLoader />;

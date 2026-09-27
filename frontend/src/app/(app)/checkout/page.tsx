@@ -65,6 +65,7 @@ function CheckoutContent() {
   const searchParams = useSearchParams();
   const { user, activeBranchId } = useSession();
   const patients = useClinicStore((s) => s.patients);
+  const operationalLoaded = useClinicStore((s) => s.operationalLoaded);
   const branches = useClinicStore((s) => s.branches);
   const staff = useClinicStore((s) => s.staff);
   const services = useClinicStore((s) => s.services);
@@ -374,6 +375,14 @@ function CheckoutContent() {
         </div>
       </div>
     );
+  }
+
+  // A checkout opened with a patient in the URL depends on the deferred
+  // operational load. Do not briefly render the patient-picker state while
+  // that request is still in flight: it makes deep links and browser E2E
+  // flows race the data load and can hide the course controls.
+  if (preselectPatientId && !patient && !operationalLoaded) {
+    return <PageLoading />;
   }
 
   return (

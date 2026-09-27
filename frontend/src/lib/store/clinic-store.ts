@@ -85,6 +85,10 @@ interface ClinicState {
   hasHydrated: boolean;
   /** True once the clinic data has been loaded from the API at least once. */
   dataLoaded: boolean;
+  /** True while patients, visits, courses and transactions are being loaded. */
+  operationalLoading: boolean;
+  /** True once the first operational collection load has completed. */
+  operationalLoaded: boolean;
   loading: boolean;
   loadError: string | null;
   setHasHydrated: (v: boolean) => void;
@@ -237,6 +241,8 @@ export const useClinicStore = create<ClinicState>()(
       session: { user: null, activeBranchId: null, accessToken: null } as Session,
       hasHydrated: false,
       dataLoaded: false,
+      operationalLoading: false,
+      operationalLoaded: false,
       loading: false,
       loadError: null,
       ...emptyData,
@@ -255,6 +261,8 @@ export const useClinicStore = create<ClinicState>()(
           // A fresh sign-in starts clean: a failure recorded against the
           // previous session must not keep the next one from loading.
           s.dataLoaded = false;
+          s.operationalLoading = false;
+          s.operationalLoaded = false;
           s.loading = false;
           s.loadError = null;
           Object.assign(s, emptyData);
@@ -265,6 +273,8 @@ export const useClinicStore = create<ClinicState>()(
           invalidateOperationalRefresh();
           s.session = { user: null, activeBranchId: null, accessToken: null };
           s.dataLoaded = false;
+          s.operationalLoading = false;
+          s.operationalLoaded = false;
           s.loadError = null;
           Object.assign(s, emptyData);
         }),
@@ -277,9 +287,11 @@ export const useClinicStore = create<ClinicState>()(
       refresh: async () => {
         const { session } = get();
         if (!session.accessToken || !session.user) return;
+        invalidateOperationalRefresh();
         set((s) => {
           s.loading = true;
           s.loadError = null;
+          s.operationalLoaded = false;
         });
         try {
           // The saved token may be older than the account behind it, so the
@@ -295,6 +307,7 @@ export const useClinicStore = create<ClinicState>()(
           set((s) => {
             Object.assign(s, snapshot);
             s.dataLoaded = true;
+            s.operationalLoaded = false;
             s.loading = false;
 
             const active = snapshot.branches.filter((b) => b.status === "ACTIVE");
@@ -331,6 +344,7 @@ export const useClinicStore = create<ClinicState>()(
               : error instanceof Error
                 ? error.message
                 : "Unable to load clinic data";
+            if (!signedOut) s.operationalLoaded = true;
           });
         }
       },
@@ -338,20 +352,49 @@ export const useClinicStore = create<ClinicState>()(
       refreshOperational: async () => {
         const revision = ++operationalRevision;
         const scope = branchScope();
-        const [patients, courses, appointments, transactions] = await Promise.all([
-          api.listPatientsFor(scope),
-          api.listPatientCoursesFor(scope),
-          api.listAppointmentsFor(scope),
-          api.listTransactionsFor(scope),
-        ]);
-        if (revision !== operationalRevision) return;
         set((s) => {
-          s.patients = patients;
-          s.patientCourses = courses.patientCourses;
-          s.courseLedger = courses.courseLedger;
-          s.appointments = appointments;
-          s.transactions = transactions;
+          s.operationalLoading = true;
         });
+        try {
+          const [patients, courses, appointments, transactions] = await Promise.all([
+            api.listPatientsFor(scope),
+            api.listPatientCoursesFor(scope),
+            api.listAppointmentsFor(scope),
+            api.listTransactionsFor(scope),
+          ]);
+          // A mutation may have changed the local operational state while
+          // this request was in flight. Keep that newer local state, but the
+          // request still proves that the first operational load completed.
+          if (revision !== operationalRevision) {
+            set((s) => {
+              s.operationalLoaded = true;
+              s.operationalLoading = false;
+            });
+            return;
+          }
+          set((s) => {
+            s.patients = patients;
+            s.patientCourses = courses.patientCourses;
+            s.courseLedger = courses.courseLedger;
+            s.appointments = appointments;
+            s.transactions = transactions;
+            s.operationalLoaded = true;
+            s.operationalLoading = false;
+          });
+        } catch (error) {
+          if (revision !== operationalRevision) {
+            set((s) => {
+              s.operationalLoaded = true;
+              s.operationalLoading = false;
+            });
+            return;
+          }
+          set((s) => {
+            s.operationalLoading = false;
+            s.operationalLoaded = true;
+            s.loadError = error instanceof Error ? error.message : "Unable to load operational data";
+          });
+        }
       },
 
       refreshStaff: async () => {
