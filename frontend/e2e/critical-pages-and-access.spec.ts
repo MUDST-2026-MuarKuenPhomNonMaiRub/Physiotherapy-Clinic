@@ -41,7 +41,7 @@ test.describe("critical browser access", () => {
       ["/settings/commission-scheme", /commission.*tier|commission.*scheme/i],
       ["/settings/monthly-closing", /monthly.*closing/i],
       ["/settings/treatment-fee-rules", /treatment.*fee/i],
-      ["/settings/services", /services/i],
+      ["/settings/services", /service/i],
       ["/settings/payment-methods", /payment/i],
     ] as const;
 
