@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Receipt, Search } from "lucide-react";
+import Link from "next/link";
+import { Printer, Receipt, Search } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
@@ -176,6 +178,13 @@ export default function TransactionsPage() {
                       <StatusBadge status={t.status} className="mt-1" />
                     </div>
                   </button>
+                  {can("transaction.view") && (
+                    <Button asChild variant="outline" size="sm" className="mx-4 mb-3">
+                      <Link href={`/transactions/${t.id}/receipt`}>
+                        <Printer className="h-4 w-4" /> พิมพ์ใบเสร็จ
+                      </Link>
+                    </Button>
+                  )}
                 </li>
               );
             })}
@@ -192,6 +201,7 @@ export default function TransactionsPage() {
                   <TableHead>Payment Method</TableHead>
                   <TableHead>Salesperson</TableHead>
                   <TableHead>Status</TableHead>
+                  {can("transaction.view") && <TableHead>ใบเสร็จ</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -216,6 +226,15 @@ export default function TransactionsPage() {
                       <TableCell className="text-muted-foreground">{pm?.name}</TableCell>
                       <TableCell className="text-muted-foreground">{sales?.name ?? "—"}</TableCell>
                       <TableCell><StatusBadge status={t.status} /></TableCell>
+                      {can("transaction.view") && (
+                        <TableCell>
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/transactions/${t.id}/receipt`} onClick={(event) => event.stopPropagation()}>
+                              <Printer className="h-4 w-4" /> พิมพ์ใบเสร็จ
+                            </Link>
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}

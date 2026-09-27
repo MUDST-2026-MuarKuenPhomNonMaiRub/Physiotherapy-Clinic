@@ -9,6 +9,7 @@ import {
   Clock,
   Minus,
   Plus,
+  Printer,
   RotateCcw,
   Search,
   ShoppingCart,
@@ -63,7 +64,7 @@ const DEFAULT_LABEL: Record<Adjustment["kind"], string> = {
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, activeBranchId } = useSession();
+  const { user, activeBranchId, can } = useSession();
   const patients = useClinicStore((s) => s.patients);
   const operationalLoaded = useClinicStore((s) => s.operationalLoaded);
   const branches = useClinicStore((s) => s.branches);
@@ -363,6 +364,13 @@ function CheckoutContent() {
         </div>
 
         <div className="mt-6 flex flex-wrap justify-center gap-2">
+          {can("transaction.view") && (
+            <Button asChild>
+              <Link href={`/transactions/${result.id}/receipt`}>
+                <Printer className="h-4 w-4" /> พิมพ์ใบเสร็จ
+              </Link>
+            </Button>
+          )}
           <Button asChild variant="outline">
             <Link href={`/transactions/${result.id}`}>View Transaction</Link>
           </Button>
