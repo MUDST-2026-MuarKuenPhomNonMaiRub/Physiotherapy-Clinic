@@ -13,7 +13,9 @@ import org.springframework.web.bind.annotation.*;
 public class CommissionRuleController {
   private final CommissionRuleService service;
   public CommissionRuleController(CommissionRuleService service) { this.service=service; }
-  @GetMapping public List<Map<String,Object>> list(){return service.list();}
+  @GetMapping
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public List<Map<String,Object>> list(){return service.list();}
   @PostMapping @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String,Object> create(@Valid @RequestBody CommissionRuleService.RuleRequest r){return service.create(r);}

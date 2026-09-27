@@ -37,6 +37,10 @@ public class RolePermissionService {
 
   @Transactional
   public Map<String, Object> update(long id, String name, List<String> permissionCodes) {
+    String code = roles.findCode(id);
+    if ("ADMIN".equals(code) || "PHYSIO".equals(code)) {
+      throw new IllegalArgumentException("Built-in roles cannot be modified");
+    }
     requireName(name);
     validatePermissionCodes(permissionCodes);
     roles.renameRole(id, name.trim());

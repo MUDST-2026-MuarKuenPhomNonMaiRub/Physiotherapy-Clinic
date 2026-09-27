@@ -32,6 +32,13 @@ public class RolePermissionRepository {
     return row;
   }
 
+  public String findCode(long id) {
+    return db.query("SELECT code FROM roles WHERE id=?", rs -> {
+      if (!rs.next()) throw new IllegalArgumentException("Role not found");
+      return rs.getString("code");
+    }, id);
+  }
+
   public List<Map<String, Object>> findAllPermissions() {
     return db.queryForList("SELECT id,code,name FROM permissions ORDER BY code");
   }

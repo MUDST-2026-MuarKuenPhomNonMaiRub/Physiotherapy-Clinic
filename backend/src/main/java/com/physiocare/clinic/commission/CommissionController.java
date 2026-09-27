@@ -32,6 +32,7 @@ public class CommissionController {
   }
 
   @GetMapping("/courses/{id}")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.view', 'course.use', 'checkout.create')")
   public CommissionDtos.CourseView get(@PathVariable long id, Authentication authentication) {
     access.requireCourseAccess(authentication, id);
     return service.getCourse(id);

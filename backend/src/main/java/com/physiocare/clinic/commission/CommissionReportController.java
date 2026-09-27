@@ -4,10 +4,12 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/commission")
+@PreAuthorize("@permissionGuard.hasAny(authentication, 'commission.view.own', 'commission.view.all')")
 public class CommissionReportController {
   private final CommissionQueryService query;
 

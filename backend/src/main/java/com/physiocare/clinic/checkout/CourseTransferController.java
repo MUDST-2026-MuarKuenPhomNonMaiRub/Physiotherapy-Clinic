@@ -20,6 +20,7 @@ public class CourseTransferController {
       @Positive int sessions, String reason) {}
 
   @GetMapping
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.transfer')")
   public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId,
       Authentication authentication) {
     return service.list(branchId, authentication);
