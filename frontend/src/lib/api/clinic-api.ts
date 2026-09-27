@@ -60,6 +60,26 @@ import type {
 
 type Row = Record<string, unknown>;
 
+interface PageResponse<T> {
+  items: T[];
+  page: number;
+  size: number;
+  totalItems: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+async function readAllPages<T>(read: (page: number, size: number) => Promise<PageResponse<T>>): Promise<T[]> {
+  const size = 100;
+  const first = await read(0, size);
+  if (!first.hasNext) return first.items;
+  const rest = await Promise.all(
+    Array.from({ length: first.totalPages - 1 }, (_, index) => read(index + 1, size))
+  );
+  return [first, ...rest].flatMap((response) => response.items);
+}
+
 const query = (params: Record<string, string | number | null | undefined>) => {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -624,8 +644,10 @@ export const setTreatmentFeeRuleActive = (id: string, active: boolean) =>
 
 // ------------------------------------------------------------------- patients
 
-export const listPatients = (branchId?: string | null, limit = 200) =>
-  apiRequest<Row[]>(`/api/v1/patients${query({ branchId, limit })}`).then((rows) => rows.map(toPatient));
+export const listPatients = (branchId?: string | null) =>
+  readAllPages((page, size) =>
+    apiRequest<PageResponse<Row>>(`/api/v1/patients/page${query({ branchId, page, size })}`)
+  ).then((rows) => rows.map(toPatient));
 
 /** A patient seen at two of the caller's branches is listed once. */
 export const listPatientsFor = (scope: BranchScope) =>
@@ -660,10 +682,10 @@ export const updatePatient = (
 
 // --------------------------------------------------------------- appointments
 
-export const listAppointments = (branchId?: string | null, limit = 200) =>
-  apiRequest<Row[]>(`/api/v1/appointments${query({ branchId, limit })}`).then((rows) =>
-    rows.map(toAppointment)
-  );
+export const listAppointments = (branchId?: string | null) =>
+  readAllPages((page, size) =>
+    apiRequest<PageResponse<Row>>(`/api/v1/appointments/page${query({ branchId, page, size })}`)
+  ).then((rows) => rows.map(toAppointment));
 
 export const listAppointmentsFor = (scope: BranchScope) =>
   forBranches(scope, listAppointments, (a) => a.id);
@@ -777,10 +799,10 @@ export const transferCourseSessions = (
 
 // --------------------------------------------------------------- transactions
 
-export const listTransactions = (branchId?: string | null, limit = 200) =>
-  apiRequest<Row[]>(`/api/v1/transactions${query({ branchId, limit })}`).then((rows) =>
-    rows.map(toTransaction)
-  );
+export const listTransactions = (branchId?: string | null) =>
+  readAllPages((page, size) =>
+    apiRequest<PageResponse<Row>>(`/api/v1/transactions/page${query({ branchId, page, size })}`)
+  ).then((rows) => rows.map(toTransaction));
 
 export const listTransactionsFor = (scope: BranchScope) =>
   forBranches(scope, listTransactions, (t) => t.id);

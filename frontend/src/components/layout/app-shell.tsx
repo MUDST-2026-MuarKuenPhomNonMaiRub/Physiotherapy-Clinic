@@ -44,6 +44,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const dataLoaded = useClinicStore((s) => s.dataLoaded);
   const loading = useClinicStore((s) => s.loading);
   const loadError = useClinicStore((s) => s.loadError);
+  const operationalLoading = useClinicStore((s) => s.operationalLoading);
   const refresh = useClinicStore((s) => s.refresh);
   const refreshOperational = useClinicStore((s) => s.refreshOperational);
   const { user, isAuthenticated } = useSession();
@@ -110,6 +111,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         Skip to main content
       </a>
       <GoogleReturnNotice />
+      {loadError && dataLoaded && (
+        <div className="fixed right-4 top-20 z-40 flex max-w-md items-center gap-3 rounded-lg border border-destructive/30 bg-background px-4 py-3 text-sm shadow-lg">
+          <p className="flex-1 text-destructive">{loadError}</p>
+          <Button size="sm" variant="outline" onClick={() => void refreshOperational()} disabled={operationalLoading}>
+            {operationalLoading ? "Retrying…" : "Retry"}
+          </Button>
+        </div>
+      )}
       <AppSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppHeader />

@@ -41,6 +41,8 @@ interface RequestOptions {
   anonymous?: boolean;
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, anonymous = false } = options;
   const token = anonymous ? null : tokenReader();
@@ -50,14 +52,22 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let response: Response;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     response = await fetch(`${API_URL}${path}`, {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError("The clinic server took too long to respond. Please try again.", 408);
+    }
     throw new ApiError("Cannot reach the clinic server. Check that the API is running.", 0);
+  } finally {
+    window.clearTimeout(timeout);
   }
 
   if (response.status === 401 && !anonymous) {

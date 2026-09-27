@@ -354,6 +354,7 @@ export const useClinicStore = create<ClinicState>()(
         const scope = branchScope();
         set((s) => {
           s.operationalLoading = true;
+          s.loadError = null;
         });
         try {
           const [patients, courses, appointments, transactions] = await Promise.all([
