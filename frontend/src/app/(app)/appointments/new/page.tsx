@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Minus, Plus, Search, X } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh, searchPatients, today } from "@/lib/domain";
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ServicePicker } from "@/components/shared/service-picker";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ function NewAppointmentContent() {
   const [patientQuery, setPatientQuery] = useState("");
   const [date, setDate] = useState("");
   const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("09:00");
   const [branchId, setBranchId] = useState(activeBranchId ?? branches[0]?.id ?? "");
   const [physioId, setPhysioId] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -57,7 +59,6 @@ function NewAppointmentContent() {
 
   const accessibleBranches = branches.filter((b) => user?.branchIds.includes(b.id) && b.status === "ACTIVE");
   const service = services.find((s) => s.id === serviceId);
-  const endTime = service ? addMinutes(startTime, service.duration) : startTime;
   const branchPhysios = staff.filter((s) => s.position === "Physiotherapist" && s.status === "ACTIVE" && s.branchIds.includes(branchId));
   const branchResources = resources.filter((r) => r.branchId === branchId && r.status === "ACTIVE");
 
@@ -66,6 +67,22 @@ function NewAppointmentContent() {
     [patientQuery, patients]
   );
   const selectedPatient = patients.find((p) => p.id === patientId);
+
+  function selectService(nextServiceId: string) {
+    setServiceId(nextServiceId);
+    const next = services.find((item) => item.id === nextServiceId);
+    if (next) setEndTime(addMinutes(startTime, next.duration));
+  }
+
+  function updateStartTime(nextStart: string) {
+    const previousDuration = Math.max(0, minutesBetween(startTime, endTime));
+    setStartTime(nextStart);
+    setEndTime(addMinutes(nextStart, previousDuration || service?.duration || 0));
+  }
+
+  function adjustEndTime(delta: number) {
+    setEndTime((current) => addMinutes(current, delta));
+  }
 
   function validate() {
     const e: Record<string, string> = {};
@@ -168,11 +185,15 @@ function NewAppointmentContent() {
               </div>
               <div className="space-y-1.5">
                 <Label>Start Time</Label>
-                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+                <Input type="time" value={startTime} onChange={(e) => updateStartTime(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>End Time</Label>
-                <Input type="time" value={endTime} readOnly disabled className="bg-muted" />
+                <Label>End Time <span className="font-normal text-muted-foreground">(adjustable)</span></Label>
+                <div className="flex gap-1">
+                  <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => adjustEndTime(-15)} aria-label="Reduce 15 minutes"><Minus className="h-3.5 w-3.5" /></Button>
+                  <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+                  <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={() => adjustEndTime(15)} aria-label="Add 15 minutes"><Plus className="h-3.5 w-3.5" /></Button>
+                </div>
               </div>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -187,14 +208,7 @@ function NewAppointmentContent() {
               </div>
               <div className="space-y-1.5">
                 <Label>Service</Label>
-                <Select value={serviceId} onValueChange={setServiceId}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select service" /></SelectTrigger>
-                  <SelectContent>
-                    {services.filter((s) => s.status === "ACTIVE").map((s) => (
-                      <SelectItem key={s.id} value={s.id}>{s.name} · {s.duration} min</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ServicePicker services={services.filter((s) => s.status === "ACTIVE")} value={serviceId} onValueChange={selectService} />
                 {fieldErrors.serviceId && <p className="text-xs text-destructive">{fieldErrors.serviceId}</p>}
               </div>
               <div className="space-y-1.5">
@@ -240,6 +254,12 @@ function NewAppointmentContent() {
       </form>
     </>
   );
+}
+
+function minutesBetween(start: string, end: string) {
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = end.split(":").map(Number);
+  return (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
 }
 
 export default function NewAppointmentPage() {

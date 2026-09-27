@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ClipboardList, Pencil, Plus, Ticket } from "lucide-react";
+import { ClipboardList, Minus, Pencil, Plus, Search, Ticket } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { formatCurrency } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
@@ -59,6 +59,18 @@ export default function ServicesSettingsPage() {
   const [courseOpen, setCourseOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<CourseTemplate | null>(null);
   const [courseForm, setCourseForm] = useState(emptyCourseForm);
+
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const matchesFilter = (item: { code: string; name: string; status: string }) => {
+    const term = query.trim().toLocaleLowerCase();
+    return (
+      (statusFilter === "ALL" || item.status === statusFilter) &&
+      (!term || `${item.code} ${item.name}`.toLocaleLowerCase().includes(term))
+    );
+  };
+  const visibleServices = services.filter(matchesFilter);
+  const visibleCourses = courseTemplates.filter(matchesFilter);
 
   function openCreateService() { setEditingService(null); setServiceForm(emptyServiceForm); setServiceOpen(true); }
   function openEditService(s: Service) {
@@ -134,6 +146,21 @@ export default function ServicesSettingsPage() {
     <>
       <PageHeader title="Service" description="Configure billable services and course packages sold at checkout" />
 
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search code or name..." className="pl-9" />
+        </div>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All status</SelectItem>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="INACTIVE">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <Tabs defaultValue="services">
         <TabsList>
           <TabsTrigger value="services">Treatment</TabsTrigger>
@@ -162,7 +189,10 @@ export default function ServicesSettingsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {services.map((s) => (
+                  {visibleServices.length === 0 && (
+                    <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">No matching service</TableCell></TableRow>
+                  )}
+                  {visibleServices.map((s) => (
                     <TableRow key={s.id} className="[&>td]:py-3.5">
                       <TableCell className="font-mono text-xs text-muted-foreground">{s.code || "—"}</TableCell>
                       <TableCell className="font-medium text-foreground">{s.name}</TableCell>
@@ -224,7 +254,10 @@ export default function ServicesSettingsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {courseTemplates.map((c) => (
+                  {visibleCourses.length === 0 && (
+                    <TableRow><TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">No matching course</TableCell></TableRow>
+                  )}
+                  {visibleCourses.map((c) => (
                     <TableRow key={c.id} className="[&>td]:py-3.5">
                       <TableCell className="font-mono text-xs text-muted-foreground">{c.code || "—"}</TableCell>
                       <TableCell>
@@ -285,16 +318,13 @@ export default function ServicesSettingsPage() {
               <Input type="number" min={0.01} step="0.01" value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: Number(e.target.value) }))} />
             </div>
             <div className="space-y-1.5">
-              <Label>Duration (minutes)</Label>
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                value={serviceForm.duration}
-                onChange={(e) => setServiceForm((f) => ({ ...f, duration: Number(e.target.value) }))}
-                aria-label="Duration in minutes"
-              />
-              <p className="text-xs text-muted-foreground">Used to calculate the appointment end time and calendar block.</p>
+              <Label>Default duration (minutes)</Label>
+              <div className="flex gap-1">
+                <Button type="button" variant="outline" size="icon" onClick={() => setServiceForm((f) => ({ ...f, duration: Math.max(15, f.duration - 15) }))} aria-label="Reduce duration by 15 minutes"><Minus className="h-3.5 w-3.5" /></Button>
+                <Input type="number" min={1} step={15} value={serviceForm.duration} onChange={(e) => setServiceForm((f) => ({ ...f, duration: Number(e.target.value) }))} aria-label="Duration in minutes" />
+                <Button type="button" variant="outline" size="icon" onClick={() => setServiceForm((f) => ({ ...f, duration: f.duration + 15 }))} aria-label="Add duration by 15 minutes"><Plus className="h-3.5 w-3.5" /></Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Sets the default booking length. The end time can still be adjusted for each appointment.</p>
             </div>
           </div>
           <DialogFooter className="items-center gap-2 sm:justify-between">

@@ -38,6 +38,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { Service, Transaction } from "@/types";
+import { ServicePicker } from "@/components/shared/service-picker";
 
 type Mode = "SINGLE" | "COURSE";
 type CourseSubMode = "USE_EXISTING" | "PURCHASE";
@@ -515,22 +516,19 @@ function CheckoutContent() {
             {mode === "SINGLE" ? (
               <Card>
                 <CardHeader><CardTitle className="text-base">Select Service</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {services.filter((s) => s.status === "ACTIVE").map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => { setServiceId(s.id); setPriceOverride(""); }}
-                        className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${serviceId === s.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-foreground">{s.name}</p>
-                          <span className="text-xs text-muted-foreground">{s.duration} min</span>
-                        </div>
-                        <p className="mt-1 text-sm font-semibold text-primary">{formatCurrency(s.price)}</p>
-                      </button>
-                    ))}
-                  </div>
+                <CardContent className="space-y-3">
+                  <ServicePicker
+                    services={services.filter((s) => s.status === "ACTIVE")}
+                    value={serviceId}
+                    onValueChange={(id) => { setServiceId(id); setPriceOverride(""); }}
+                    placeholder="Type to search service..."
+                  />
+                  {selectedService && (
+                    <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                      <span>{selectedService.name} · {selectedService.duration} min</span>
+                      <span className="font-semibold text-primary">{formatCurrency(selectedService.price)}</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ) : (

@@ -40,6 +40,9 @@ export default function CoursesTransferPage() {
   const transferCourseSessions = useClinicStore((s) => s.transferCourseSessions);
 
   const [branchFilter, setBranchFilter] = useState("ALL");
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [step, setStep] = useState<Step>("closed");
   const [sourceQuery, setSourceQuery] = useState("");
   const [sourceCourseId, setSourceCourseId] = useState("");
@@ -52,6 +55,7 @@ export default function CoursesTransferPage() {
     const outs = courseLedger
       .filter((l) => l.type === "TRANSFER_OUT" && l.transferGroupId)
       .filter((l) => (branchFilter === "ALL" ? isAccessible(l.branchId) : l.branchId === branchFilter));
+    const normalizedQuery = historyQuery.trim().toLocaleLowerCase();
     return outs
       .map((out) => {
         // A transfer stays inside the same course (the recipient becomes a
@@ -72,8 +76,11 @@ export default function CoursesTransferPage() {
           performedBy: out.performedBy,
         };
       })
+      .filter((transfer) => !dateFrom || transfer.date.slice(0, 10) >= dateFrom)
+      .filter((transfer) => !dateTo || transfer.date.slice(0, 10) <= dateTo)
+      .filter((transfer) => !normalizedQuery || [transfer.fromPatient && getPatientFullNameTh(transfer.fromPatient), transfer.toPatient && getPatientFullNameTh(transfer.toPatient), transfer.course, transfer.performedBy, transfer.branch].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalizedQuery))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [courseLedger, patientCourses, courseTemplates, patients, branches, branchFilter, isAccessible]);
+  }, [courseLedger, patientCourses, courseTemplates, patients, branches, branchFilter, isAccessible, historyQuery, dateFrom, dateTo]);
 
   const totalSessions = history.reduce((s, r) => s + r.sessions, 0);
 
@@ -139,7 +146,13 @@ export default function CoursesTransferPage() {
       />
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search owner, recipient or course..." className="pl-9" />
+        </div>
         <BranchFilterSelect value={branchFilter} onValueChange={setBranchFilter} className="w-44" />
+        <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} aria-label="Transfers from date" className="w-36" />
+        <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} aria-label="Transfers to date" className="w-36" />
         <p className="ml-auto text-sm text-muted-foreground">
           {history.length} {history.length === 1 ? "transfer" : "transfers"}
         </p>
@@ -183,10 +196,10 @@ export default function CoursesTransferPage() {
                         {r.toPatient ? getPatientFullNameTh(r.toPatient) : "—"}
                       </span>
                     </TableCell>
-                    <TableCell>{r.course}</TableCell>
+                    <TableCell>{r.course || "—"}</TableCell>
                     <TableCell className="text-center font-medium">{r.sessions}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.branch}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.performedBy}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.branch || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.performedBy || "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
