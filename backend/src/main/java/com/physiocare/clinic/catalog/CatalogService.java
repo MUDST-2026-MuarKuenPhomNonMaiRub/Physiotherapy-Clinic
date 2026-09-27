@@ -221,14 +221,14 @@ public class CatalogService {
   public List<Map<String, Object>> payments() {
     return db.queryForList(
         "SELECT id,code,name,icon,requires_reference,requires_attachment,active FROM"
-            + " payment_methods ORDER BY sort_order,id");
+            + " payment_methods WHERE code <> 'QR' ORDER BY sort_order,id");
   }
 
   @PatchMapping("/payment-methods/{id}/status")
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setPaymentMethodStatus(
       @PathVariable long id, @RequestBody ActiveRequest r) {
-    int rows = db.update("UPDATE payment_methods SET active=? WHERE id=?", r.active(), id);
+    int rows = db.update("UPDATE payment_methods SET active=? WHERE id=? AND code <> 'QR'", r.active(), id);
     if (rows == 0) throw new IllegalArgumentException("Payment method not found");
     return db.queryForMap(
         "SELECT id,code,name,icon,requires_reference,requires_attachment,active FROM"

@@ -34,7 +34,7 @@ class InputRulesTest {
 
   @Test
   void oneOfAcceptsAllowedValueAndRejectsNullOrUnknownValue() {
-    assertDoesNotThrow(() -> InputRules.oneOf("CASH", List.of("CASH", "QR"), "Payment method"));
+    assertDoesNotThrow(() -> InputRules.oneOf("CASH", List.of("CASH", "TRANSFER"), "Payment method"));
     assertThrows(IllegalArgumentException.class, () -> InputRules.oneOf(null, List.of("CASH"), "Payment method"));
     assertThrows(IllegalArgumentException.class, () -> InputRules.oneOf("CARD", List.of("CASH"), "Payment method"));
   }

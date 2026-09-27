@@ -177,8 +177,7 @@ Scheduled → Confirmed → Arrived → In Service → Completed
 5. เลือก Treating Staff
 6. เพิ่มส่วนลดหรือค่าใช้จ่ายเพิ่มเติมถ้ามี
 7. เลือกวิธีชำระเงิน
-8. ถ้าเลือก QR Payment ให้ตรวจยอดใน Popup แล้วกด `Confirm Payment Received`
-9. กดปุ่มยืนยันการชำระเงิน
+8. กดปุ่มยืนยันการชำระเงิน
 
 การ Checkout รายครั้งไม่ต้องเลือก Salesperson และจะสร้างรายการค่าคอมมิชชันของหมอผู้รักษา
 ตามกฎ Treatment Commission

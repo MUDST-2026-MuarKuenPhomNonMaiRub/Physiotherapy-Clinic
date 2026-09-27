@@ -134,7 +134,7 @@ function CheckoutContent() {
     () => patientCourses.filter((pc) => pc.patientId === patientId && pc.status === "ACTIVE"),
     [patientCourses, patientId]
   );
-  const enabledPayments = paymentMethods.filter((p) => p.enabled && p.code !== "QR");
+  const enabledPayments = paymentMethods.filter((p) => p.enabled);
   const branchPhysios = staff.filter(
     (s) =>
       s.position === "Physiotherapist" &&

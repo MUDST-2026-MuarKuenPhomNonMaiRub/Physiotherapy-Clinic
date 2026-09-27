@@ -1,12 +1,12 @@
 "use client";
 
-import { Banknote, CreditCard, Landmark, QrCode } from "lucide-react";
+import { Banknote, CreditCard, Landmark } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { PageHeader } from "@/components/shared/page-header";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 
-const iconMap: Record<string, typeof Banknote> = { Banknote, Landmark, QrCode, CreditCard };
+const iconMap: Record<string, typeof Banknote> = { Banknote, Landmark, CreditCard };
 
 export default function PaymentMethodsSettingsPage() {
   const paymentMethods = useClinicStore((s) => s.paymentMethods);

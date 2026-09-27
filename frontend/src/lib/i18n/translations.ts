@@ -238,7 +238,6 @@ export const thaiTranslations: Record<string, string> = {
   "Enter what the patient handed over.": "กรอกจำนวนเงินที่ผู้ป่วยชำระ",
   "That is less than the amount due.": "จำนวนเงินน้อยกว่ายอดที่ต้องชำระ",
   "Unable to take this payment": "ไม่สามารถรับชำระเงินได้",
-  "QR Payment": "ชำระด้วย QR",
   "Amount to pay": "ยอดที่ต้องชำระ",
   "Account name": "ชื่อบัญชี",
   "Payment method": "วิธีชำระเงิน",
@@ -548,9 +547,6 @@ export const thaiTranslations: Record<string, string> = {
   "View Transaction": "ดูรายการชำระเงิน",
   "Related Transaction": "รายการชำระเงินที่เกี่ยวข้อง",
   "All Payments": "การชำระเงินทั้งหมด",
-  "Mock QR code": "QR ตัวอย่าง",
-  "THAI QR PAYMENT": "ชำระเงินด้วย THAI QR",
-  "PromptPay · Krungthai mockup": "พร้อมเพย์ · ตัวอย่างกรุงไทย",
 
   "Course Name": "ชื่อคอร์ส",
   "Course Ledger": "ประวัติคอร์ส",

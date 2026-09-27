@@ -95,6 +95,12 @@ public class SalesService {
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'transaction.view')")
   @Transactional
   public Object pay(@Valid @RequestBody PaymentRequest r, Authentication authentication) {
+    Integer activeMethod = db.queryForObject(
+        "SELECT count(*) FROM payment_methods WHERE id=? AND active AND code <> 'QR'",
+        Integer.class,
+        r.paymentMethodId());
+    if (activeMethod == null || activeMethod == 0)
+      throw new IllegalArgumentException("Payment method is unavailable");
     Map<String, Object> sale =
         db.queryForMap(
             "SELECT total_amount,status,branch_id FROM sales_transactions WHERE id=? FOR UPDATE",
