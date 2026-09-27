@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   CircleDot,
   Percent,
+  Printer,
   Ticket,
   TriangleAlert,
 } from "lucide-react";
@@ -80,7 +81,12 @@ export default function TransactionDetailPage({ params }: { params: Promise<{ id
         title={txn.transactionNo}
         description={`${formatDateTime(txn.date)} · ${branch?.name ?? ""}`}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {can("transaction.view") && (
+              <Button asChild>
+                <Link href={`/transactions/${txn.id}/receipt`}><Printer className="h-4 w-4" /> พิมพ์ใบเสร็จ</Link>
+              </Button>
+            )}
             <StatusBadge status={txn.status} className="text-sm" />
             {canVoid && (
               <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setVoidStep("reason")}>
