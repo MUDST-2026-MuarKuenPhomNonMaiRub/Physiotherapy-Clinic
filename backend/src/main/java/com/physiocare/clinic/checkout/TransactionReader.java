@@ -3,9 +3,11 @@ package com.physiocare.clinic.checkout;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -22,29 +24,29 @@ public class TransactionReader {
     List<Map<String, Object>> rows =
         db.queryForList("SELECT * FROM sales_transactions WHERE id=?", id);
     if (rows.isEmpty()) throw new IllegalArgumentException("Transaction not found");
-    return toView(rows.get(0));
+    return toView(rows.get(0), loadRelatedData(List.of(id)));
   }
 
-  public List<CheckoutDtos.TransactionView> list(Long branchId, Long patientId) {
-    return db
-        .queryForList(
+  public List<CheckoutDtos.TransactionView> list(Long branchId, Long patientId, int limit) {
+    List<Map<String, Object>> rows = db.queryForList(
             "SELECT * FROM sales_transactions WHERE (?::bigint IS NULL OR branch_id=?) AND"
-                + " (?::bigint IS NULL OR patient_id=?) ORDER BY sold_at DESC, id DESC",
-            branchId, branchId, patientId, patientId)
-        .stream()
-        .map(this::toView)
-        .toList();
+                + " (?::bigint IS NULL OR patient_id=?) ORDER BY sold_at DESC, id DESC LIMIT ?",
+            branchId, branchId, patientId, patientId, limit);
+    List<Long> ids = rows.stream().map(row -> ((Number) row.get("id")).longValue()).toList();
+    RelatedData related = loadRelatedData(ids);
+    return rows.stream().map(row -> toView(row, related)).toList();
   }
 
   private CheckoutDtos.TransactionView toView(Map<String, Object> transaction) {
     long id = ((Number) transaction.get("id")).longValue();
+    return toView(transaction, loadRelatedData(List.of(id)));
+  }
+
+  private CheckoutDtos.TransactionView toView(Map<String, Object> transaction, RelatedData related) {
+    long id = ((Number) transaction.get("id")).longValue();
 
     List<CheckoutDtos.LineItem> items =
-        db
-            .queryForList(
-                "SELECT description_snapshot,quantity,total_amount,item_kind FROM sales_items"
-                    + " WHERE sales_transaction_id=? ORDER BY id",
-                id)
+        related.items().getOrDefault(id, List.of())
             .stream()
             .map(
                 row ->
@@ -56,11 +58,7 @@ public class TransactionReader {
             .toList();
 
     List<CheckoutDtos.CommissionLine> commission =
-        db
-            .queryForList(
-                "SELECT commission_rule_id,rule_name_snapshot,staff_id,commission_type,amount FROM"
-                    + " transaction_commissions WHERE sales_transaction_id=? ORDER BY id",
-                id)
+        related.commission().getOrDefault(id, List.of())
             .stream()
             .map(
                 row ->
@@ -76,12 +74,7 @@ public class TransactionReader {
 
     // The course impact is read back from the ledger rather than stored twice.
     List<CheckoutDtos.CourseImpact> courseImpact = new ArrayList<>();
-    for (Map<String, Object> entry :
-        db.queryForList(
-            "SELECT e.entry_type,e.quantity,pc.package_name_snapshot FROM course_ledger_entries e"
-                + " JOIN patient_courses pc ON pc.id=e.patient_course_id WHERE"
-                + " e.related_transaction_id=? ORDER BY e.id",
-            id)) {
+    for (Map<String, Object> entry : related.courseImpact().getOrDefault(id, List.of())) {
       String label =
           entry.get("package_name_snapshot")
               + " — "
@@ -98,11 +91,7 @@ public class TransactionReader {
 
     // The cash figures live on the payment row, not the transaction, and are
     // present only for a cash receipt.
-    List<Map<String, Object>> cashRows =
-        db.queryForList(
-            "SELECT cash_received,change_given FROM payments WHERE sales_transaction_id=?"
-                + " AND cash_received IS NOT NULL ORDER BY id DESC LIMIT 1",
-            id);
+    List<Map<String, Object>> cashRows = related.payments().getOrDefault(id, List.of());
     BigDecimal cashReceived =
         cashRows.isEmpty() ? null : (BigDecimal) cashRows.get(0).get("cash_received");
     BigDecimal changeGiven =
@@ -110,15 +99,7 @@ public class TransactionReader {
 
     CheckoutDtos.VoidInfo voidInfo = null;
     if ("CANCELLED".equals(transaction.get("status"))) {
-      List<Map<String, Object>> cancellations =
-          db.queryForList(
-              "SELECT c.reason_text,c.cancelled_at,COALESCE(NULLIF(trim(s.name),''),"
-                  + " trim(u.first_name || ' ' || u.last_name),'System') AS actor"
-                  + " FROM transaction_cancellations c"
-                  + " LEFT JOIN users u ON u.id=c.cancelled_by"
-                  + " LEFT JOIN staff s ON s.user_id=u.id AND s.deleted_at IS NULL"
-                  + " WHERE c.transaction_id=? ORDER BY c.id DESC LIMIT 1",
-              id);
+      List<Map<String, Object>> cancellations = related.cancellations().getOrDefault(id, List.of());
       if (!cancellations.isEmpty()) {
         Map<String, Object> cancellation = cancellations.get(0);
         voidInfo =
@@ -152,8 +133,50 @@ public class TransactionReader {
         voidInfo);
   }
 
+  private record RelatedData(
+      Map<Long, List<Map<String, Object>>> items,
+      Map<Long, List<Map<String, Object>>> commission,
+      Map<Long, List<Map<String, Object>>> courseImpact,
+      Map<Long, List<Map<String, Object>>> payments,
+      Map<Long, List<Map<String, Object>>> cancellations) {}
+
+  private RelatedData loadRelatedData(List<Long> ids) {
+    if (ids.isEmpty()) return new RelatedData(Map.of(), Map.of(), Map.of(), Map.of(), Map.of());
+    String placeholders = ids.stream().map(id -> "?").collect(Collectors.joining(","));
+    Object[] args = ids.toArray();
+    Map<Long, List<Map<String, Object>>> items = groupById(db.queryForList(
+        "SELECT sales_transaction_id,description_snapshot,quantity,total_amount,item_kind FROM sales_items"
+            + " WHERE sales_transaction_id IN (" + placeholders + ") ORDER BY id", args));
+    Map<Long, List<Map<String, Object>>> commission = groupById(db.queryForList(
+        "SELECT sales_transaction_id,commission_rule_id,rule_name_snapshot,staff_id,commission_type,amount"
+            + " FROM transaction_commissions WHERE sales_transaction_id IN (" + placeholders + ") ORDER BY id", args));
+    Map<Long, List<Map<String, Object>>> courseImpact = groupById(db.queryForList(
+        "SELECT e.related_transaction_id,e.entry_type,e.quantity,pc.package_name_snapshot FROM course_ledger_entries e"
+            + " JOIN patient_courses pc ON pc.id=e.patient_course_id WHERE e.related_transaction_id IN (" + placeholders + ") ORDER BY e.id", args));
+    Map<Long, List<Map<String, Object>>> payments = groupById(db.queryForList(
+        "SELECT sales_transaction_id,cash_received,change_given FROM payments WHERE sales_transaction_id IN (" + placeholders + ")"
+            + " AND cash_received IS NOT NULL ORDER BY id DESC", args));
+    Map<Long, List<Map<String, Object>>> cancellations = groupById(db.queryForList(
+        "SELECT c.transaction_id,c.reason_text,c.cancelled_at,COALESCE(NULLIF(trim(s.name),''),"
+            + " trim(u.first_name || ' ' || u.last_name),'System') AS actor FROM transaction_cancellations c"
+            + " LEFT JOIN users u ON u.id=c.cancelled_by LEFT JOIN staff s ON s.user_id=u.id AND s.deleted_at IS NULL"
+            + " WHERE c.transaction_id IN (" + placeholders + ") ORDER BY c.id DESC", args));
+    return new RelatedData(items, commission, courseImpact, payments, cancellations);
+  }
+
+  private Map<Long, List<Map<String, Object>>> groupById(List<Map<String, Object>> rows) {
+    Map<Long, List<Map<String, Object>>> grouped = new HashMap<>();
+    for (Map<String, Object> row : rows) {
+      Object value = row.get("sales_transaction_id");
+      if (value == null) value = row.get("related_transaction_id");
+      if (value == null) value = row.get("transaction_id");
+      grouped.computeIfAbsent(((Number) value).longValue(), ignored -> new ArrayList<>()).add(row);
+    }
+    return grouped;
+  }
+
   /** Course balance and its full history, for the course detail and report screens. */
-  public Map<String, Object> courseLedger(Long patientId, Long branchId) {
+  public Map<String, Object> courseLedger(Long patientId, Long branchId, int limit) {
     Map<String, Object> result = new LinkedHashMap<>();
     // One row per person holding sessions on a course: the owner, and anyone
     // sessions were transferred to. Each row carries that person's own
@@ -172,8 +195,8 @@ public class TransactionReader {
             + "pc.branch_id,pc.status FROM patient_courses pc JOIN course_member_balances cmb"
             + " ON cmb.patient_course_id=pc.id WHERE (?::bigint IS NULL OR cmb.patient_id=?)"
             + " AND (?::bigint IS NULL OR pc.branch_id=?)"
-            + " ORDER BY pc.id, (cmb.patient_id=pc.patient_id) DESC, cmb.patient_id";
-    Object[] courseArgs = new Object[] {patientId, patientId, branchId, branchId};
+            + " ORDER BY pc.id, (cmb.patient_id=pc.patient_id) DESC, cmb.patient_id LIMIT ?";
+    Object[] courseArgs = new Object[] {patientId, patientId, branchId, branchId, limit};
     result.put("patientCourses", db.queryForList(courseSql, courseArgs));
     String ledgerSql;
     Object[] ledgerArgs;
@@ -183,8 +206,8 @@ public class TransactionReader {
               + "e.related_transaction_id,e.transfer_group_id,e.counterparty_patient_id,"
               + "e.performed_by_name,e.created_at FROM course_ledger_entries e JOIN"
               + " patient_courses pc ON pc.id=e.patient_course_id WHERE (?::bigint IS NULL OR"
-              + " pc.patient_id=?) AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id";
-      ledgerArgs = new Object[] {null, null, branchId, branchId};
+              + " pc.patient_id=?) AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id LIMIT ?";
+      ledgerArgs = new Object[] {null, null, branchId, branchId, limit};
     } else {
       ledgerSql =
           "SELECT e.id,e.patient_course_id,e.entry_type,e.quantity,e.balance_after,e.branch_id,"
@@ -192,8 +215,8 @@ public class TransactionReader {
               + "e.performed_by_name,e.created_at FROM course_ledger_entries e JOIN"
               + " patient_courses pc ON pc.id=e.patient_course_id JOIN course_member_balances cmb"
               + " ON cmb.patient_course_id=e.patient_course_id WHERE cmb.patient_id=?"
-              + " AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id";
-      ledgerArgs = new Object[] {patientId, branchId, branchId};
+              + " AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id LIMIT ?";
+      ledgerArgs = new Object[] {patientId, branchId, branchId, limit};
     }
     result.put(
         "ledger",

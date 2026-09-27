@@ -48,8 +48,9 @@ public class AppointmentController {
       @RequestParam(required = false) Long branchId,
       @RequestParam(required = false) LocalDate date,
       @RequestParam(required = false) Long patientId,
+      @RequestParam(defaultValue = "200") int limit,
       Authentication authentication) {
-    return service.list(branchId, date, patientId, authentication);
+    return service.list(branchId, date, patientId, limit, authentication);
   }
 
   @GetMapping("/{id}")

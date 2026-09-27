@@ -26,13 +26,13 @@ public class AppointmentRepository {
     this.db = db;
   }
 
-  public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId) {
+  public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId, int limit) {
     return db.queryForList(
         "SELECT " + COLUMNS
             + " FROM appointments a WHERE (?::bigint IS NULL OR a.branch_id=?) AND (?::date IS"
             + " NULL OR a.starts_at::date=?) AND (?::bigint IS NULL OR a.patient_id=?) ORDER BY"
-            + " a.starts_at",
-        branchId, branchId, date, date, patientId, patientId);
+            + " a.starts_at LIMIT ?",
+        branchId, branchId, date, date, patientId, patientId, limit);
   }
 
   public Map<String, Object> get(long id) {

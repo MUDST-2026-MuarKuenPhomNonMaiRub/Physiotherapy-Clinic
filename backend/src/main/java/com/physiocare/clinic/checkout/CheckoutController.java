@@ -36,9 +36,10 @@ public class CheckoutController {
   public List<CheckoutDtos.TransactionView> list(
       @RequestParam(required = false) Long branchId,
       @RequestParam(required = false) Long patientId,
+      @RequestParam(defaultValue = "200") int limit,
       Authentication authentication) {
     branches.requireFilter(authentication, branchId);
-    return reader.list(branchId, patientId);
+    return reader.list(branchId, patientId, Math.min(Math.max(limit, 1), 1000));
   }
 
   @GetMapping("/transactions/{id}")
@@ -64,8 +65,9 @@ public class CheckoutController {
   public Map<String, Object> courses(
       @RequestParam(required = false) Long patientId,
       @RequestParam(required = false) Long branchId,
+      @RequestParam(defaultValue = "200") int limit,
       Authentication authentication) {
     branches.requireFilter(authentication, branchId);
-    return reader.courseLedger(patientId, branchId);
+    return reader.courseLedger(patientId, branchId, Math.min(Math.max(limit, 1), 1000));
   }
 }

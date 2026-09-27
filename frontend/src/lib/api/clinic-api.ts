@@ -624,8 +624,8 @@ export const setTreatmentFeeRuleActive = (id: string, active: boolean) =>
 
 // ------------------------------------------------------------------- patients
 
-export const listPatients = (branchId?: string | null) =>
-  apiRequest<Row[]>(`/api/v1/patients${query({ branchId })}`).then((rows) => rows.map(toPatient));
+export const listPatients = (branchId?: string | null, limit = 200) =>
+  apiRequest<Row[]>(`/api/v1/patients${query({ branchId, limit })}`).then((rows) => rows.map(toPatient));
 
 /** A patient seen at two of the caller's branches is listed once. */
 export const listPatientsFor = (scope: BranchScope) =>
@@ -660,8 +660,8 @@ export const updatePatient = (
 
 // --------------------------------------------------------------- appointments
 
-export const listAppointments = (branchId?: string | null) =>
-  apiRequest<Row[]>(`/api/v1/appointments${query({ branchId })}`).then((rows) =>
+export const listAppointments = (branchId?: string | null, limit = 200) =>
+  apiRequest<Row[]>(`/api/v1/appointments${query({ branchId, limit })}`).then((rows) =>
     rows.map(toAppointment)
   );
 
@@ -739,9 +739,9 @@ export interface CourseSnapshot {
   courseLedger: CourseLedgerEntry[];
 }
 
-export const listPatientCourses = (branchId?: string | null): Promise<CourseSnapshot> =>
+export const listPatientCourses = (branchId?: string | null, limit = 200): Promise<CourseSnapshot> =>
   apiRequest<{ patientCourses: Row[]; ledger: Row[] }>(
-    `/api/v1/patient-courses${query({ branchId })}`
+    `/api/v1/patient-courses${query({ branchId, limit })}`
   ).then((response) => ({
     patientCourses: response.patientCourses.map(toPatientCourse),
     courseLedger: response.ledger.map(toLedgerEntry),
@@ -777,8 +777,8 @@ export const transferCourseSessions = (
 
 // --------------------------------------------------------------- transactions
 
-export const listTransactions = (branchId?: string | null) =>
-  apiRequest<Row[]>(`/api/v1/transactions${query({ branchId })}`).then((rows) =>
+export const listTransactions = (branchId?: string | null, limit = 200) =>
+  apiRequest<Row[]>(`/api/v1/transactions${query({ branchId, limit })}`).then((rows) =>
     rows.map(toTransaction)
   );
 
@@ -931,10 +931,6 @@ export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promis
     resources,
     masterData,
     commissionRules,
-    patients,
-    courses,
-    appointments,
-    transactions,
   ] = await Promise.all([
     listBranches(),
     listStaff(),
@@ -945,10 +941,6 @@ export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promis
     listResourcesFor(scope),
     listMasterData(),
     listCommissionRules(),
-    listPatientsFor(scope),
-    listPatientCoursesFor(scope),
-    listAppointmentsFor(scope),
-    listTransactionsFor(scope),
   ]);
 
   return {
@@ -961,10 +953,13 @@ export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promis
     resources,
     masterData,
     commissionRules,
-    patients,
-    patientCourses: courses.patientCourses,
-    courseLedger: courses.courseLedger,
-    appointments,
-    transactions,
+    // Operational collections are loaded after the shell is visible. This
+    // keeps login latency and the initial browser heap independent of the
+    // number of patients, visits and transactions in the clinic.
+    patients: [],
+    patientCourses: [],
+    courseLedger: [],
+    appointments: [],
+    transactions: [],
   };
 }

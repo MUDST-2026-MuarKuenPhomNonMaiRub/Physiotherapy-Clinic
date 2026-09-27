@@ -36,9 +36,9 @@ public class AppointmentService {
   }
 
   public List<Map<String, Object>> list(Long branchId, LocalDate date, Long patientId,
-      Authentication authentication) {
+      int limit, Authentication authentication) {
     branches.requireFilter(authentication, branchId);
-    return appointments.list(branchId, date, patientId);
+    return appointments.list(branchId, date, patientId, Math.min(Math.max(limit, 1), 1000));
   }
 
   public Map<String, Object> get(long id, Authentication authentication) {

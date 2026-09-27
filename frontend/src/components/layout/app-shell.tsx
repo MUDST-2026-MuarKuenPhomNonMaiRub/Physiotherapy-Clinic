@@ -45,6 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const loading = useClinicStore((s) => s.loading);
   const loadError = useClinicStore((s) => s.loadError);
   const refresh = useClinicStore((s) => s.refresh);
+  const refreshOperational = useClinicStore((s) => s.refreshOperational);
   const { user, isAuthenticated } = useSession();
   const pathname = usePathname();
   const router = useRouter();
@@ -69,6 +70,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       void refresh();
     }
   }, [hasHydrated, isAuthenticated, dataLoaded, loading, loadError, refresh]);
+
+  // Load large operational collections after the shell is usable. The login
+  // request should not wait for every patient, visit and transaction row.
+  useEffect(() => {
+    if (dataLoaded && isAuthenticated) void refreshOperational();
+  }, [dataLoaded, isAuthenticated, refreshOperational]);
 
   // Permissions can be changed by an administrator in another tab. Re-read
   // the profile when this tab becomes active so menus and route guards do not

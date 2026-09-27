@@ -35,8 +35,9 @@ public class PatientController {
   @GetMapping
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'patient.view')")
   public List<Map<String, Object>> list(@RequestParam(defaultValue = "") String search,
-      @RequestParam(required = false) Long branchId, Authentication authentication) {
-    return service.list(search, branchId, authentication);
+      @RequestParam(required = false) Long branchId,
+      @RequestParam(defaultValue = "200") int limit, Authentication authentication) {
+    return service.list(search, branchId, limit, authentication);
   }
 
   @GetMapping("/{id}")

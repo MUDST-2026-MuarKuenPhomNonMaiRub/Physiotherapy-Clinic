@@ -3,10 +3,12 @@ name: Clinic CI
 on:
   push:
     branches:
+      - dev
       - dev3
       - main
   pull_request:
     branches:
+      - dev
       - dev3
       - main
 

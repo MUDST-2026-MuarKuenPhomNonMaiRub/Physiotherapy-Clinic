@@ -163,6 +163,7 @@ public class PatientService {
   public List<Map<String, Object>> list(
       @RequestParam(defaultValue = "") String search,
       @RequestParam(required = false) Long branchId,
+      @RequestParam(defaultValue = "200") int limit,
       Authentication authentication) {
     // A non-admin must always select one of their branches.  Omitting the
     // filter must not turn the patient directory into a clinic-wide export.
@@ -186,7 +187,8 @@ public class PatientService {
         branchId,
         branchId,
         branchId,
-        branchId).stream().map(this::decode).toList();
+        branchId,
+        Math.min(Math.max(limit, 1), 1000)).stream().map(this::decode).toList();
   }
 
   @GetMapping("/{id}")
