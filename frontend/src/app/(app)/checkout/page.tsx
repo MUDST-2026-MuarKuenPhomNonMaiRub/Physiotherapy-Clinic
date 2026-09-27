@@ -134,7 +134,7 @@ function CheckoutContent() {
     () => patientCourses.filter((pc) => pc.patientId === patientId && pc.status === "ACTIVE"),
     [patientCourses, patientId]
   );
-  const enabledPayments = paymentMethods.filter((p) => p.enabled);
+  const enabledPayments = paymentMethods.filter((p) => p.enabled && p.code !== "QR");
   const branchPhysios = staff.filter(
     (s) =>
       s.position === "Physiotherapist" &&
@@ -931,11 +931,6 @@ function CheckoutContent() {
                 </div>
               )}
 
-              {total === 0 && mode === "COURSE" && subMode === "USE_EXISTING" && (
-                <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  การใช้คอร์สเดิมไม่มีค่าใช้จ่าย จึงไม่ต้องเปิด QR
-                </p>
-              )}
               <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={() => void handleConfirm()}>
                 {confirmLabel}
               </Button>
