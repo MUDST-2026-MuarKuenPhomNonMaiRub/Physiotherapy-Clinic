@@ -867,20 +867,24 @@ function CheckoutContent() {
             <Card>
               <CardHeader><CardTitle className="text-base">Staff</CardTitle></CardHeader>
               <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className={`space-y-1.5${needsSalesperson ? "" : " sm:col-span-2"}`}>
-                  <Label>Treating Staff {needsTreatingStaff && <span className="text-destructive">*</span>}</Label>
-                  {needsSalesperson && (
-                    <p className="text-xs invisible" aria-hidden="true">Required only when purchasing a course package.</p>
-                  )}
-                  <Select value={treatingStaffId} onValueChange={setTreatingStaffId}>
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select physiotherapist" /></SelectTrigger>
-                    <SelectContent>
-                      {branchPhysios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {needsTreatingStaff && (
+                  <div className={`space-y-1.5${needsSalesperson ? "" : " sm:col-span-2"}`}>
+                    <Label>Treating Staff <span className="text-destructive">*</span></Label>
+                    {needsSalesperson && (
+                      <p className="text-xs text-muted-foreground">
+                        Physiotherapist providing today&apos;s treatment.
+                      </p>
+                    )}
+                    <Select value={treatingStaffId} onValueChange={setTreatingStaffId}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Select physiotherapist" /></SelectTrigger>
+                      <SelectContent>
+                        {branchPhysios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 {needsSalesperson && (
-                  <div className="space-y-1.5">
+                  <div className={`space-y-1.5${needsTreatingStaff ? "" : " sm:col-span-2"}`}>
                     <Label>Salesperson <span className="text-destructive">*</span></Label>
                     <p className="text-xs text-muted-foreground">Required only when purchasing a course package.</p>
                     <Select value={salespersonId} onValueChange={changeSalesperson}>
@@ -895,9 +899,9 @@ function CheckoutContent() {
                   <div className="space-y-3 sm:col-span-2">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <Label>Commission Owners</Label>
+                        <Label>Case Owners</Label>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          Split the full-price sales credit and all paid + bonus visits between physiotherapists. Each owner gets their own monthly tier and visit pool.
+                          Add one or more physiotherapists. Split the full-price sales credit and all paid + bonus visits between them; each Case Owner gets their own monthly tier and visit pool.
                         </p>
                       </div>
                       <Button
@@ -907,7 +911,7 @@ function CheckoutContent() {
                         onClick={addCommissionSplit}
                         disabled={commissionSplits.length >= branchPhysios.length}
                       >
-                        <Plus className="h-3.5 w-3.5" /> Add PT
+                        <Plus className="h-3.5 w-3.5" /> Add Case Owner
                       </Button>
                     </div>
                     <div className="space-y-2">
