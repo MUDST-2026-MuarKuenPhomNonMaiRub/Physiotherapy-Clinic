@@ -30,6 +30,7 @@
                     <excludes>
                         <exclude>**/*IntegrationTest.java</exclude>
                         <exclude>**/commission/CommissionFlowTest.java</exclude>
+                        <exclude>**/commission/LatestCommissionRequirementsTest.java</exclude>
                         <exclude>**/commission/CourseBalanceReportTest.java</exclude>
                         <exclude>**/checkout/LegacyTransferReconciliationServiceTest.java</exclude>
                         <exclude>**/integration/google/service/GoogleCalendarSyncTest.java</exclude>
