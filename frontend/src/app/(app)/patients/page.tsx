@@ -1,36 +1,25 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarPlus, Plus, Search, ShoppingCart, UserRound } from "lucide-react";
+import { CalendarPlus, Plus, Search, ShoppingCart, UserRound, Loader2, RotateCcw } from "lucide-react";
 import type { Patient } from "@/types";
-import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import * as api from "@/lib/api/clinic-api";
+import { getPatientFullNameTh } from "@/lib/domain";
 import { formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageLoading } from "@/components/shared/page-loading";
 import { EmptyState } from "@/components/shared/empty-state";
-import { TablePagination, paginate, usePageReset } from "@/components/shared/table-pagination";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const avatarPalette = ["bg-blue-600", "bg-emerald-600", "bg-teal-600", "bg-indigo-600", "bg-violet-600", "bg-rose-600"];
 
@@ -49,210 +38,119 @@ function initials(p: Patient) {
 function PatientsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { can } = useSession();
+  const { user, activeBranchId, can } = useSession();
   const { isAccessible } = useBranchScope();
-  const patients = useClinicStore((s) => s.patients);
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
   const [branchFilter, setBranchFilter] = useState("ALL");
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(0);
+  const [items, setItems] = useState<Patient[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const requestBranchId = branchFilter === "ALL"
+    ? user?.role === "ADMIN" ? undefined : activeBranchId ?? user?.branchIds[0]
+    : branchFilter;
+
+  const loadPage = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listPatientsPage(page, 100, requestBranchId);
+      const visible = response.items.filter((p) => isAccessible(p.registrationBranchId));
+      setItems(visible);
+      setTotalItems(response.totalItems);
+      setTotalPages(response.totalPages);
+      setHasNext(response.hasNext);
+      setHasPrevious(response.hasPrevious);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to load patients");
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, requestBranchId, isAccessible]);
+
+  // The effect synchronizes the page view with the server-side page state.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void loadPage(); }, [loadPage]);
 
   const results = useMemo(() => {
-    const filtered = searchPatients(query, patients).filter((p) =>
-      branchFilter === "ALL" ? isAccessible(p.registrationBranchId) : p.registrationBranchId === branchFilter
-    );
-    return filtered
-      .map((patient) => ({ patient }))
-      .sort((a, b) => b.patient.createdAt.localeCompare(a.patient.createdAt));
-  }, [query, patients, branchFilter, isAccessible]);
-
-  usePageReset(`${query}|${branchFilter}`, setPage);
-
-  const pageResults = paginate(results, page);
+    const q = query.trim().toLowerCase();
+    return items
+      .filter((p) => !q || [p.hn, p.firstNameTh, p.lastNameTh, p.firstNameEn, p.lastNameEn, p.nickname, p.phone].some((v) => String(v ?? "").toLowerCase().includes(q)))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }, [items, query]);
 
   return (
     <>
-      <PageHeader
-        title="Patients"
-        description={`${patients.length} registered patients`}
-        actions={
-          can("patient.create") ? (
-            <Button asChild>
-              <Link href="/patients/new">
-                <Plus className="h-4 w-4" />
-                Register Patient
-              </Link>
-            </Button>
-          ) : undefined
-        }
-      />
+      <PageHeader title="Patients" description={`${totalItems} registered patients`} actions={can("patient.create") ? (
+        <Button asChild><Link href="/patients/new"><Plus className="h-4 w-4" /> Register Patient</Link></Button>
+      ) : undefined} />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by HN, name, nickname or phone..."
-            className="pl-9"
-          />
+          <Input value={query} onChange={(e) => { setQuery(e.target.value); setPage(0); }} placeholder="Search by HN, name, nickname or phone..." className="pl-9" />
         </div>
-        <BranchFilterSelect value={branchFilter} onValueChange={setBranchFilter} className="w-44" />
-        <p className="text-sm text-muted-foreground">{results.length} results</p>
+        <BranchFilterSelect value={branchFilter} onValueChange={(value) => { setBranchFilter(value); setPage(0); }} className="w-44" />
+        <p className="text-sm text-muted-foreground">Page {totalPages ? page + 1 : 0} of {totalPages}</p>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        {results.length === 0 ? (
-          <EmptyState
-            icon={UserRound}
-            title="No patients found"
-            description="Try a different search term, or register a new patient."
-            action={
-              can("patient.create") ? (
-                <Button asChild variant="outline">
-                  <Link href="/patients/new">
-                    <Plus className="h-4 w-4" /> Register Patient
-                  </Link>
-                </Button>
-              ) : undefined
-            }
-          />
+        {error ? (
+          <div className="flex flex-col items-center gap-3 p-10 text-center">
+            <p className="text-sm text-destructive">{error}</p>
+            <Button variant="outline" onClick={() => void loadPage()}><RotateCcw className="h-4 w-4" /> Retry</Button>
+          </div>
+        ) : loading ? (
+          <div className="flex items-center justify-center gap-2 p-12 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading patients…</div>
+        ) : results.length === 0 ? (
+          <EmptyState icon={UserRound} title="No patients found" description="Try a different search term, or register a new patient." action={can("patient.create") ? (
+            <Button asChild variant="outline"><Link href="/patients/new"><Plus className="h-4 w-4" /> Register Patient</Link></Button>
+          ) : undefined} />
         ) : (
           <>
-          {/* Phone: one card per patient. The table needs nine columns of width. */}
-          <ul className="divide-y divide-border md:hidden">
-            {pageResults.map(({ patient: p }) => (
-              <li key={p.id} className="flex items-center gap-1 pr-2">
-                <Link href={`/patients/${p.id}`} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 active:bg-muted/50">
-                  <span
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(p.id)}`}
-                  >
-                    {initials(p)}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{getPatientFullNameTh(p)}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      <span className="font-mono text-primary">{p.hn}</span>
-                      {p.nickname && ` · ${p.nickname}`}
-                      {` · ${formatPhone(p.phone)}`}
-                    </p>
+            <ul className="divide-y divide-border md:hidden">
+              {results.map((p) => (
+                <li key={p.id} className="flex items-center gap-1 pr-2">
+                  <Link href={`/patients/${p.id}`} className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 active:bg-muted/50">
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(p.id)}`}>{initials(p)}</span>
+                    <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{getPatientFullNameTh(p)}</p><p className="truncate text-xs text-muted-foreground"><span className="font-mono text-primary">{p.hn}</span>{p.nickname && ` · ${p.nickname}`}{` · ${formatPhone(p.phone)}`}</p></div>
+                  </Link>
+                  <div className="flex shrink-0 gap-0.5">
+                    {can("appointment.create") && <Button asChild size="icon" variant="ghost" className="h-9 w-9" aria-label="New appointment"><Link href={`/appointments/new?patientId=${p.id}`}><CalendarPlus className="h-4 w-4" /></Link></Button>}
+                    {can("checkout.create") && <Button asChild size="icon" variant="ghost" className="h-9 w-9" aria-label="Checkout"><Link href={`/checkout?patientId=${p.id}`}><ShoppingCart className="h-4 w-4" /></Link></Button>}
                   </div>
-                </Link>
-                {/* Sibling links, not children of the row link: an <a> may not nest another <a>. */}
-                <div className="flex shrink-0 gap-0.5">
-                  {can("appointment.create") && (
-                    <Button asChild size="icon" variant="ghost" className="h-9 w-9" aria-label="New appointment">
-                      <Link href={`/appointments/new?patientId=${p.id}`}><CalendarPlus className="h-4 w-4" /></Link>
-                    </Button>
-                  )}
-                  {can("checkout.create") && (
-                    <Button asChild size="icon" variant="ghost" className="h-9 w-9" aria-label="Checkout">
-                      <Link href={`/checkout?patientId=${p.id}`}><ShoppingCart className="h-4 w-4" /></Link>
-                    </Button>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <div className="hidden overflow-x-auto md:block">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="py-3">HN</TableHead>
-                  <TableHead className="py-3">Name</TableHead>
-                  <TableHead className="py-3">NickName</TableHead>
-                  <TableHead className="py-3">ID CARD</TableHead>
-                  <TableHead className="py-3">SEX</TableHead>
-                  <TableHead className="py-3">Phone No.</TableHead>
-                  <TableHead className="py-3">Group</TableHead>
-                  <TableHead className="py-3">Date Created</TableHead>
-                  <TableHead className="py-3 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pageResults.map(({ patient: p }) => {
-                  return (
-                    <TableRow
-                      key={p.id}
-                      className="cursor-pointer"
-                      onClick={() => router.push(`/patients/${p.id}`)}
-                    >
-                      <TableCell className="py-3.5">
-                        <span className="rounded-md bg-primary/5 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
-                          {p.hn}
-                        </span>
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(p.id)}`}
-                          >
-                            {initials(p)}
-                          </span>
-                          <div>
-                            <p className="text-sm font-medium text-foreground hover:underline">{getPatientFullNameTh(p)}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">{p.nickname || "—"}</TableCell>
-                      <TableCell className="py-3.5 font-mono text-sm text-muted-foreground">
-                        {p.nationalId ? formatThaiNationalId(p.nationalId) : p.passport || "—"}
-                      </TableCell>
-                      <TableCell className="py-3.5">
-                        <Badge variant="outline" className="font-normal">
-                          {p.gender === "MALE" ? "Male" : p.gender === "FEMALE" ? "Female" : "Other"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">{formatPhone(p.phone)}</TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">{p.customerGroup || "—"}</TableCell>
-                      <TableCell className="py-3.5 text-sm text-muted-foreground">
-                        {p.createdAt ? formatDate(p.createdAt) : "—"}
-                      </TableCell>
-                      <TableCell className="py-3.5" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1">
-                          {can("appointment.create") && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button asChild size="icon" variant="ghost" className="h-8 w-8">
-                                  <Link href={`/appointments/new?patientId=${p.id}`}>
-                                    <CalendarPlus className="h-4 w-4" />
-                                  </Link>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>New Appointment</TooltipContent>
-                            </Tooltip>
-                          )}
-                          {can("checkout.create") && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button asChild size="icon" variant="ghost" className="h-8 w-8">
-                                  <Link href={`/checkout?patientId=${p.id}`}>
-                                    <ShoppingCart className="h-4 w-4" />
-                                  </Link>
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Checkout</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <TablePagination page={page} totalItems={results.length} onPageChange={setPage} />
+                </li>
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto md:block">
+              <Table><TableHeader><TableRow><TableHead className="py-3">HN</TableHead><TableHead className="py-3">Name</TableHead><TableHead className="py-3">NickName</TableHead><TableHead className="py-3">ID CARD</TableHead><TableHead className="py-3">SEX</TableHead><TableHead className="py-3">Phone No.</TableHead><TableHead className="py-3">Group</TableHead><TableHead className="py-3">Date Created</TableHead><TableHead className="py-3 text-right">Actions</TableHead></TableRow></TableHeader>
+                <TableBody>{results.map((p) => <TableRow key={p.id} className="cursor-pointer" onClick={() => router.push(`/patients/${p.id}`)}>
+                  <TableCell className="py-3.5"><span className="rounded-md bg-primary/5 px-2 py-0.5 font-mono text-xs font-semibold text-primary">{p.hn}</span></TableCell>
+                  <TableCell className="py-3.5"><div className="flex items-center gap-3"><span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${avatarColor(p.id)}`}>{initials(p)}</span><p className="text-sm font-medium">{getPatientFullNameTh(p)}</p></div></TableCell>
+                  <TableCell className="py-3.5 text-sm text-muted-foreground">{p.nickname || "—"}</TableCell><TableCell className="py-3.5 font-mono text-sm text-muted-foreground">{p.nationalId ? formatThaiNationalId(p.nationalId) : p.passport || "—"}</TableCell>
+                  <TableCell className="py-3.5"><Badge variant="outline" className="font-normal">{p.gender === "MALE" ? "Male" : p.gender === "FEMALE" ? "Female" : "Other"}</Badge></TableCell><TableCell className="py-3.5 text-sm text-muted-foreground">{formatPhone(p.phone)}</TableCell><TableCell className="py-3.5 text-sm text-muted-foreground">{p.customerGroup || "—"}</TableCell><TableCell className="py-3.5 text-sm text-muted-foreground">{p.createdAt ? formatDate(p.createdAt) : "—"}</TableCell>
+                  <TableCell className="py-3.5" onClick={(e) => e.stopPropagation()}><div className="flex justify-end gap-1">
+                    {can("appointment.create") && <Tooltip><TooltipTrigger asChild><Button asChild size="icon" variant="ghost" className="h-8 w-8"><Link href={`/appointments/new?patientId=${p.id}`}><CalendarPlus className="h-4 w-4" /></Link></Button></TooltipTrigger><TooltipContent>New Appointment</TooltipContent></Tooltip>}
+                    {can("checkout.create") && <Tooltip><TooltipTrigger asChild><Button asChild size="icon" variant="ghost" className="h-8 w-8"><Link href={`/checkout?patientId=${p.id}`}><ShoppingCart className="h-4 w-4" /></Link></Button></TooltipTrigger><TooltipContent>Checkout</TooltipContent></Tooltip>}
+                  </div></TableCell>
+                </TableRow>)}</TableBody></Table>
+            </div>
+            <TablePagination page={page + 1} totalItems={totalItems} onPageChange={(next) => setPage(next - 1)} />
           </>
         )}
       </div>
+      {hasNext && <span className="sr-only">More patient pages available</span>}
+      {hasPrevious && <span className="sr-only">Previous patient pages available</span>}
     </>
   );
 }
 
 export default function PatientsPage() {
-  return (
-    <Suspense fallback={<PageLoading />}>
-      <PatientsPageContent />
-    </Suspense>
-  );
+  return <Suspense fallback={<PageLoading />}><PatientsPageContent /></Suspense>;
 }

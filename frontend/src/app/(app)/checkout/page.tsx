@@ -113,6 +113,7 @@ function CheckoutContent() {
   const [cashReceivedInput, setCashReceivedInput] = useState("");
   const [result, setResult] = useState<Transaction | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   // Empty string = "use the catalogue price"; a typed value overrides it.
   const [priceOverride, setPriceOverride] = useState("");
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
@@ -265,6 +266,7 @@ function CheckoutContent() {
   async function handleConfirm() {
     if (!canConfirm || !user || submitting) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       // The backend always charges the catalog price and never accepts a
       // supplied price that differs from it — a manual price entered here is
@@ -295,7 +297,9 @@ function CheckoutContent() {
       });
       setResult(txn);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to take this payment");
+      const message = error instanceof Error ? error.message : "Unable to take this payment";
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -947,8 +951,9 @@ function CheckoutContent() {
               )}
 
               <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={() => void handleConfirm()}>
-                {confirmLabel}
+                {submitting ? "Processing..." : confirmLabel}
               </Button>
+              {submitError && <div className="mt-2 flex items-center justify-end gap-2 text-sm text-destructive"><span>{submitError}</span><Button type="button" variant="outline" size="sm" disabled={submitting} onClick={() => void handleConfirm()}><RotateCcw className="h-3.5 w-3.5" /> Retry</Button></div>}
             </div>
           </div>
 
@@ -964,7 +969,7 @@ function CheckoutContent() {
               disabled={!canConfirm || submitting}
               onClick={() => void handleConfirm()}
             >
-              {confirmLabel}
+              {submitting ? "Processing..." : confirmLabel}
             </Button>
           </div>
         </div>

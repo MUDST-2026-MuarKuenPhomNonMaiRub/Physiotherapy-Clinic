@@ -1,8 +1,8 @@
 "use client";
 
-import { use, useMemo } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+
 import {
   ArrowLeft,
   CalendarPlus,
@@ -12,6 +12,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
+import * as api from "@/lib/api/clinic-api";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { calcAge, formatCurrency, formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
@@ -36,8 +37,15 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
   const transactions = useClinicStore((s) => s.transactions);
   const patientCourses = useClinicStore((s) => s.patientCourses);
   const paymentMethods = useClinicStore((s) => s.paymentMethods);
+  const [fetchedPatient, setFetchedPatient] = useState<typeof patients[number] | null>(null);
+  const [patientError, setPatientError] = useState<string | null>(null);
 
-  const patient = patients.find((p) => p.id === id);
+  useEffect(() => {
+    if (patients.some((p) => p.id === id)) return;
+    void api.getPatientById(id).then(setFetchedPatient).catch((e) => setPatientError(e instanceof Error ? e.message : "Unable to load patient"));
+  }, [id, patients]);
+
+  const patient = patients.find((p) => p.id === id) ?? fetchedPatient;
 
   const patientAppointments = useMemo(
     () =>
@@ -52,7 +60,8 @@ export default function PatientProfilePage({ params }: { params: Promise<{ id: s
   );
   const courses = useMemo(() => patientCourses.filter((c) => c.patientId === id), [patientCourses, id]);
 
-  if (!patient) notFound();
+  if (patientError) return <EmptyState icon={ShieldCheck} title="Unable to load patient" description={patientError} action={<Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>} />;
+  if (!patient) return <div className="p-8 text-sm text-muted-foreground">Loading patient...</div>;
 
   const branch = branches.find((b) => b.id === patient.registrationBranchId);
   const age = calcAge(patient.dob);

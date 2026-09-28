@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, KeyRound, Minus, Pencil, Plus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
+import { useSession } from "@/lib/auth/use-session";
 import { fieldRules, fieldInput } from "@/lib/domain";
 import { allRoles, roleDescriptions, roleLabels, roleStyles, rolePermissions } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/format";
@@ -159,6 +160,7 @@ export default function StaffAccessPage() {
   const createStaffAccount = useClinicStore((s) => s.createStaffAccount);
   const updateUser = useClinicStore((s) => s.updateUser);
   const toggleUserStatus = useClinicStore((s) => s.toggleUserStatus);
+  const { can } = useSession();
 
   const [tab, setTab] = useState("people");
   const [open, setOpen] = useState(false);
@@ -174,6 +176,7 @@ export default function StaffAccessPage() {
   const [rolePermissionsDraft, setRolePermissionsDraft] = useState<string[]>([]);
   const [configuredPermissions, setConfiguredPermissions] = useState<api.ConfiguredPermission[]>([]);
   const [configuredRoles, setConfiguredRoles] = useState<api.ConfiguredRole[]>([]);
+  const [roleSaving, setRoleSaving] = useState(false);
 
   useEffect(() => {
     if (!roleDialog) return;
@@ -206,14 +209,19 @@ export default function StaffAccessPage() {
   }
 
   async function createRole() {
-    if (!roleCode.trim() || !roleName.trim()) return;
+    if (!roleCode.trim() || !roleName.trim() || roleSaving) return;
+    setRoleSaving(true);
     try {
       if (editingRoleId == null) await api.createConfiguredRole({ code: roleCode, name: roleName, permissionCodes: rolePermissionsDraft });
       else await api.updateConfiguredRole(editingRoleId, { name: roleName, permissionCodes: rolePermissionsDraft });
       setConfiguredRoles(await api.listConfiguredRoles());
       toast.success(editingRoleId == null ? "Role created" : "Role updated");
       setRoleDialog(false); setRoleCode(""); setRoleName(""); setRolePermissionsDraft([]); setEditingRoleId(null);
-    } catch (error) { toast.error(error instanceof Error ? error.message : "Unable to create role"); }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create role");
+    } finally {
+      setRoleSaving(false);
+    }
   }
 
   const visibleStaff = staff;
@@ -376,7 +384,7 @@ export default function StaffAccessPage() {
         title="Staff & Access"
         description="One record per person — their clinic profile and the login that goes with it"
         actions={
-          tab === "people" ? (
+          tab === "people" && can("settings.manage") ? (
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={() => setTab("roles")}>
                 <ShieldCheck className="h-4 w-4" /> Manage Roles & Permissions
@@ -385,9 +393,9 @@ export default function StaffAccessPage() {
                 <UserPlus className="h-4 w-4" /> Add Person
               </Button>
             </div>
-          ) : (
-            <Button onClick={() => setRoleDialog(true)}><Plus className="h-4 w-4" /> New Role</Button>
-          )
+          ) : can("settings.manage") ? (
+            <Button onClick={() => setRoleDialog(true)} disabled={roleSaving}><Plus className="h-4 w-4" /> {roleSaving ? "Saving..." : "New Role"}</Button>
+          ) : undefined
         }
       />
 
@@ -518,19 +526,21 @@ export default function StaffAccessPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)} aria-label={`Edit ${s.name}`}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => void removePerson(s)} aria-label={`Archive ${s.name}`}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                            <Switch
-                              checked={s.status === "ACTIVE"}
-                              aria-label={`${s.status === "ACTIVE" ? "Deactivate" : "Activate"} ${s.name}`}
-                              // The login follows the person: the API deactivates
-                              // the account alongside the staff record.
-                              onCheckedChange={() => void toggleStaffStatus(s.id)}
-                            />
+                            {can("settings.manage") && (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)} aria-label={`Edit ${s.name}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => void removePerson(s)} aria-label={`Archive ${s.name}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                                <Switch
+                                  checked={s.status === "ACTIVE"}
+                                  aria-label={`${s.status === "ACTIVE" ? "Deactivate" : "Activate"} ${s.name}`}
+                                  onCheckedChange={() => void toggleStaffStatus(s.id)}
+                                />
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -820,7 +830,7 @@ export default function StaffAccessPage() {
               </div>
             </div>
           </div>
-          <DialogFooter><Button variant="outline" onClick={() => { setRoleDialog(false); setEditingRoleId(null); }}>Cancel</Button><Button disabled={!roleCode.trim() || !roleName.trim()} onClick={() => void createRole()}>{editingRoleId == null ? "Create Role" : "Save Changes"}</Button></DialogFooter>
+          <DialogFooter><Button variant="outline" onClick={() => { setRoleDialog(false); setEditingRoleId(null); }}>Cancel</Button><Button disabled={!roleCode.trim() || !roleName.trim() || roleSaving} onClick={() => void createRole()}>{editingRoleId == null ? "Create Role" : "Save Changes"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>
