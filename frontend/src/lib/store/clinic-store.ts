@@ -153,7 +153,10 @@ interface ClinicState {
   toggleCourseTemplateStatus: (id: string) => Promise<void>;
 
   // admin: payment methods
+  addPaymentMethod: (data: Pick<PaymentMethod, "name" | "icon" | "enabled">) => Promise<void>;
+  updatePaymentMethod: (id: string, data: Pick<PaymentMethod, "name" | "icon" | "enabled">) => Promise<void>;
   togglePaymentMethod: (id: string) => Promise<void>;
+  deletePaymentMethod: (id: string) => Promise<void>;
 
   // admin: resources
   addResource: (data: Omit<ResourceRoom, "id">) => Promise<void>;
@@ -169,6 +172,8 @@ interface ClinicState {
   addMasterDataItem: (data: Omit<MasterDataItem, "id">) => Promise<void>;
   updateMasterDataItem: (id: string, data: Partial<MasterDataItem>) => Promise<void>;
   toggleMasterDataItemStatus: (id: string) => Promise<void>;
+  deleteMasterDataItem: (id: string) => Promise<void>;
+  deleteMasterDataCategory: (code: string) => Promise<void>;
 
   // patients
   addPatient: (data: Omit<Patient, "id" | "hn" | "createdAt">) => Promise<Patient>;
@@ -605,6 +610,16 @@ export const useClinicStore = create<ClinicState>()(
 
       // ----------------------------------------------------- payment methods
 
+      addPaymentMethod: async (data) => {
+        const method = await api.createPaymentMethod(data);
+        set((s) => { upsert(s.paymentMethods, method); });
+      },
+
+      updatePaymentMethod: async (id, data) => {
+        const method = await api.updatePaymentMethod(id, data);
+        set((s) => { upsert(s.paymentMethods, method); });
+      },
+
       togglePaymentMethod: async (id) => {
         const current = requireItem(
           get().paymentMethods.find((x) => x.id === id),
@@ -613,6 +628,14 @@ export const useClinicStore = create<ClinicState>()(
         const method = await api.setPaymentMethodEnabled(id, !current.enabled);
         set((s) => {
           upsert(s.paymentMethods, method);
+        });
+      },
+
+      deletePaymentMethod: async (id) => {
+        await api.deletePaymentMethod(id);
+        set((s) => {
+          const method = s.paymentMethods.find((m) => m.id === id);
+          if (method) { method.enabled = false; method.deleted = true; }
         });
       },
 
@@ -673,6 +696,15 @@ export const useClinicStore = create<ClinicState>()(
       },
 
       // --------------------------------------------------------- master data
+
+      deleteMasterDataItem: async (id) => {
+        await api.deleteMasterDataItem(id);
+        set((s) => { s.masterData = s.masterData.filter((item) => item.id !== id); });
+      },
+      deleteMasterDataCategory: async (code) => {
+        await api.deleteMasterDataCategory(code);
+        set((s) => { s.masterData = s.masterData.filter((item) => item.category !== code); });
+      },
 
       addMasterDataItem: async (data) => {
         const item = await api.createMasterDataItem(data);

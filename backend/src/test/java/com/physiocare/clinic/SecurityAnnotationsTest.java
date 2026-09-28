@@ -9,6 +9,7 @@ import com.physiocare.clinic.commission.CommissionClosingController;
 import com.physiocare.clinic.commission.CommissionCourseActionsController;
 import com.physiocare.clinic.branch.BranchService;
 import com.physiocare.clinic.catalog.CatalogController;
+import com.physiocare.clinic.catalog.CatalogConfigurationController;
 import com.physiocare.clinic.integration.google.controller.GoogleCalendarController;
 import com.physiocare.clinic.patient.PatientController;
 import com.physiocare.clinic.room.RoomService;
@@ -58,6 +59,9 @@ class SecurityAnnotationsTest {
   @Test void catalogWritesUseTheConfigurableSettingsPermission() throws Exception {
     assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(CatalogController.class, "addService"));
     assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(CatalogController.class, "addCourse"));
+    for (String method : new String[] {"createPayment", "updatePayment", "deletePayment", "createCategory", "updateCategory", "deleteCategory", "deleteValue"}) {
+      assertEquals("@permissionGuard.hasAny(authentication, 'settings.manage')", policy(CatalogConfigurationController.class, method));
+    }
   }
 
   @Test void googleCalendarEndpointsUseTheirPermissions() throws Exception {

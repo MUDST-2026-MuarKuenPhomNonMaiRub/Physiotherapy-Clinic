@@ -46,6 +46,7 @@ import type {
   GoogleCalendarConnection,
   GoogleCalendarStatus,
   MasterDataItem,
+  MasterDataCategory,
   Patient,
   PatientCourse,
   PaymentMethod,
@@ -396,6 +397,26 @@ export const setCourseTemplateActive = (id: string, active: boolean) =>
 
 export const listPaymentMethods = () =>
   apiRequest<Row[]>("/api/v1/payment-methods").then((rows) => rows.map(toPaymentMethod));
+
+export const createPaymentMethod = (data: Pick<PaymentMethod, "name" | "icon" | "enabled">) =>
+  apiRequest<Row>("/api/v1/payment-methods", { method: "POST", body: data }).then(toPaymentMethod);
+
+export const updatePaymentMethod = (id: string, data: Pick<PaymentMethod, "name" | "icon" | "enabled">) =>
+  apiRequest<Row>(`/api/v1/payment-methods/${id}`, { method: "PATCH", body: data }).then(toPaymentMethod);
+
+export const deletePaymentMethod = (id: string) => apiRequest<void>(`/api/v1/payment-methods/${id}`, { method: "DELETE" });
+export const deleteMasterDataItem = (id: string) => apiRequest<void>(`/api/v1/master-data/${id}`, { method: "DELETE" });
+export const deleteMasterDataCategory = (code: string) => apiRequest<void>(`/api/v1/master-data-categories/${encodeURIComponent(code)}`, { method: "DELETE" });
+
+const toMasterDataCategory = (row: Row): MasterDataCategory => ({
+  code: String(row.code), name: String(row.name), description: String(row.description ?? ""), builtIn: row.built_in === true,
+});
+export const listMasterDataCategories = () =>
+  apiRequest<Row[]>("/api/v1/master-data-categories").then((rows) => rows.map(toMasterDataCategory));
+export const createMasterDataCategory = (data: Pick<MasterDataCategory, "name" | "description">) =>
+  apiRequest<Row>("/api/v1/master-data-categories", { method: "POST", body: data }).then(toMasterDataCategory);
+export const updateMasterDataCategory = (code: string, data: Pick<MasterDataCategory, "name" | "description">) =>
+  apiRequest<Row>(`/api/v1/master-data-categories/${encodeURIComponent(code)}`, { method: "PATCH", body: data }).then(toMasterDataCategory);
 
 export const setPaymentMethodEnabled = (id: string, active: boolean) =>
   apiRequest<Row>(`/api/v1/payment-methods/${id}/status`, {

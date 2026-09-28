@@ -275,7 +275,7 @@ function CheckoutContent() {
 
   const canConfirm =
     !!patientId &&
-    !!paymentMethodId &&
+    enabledPayments.some((method) => method.id === paymentMethodId) &&
     (mode === "SINGLE"
       ? !!serviceId
       : subMode === "USE_EXISTING"
@@ -1056,6 +1056,8 @@ function CheckoutContent() {
 
               <div className="space-y-1.5">
                 <Label>Payment Method</Label>
+                {enabledPayments.length === 0 && <p className="text-sm text-destructive">ยังไม่มีช่องทางชำระเงินที่เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ</p>}
+                {paymentMethodId && !enabledPayments.some((method) => method.id === paymentMethodId) && <p className="text-sm text-destructive">ช่องทางเดิมถูกปิดใช้งาน กรุณาเลือกช่องทางใหม่</p>}
                 <div className="grid grid-cols-2 gap-2 [&>*:last-child:nth-child(odd)]:col-span-2">
                   {enabledPayments.map((pm) => (
                     <button

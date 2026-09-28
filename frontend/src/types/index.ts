@@ -438,11 +438,12 @@ export interface SharedCourseMember {
 
 export interface PaymentMethod {
   id: string;
-  /** CASH, TRANSFER, QR, CARD — the stable handle rules key off, unlike the name. */
+  /** Stable server code; custom methods use generated codes. CASH retains cash/change handling. */
   code: string;
   name: string;
   icon: string;
   enabled: boolean;
+  deleted?: boolean;
 }
 
 export interface ResourceRoom {
@@ -455,7 +456,14 @@ export interface ResourceRoom {
 
 export interface MasterDataItem {
   id: string;
-  category: "CUSTOMER_GROUP" | "REFERRAL_CHANNEL" | "INSURANCE_COMPANY";
+  category: string;
   value: string;
   status: "ACTIVE" | "INACTIVE";
+}
+
+export interface MasterDataCategory {
+  code: string;
+  name: string;
+  description: string;
+  builtIn: boolean;
 }

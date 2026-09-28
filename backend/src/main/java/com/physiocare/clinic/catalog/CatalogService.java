@@ -10,6 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 /** Back-office catalogue: what the clinic screens are allowed to sell and select. */
@@ -251,7 +252,7 @@ public class CatalogService {
   @GetMapping("/payment-methods")
   public List<Map<String, Object>> payments() {
     return db.queryForList(
-        "SELECT id,code,name,icon,requires_reference,requires_attachment,active FROM"
+        "SELECT id,code,name,icon,requires_reference,requires_attachment,active,deleted_at FROM"
             + " payment_methods WHERE code <> 'QR' ORDER BY sort_order,id");
   }
 
@@ -259,7 +260,7 @@ public class CatalogService {
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setPaymentMethodStatus(
       @PathVariable long id, @RequestBody ActiveRequest r) {
-    int rows = db.update("UPDATE payment_methods SET active=? WHERE id=? AND code <> 'QR'", r.active(), id);
+    int rows = db.update("UPDATE payment_methods SET active=? WHERE id=? AND code <> 'QR' AND deleted_at IS NULL", r.active(), id);
     if (rows == 0) throw new IllegalArgumentException("Payment method not found");
     return db.queryForMap(
         "SELECT id,code,name,icon,requires_reference,requires_attachment,active FROM"
@@ -273,7 +274,7 @@ public class CatalogService {
   @GetMapping("/master-data")
   public List<Map<String, Object>> allMasterData() {
     return db.queryForList(
-        "SELECT id,data_type,code,name_th,name_en,sort_order,active FROM master_data_values ORDER"
+        "SELECT id,data_type,code,name_th,name_en,sort_order,active FROM master_data_values WHERE deleted_at IS NULL ORDER"
             + " BY data_type,sort_order,id");
   }
 
@@ -281,16 +282,22 @@ public class CatalogService {
   public List<Map<String, Object>> master(@PathVariable String type) {
     return db.queryForList(
         "SELECT id,data_type,code,name_th,name_en,sort_order,active FROM master_data_values WHERE"
-            + " data_type=? ORDER BY sort_order,id",
+            + " data_type=? AND deleted_at IS NULL ORDER BY sort_order,id",
         type.toUpperCase());
   }
 
   @PostMapping("/master-data")
   @ResponseStatus(HttpStatus.CREATED)
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  @Transactional
   public Map<String, Object> addMasterData(@Valid @RequestBody MasterDataRequest r) {
+    InputRules.require(r.nameTh() != null && !r.nameTh().isBlank(), "The value is required");
     InputRules.text(r.nameTh(), 200, "The value");
-    String type = r.dataType().toUpperCase();
+    InputRules.require(r.dataType() != null && !r.dataType().isBlank(), "The category is required");
+    String type = r.dataType().toUpperCase(java.util.Locale.ROOT);
+    InputRules.require(!db.queryForList(
+        "SELECT code FROM master_data_categories WHERE code=? AND deleted_at IS NULL FOR SHARE", type).isEmpty(),
+        "Create the category before adding values");
     Integer nextOrder =
         db.queryForObject(
             "SELECT COALESCE(max(sort_order),0)+1 FROM master_data_values WHERE data_type=?",
@@ -314,10 +321,14 @@ public class CatalogService {
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> updateMasterData(
       @PathVariable long id, @RequestBody MasterDataRequest r) {
+    if (r.nameTh() != null) {
+      InputRules.require(!r.nameTh().isBlank(), "The value is required");
+      InputRules.text(r.nameTh(), 200, "The value");
+    }
     int rows =
         db.update(
             "UPDATE master_data_values SET name_th=COALESCE(?,name_th),"
-                + " name_en=COALESCE(?,name_en), active=COALESCE(?,active) WHERE id=?",
+                + " name_en=COALESCE(?,name_en), active=COALESCE(?,active) WHERE id=? AND deleted_at IS NULL",
             r.nameTh(),
             r.nameEn() == null ? r.nameTh() : r.nameEn(),
             r.active(),
@@ -330,7 +341,7 @@ public class CatalogService {
   @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
   public Map<String, Object> setMasterDataStatus(
       @PathVariable long id, @RequestBody ActiveRequest r) {
-    int rows = db.update("UPDATE master_data_values SET active=? WHERE id=?", r.active(), id);
+    int rows = db.update("UPDATE master_data_values SET active=? WHERE id=? AND deleted_at IS NULL", r.active(), id);
     if (rows == 0) throw new IllegalArgumentException("Master data value not found");
     return masterDataRow(id);
   }

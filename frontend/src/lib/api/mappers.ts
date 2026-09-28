@@ -169,6 +169,7 @@ export function toPaymentMethod(row: Row): PaymentMethod {
     name: str(row.name),
     icon: str(row.icon) || "Wallet",
     enabled: bool(row.active),
+    deleted: row.deleted_at != null,
   };
 }
 
