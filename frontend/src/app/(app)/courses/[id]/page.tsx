@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRightLeft, HandCoins, Search, UsersRound } from "lucide-react";
+import { ArrowLeft, ArrowRightLeft, HandCoins, Printer, Search, UsersRound } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
@@ -153,6 +153,13 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={pc.status} className="text-sm" />
+            {can("course.view") && (
+              <Button asChild variant="outline">
+                <Link href={`/courses/${id}/course-slip`}>
+                  <Printer className="h-4 w-4" /> พิมพ์ใบตัดคอร์ส
+                </Link>
+              </Button>
+            )}
             {can("course.transfer") && pc.status === "ACTIVE" && rem > 0 && (
               <Button variant="outline" onClick={openTransfer}>
                 <ArrowRightLeft className="h-4 w-4" /> Transfer Course

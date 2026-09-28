@@ -1,0 +1,242 @@
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  background: #e9edef;
+  color: #111;
+  font-family: var(--font-sarabun), sans-serif;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px max(16px, calc((100% - 794px) / 2));
+  border-bottom: 1px solid #d6dfe0;
+  background: #fff;
+}
+
+.toolbar a,
+.toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.toolbar button {
+  cursor: pointer;
+  border-radius: 7px;
+  background: #087e72;
+  padding: 10px 16px;
+  color: #fff;
+}
+
+.toolbar :is(a, button):focus-visible {
+  outline: 3px solid #09aa99;
+  outline-offset: 4px;
+}
+
+.notice {
+  max-width: 794px;
+  margin: 18px auto;
+  padding: 0 16px;
+  color: #34464b;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.notice strong {
+  color: #126d63;
+  font-size: 14px;
+}
+
+.paperScroll {
+  overflow-x: auto;
+  padding: 0 16px 32px;
+}
+
+.paper {
+  box-sizing: border-box;
+  display: flex;
+  min-height: 297mm;
+  width: 210mm;
+  margin: 0 auto;
+  padding: 10mm 9mm 7mm;
+  flex-direction: column;
+  background: #fff;
+  box-shadow: 0 4px 24px #20343c18;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.header {
+  text-align: center;
+}
+
+.header h1 {
+  margin: 0 0 2mm;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.clinicName {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.clinicContact {
+  max-width: 175mm;
+  margin: 0 auto;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+
+.rule {
+  margin-top: 4mm;
+  border-top: 1.5px solid #111;
+}
+
+.printedAt {
+  margin: 2.5mm 0 2mm;
+  text-align: right;
+  font-size: 10.5px;
+}
+
+.courseSummary {
+  display: grid;
+  grid-template-columns: 1.3fr repeat(3, 1fr);
+  gap: 4mm;
+  margin-bottom: 2mm;
+}
+
+.courseSummary p:not(:first-child) {
+  text-align: center;
+}
+
+.courseDetails {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8mm;
+  margin-bottom: 4mm;
+  font-size: 13px;
+}
+
+.courseDetails p:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.usageTable {
+  width: 100%;
+  height: 190mm;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 1px solid #111;
+}
+
+.dateColumn {
+  width: 17%;
+}
+
+.therapistColumn {
+  width: 34%;
+}
+
+.patientColumn {
+  width: 35%;
+}
+
+.quantityColumn {
+  width: 14%;
+}
+
+.usageTable th,
+.usageTable td {
+  border: 1px solid #111;
+  padding: 2mm 1.5mm;
+  text-align: center;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+
+.usageTable th {
+  height: 12mm;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dataRow {
+  height: 10mm;
+}
+
+.emptyRow {
+  height: 10mm;
+  color: #666;
+}
+
+.fillerRow {
+  height: 100%;
+}
+
+.fillerRow td {
+  padding: 0;
+}
+
+.totalRow {
+  height: 11mm;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.totalRow td:first-child {
+  padding-right: 4mm;
+  text-align: right;
+}
+
+@page course-slip {
+  size: A4 portrait;
+  margin: 9mm;
+}
+
+@media print {
+  :global(body):has(.viewer) > :not(.viewer) {
+    display: none !important;
+  }
+
+  .viewer {
+    position: static;
+    overflow: visible;
+    background: #fff;
+    page: course-slip;
+  }
+
+  .toolbar,
+  .notice {
+    display: none;
+  }
+
+  .paperScroll {
+    overflow: visible;
+    padding: 0;
+  }
+
+  .paper {
+    width: auto;
+    min-height: 279mm;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .usageTable tr {
+    break-inside: avoid;
+  }
+}
