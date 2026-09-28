@@ -1,7 +1,16 @@
 import { test, expect, type Page } from "@playwright/test";
+import fs from "node:fs";
+import path from "node:path";
 
-const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "admin.e2e@example.com";
-const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? "AdminE2E!123456";
+function localEnv(name: string): string | undefined {
+  const envPath = path.resolve(process.cwd(), "..", ".env");
+  if (!fs.existsSync(envPath)) return undefined;
+  const line = fs.readFileSync(envPath, "utf8").split(/\r?\n/).find((value) => value.startsWith(`${name}=`));
+  return line?.slice(name.length + 1);
+}
+
+const adminEmail = process.env.E2E_ADMIN_EMAIL ?? localEnv("BOOTSTRAP_ADMIN_EMAIL") ?? "admin.e2e@example.com";
+const adminPassword = process.env.E2E_ADMIN_PASSWORD ?? localEnv("BOOTSTRAP_ADMIN_PASSWORD") ?? "AdminE2E!123456";
 
 async function signIn(page: Page) {
   await page.goto("/login");
