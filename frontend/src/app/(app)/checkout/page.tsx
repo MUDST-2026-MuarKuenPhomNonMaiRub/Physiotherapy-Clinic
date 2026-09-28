@@ -56,6 +56,13 @@ interface Adjustment {
   isPercent: boolean;
 }
 
+interface CommissionSplitForm {
+  id: number;
+  employeeId: string;
+  salesCreditAmount: string;
+  visits: string;
+}
+
 const DEFAULT_LABEL: Record<Adjustment["kind"], string> = {
   DISCOUNT: "Discount",
   SURCHARGE: "Extra charge",
@@ -103,10 +110,10 @@ function CheckoutContent() {
   const [useToday, setUseToday] = useState(false);
   const [treatingStaffId, setTreatingStaffId] = useState(linkedAppointment?.physiotherapistId ?? "");
   const [salespersonId, setSalespersonId] = useState(user?.staffId ?? "");
-  // The person who owns the course's commission pool. Blank = same as the
-  // salesperson, which is the everyday case; only set when the seller hands
-  // the patient to another therapist from day one.
-  const [caseOwnerId, setCaseOwnerId] = useState("");
+  const [commissionSplits, setCommissionSplits] = useState<CommissionSplitForm[]>([
+    { id: 1, employeeId: user?.staffId ?? "", salesCreditAmount: "", visits: "" },
+  ]);
+  const [commissionSplitSeq, setCommissionSplitSeq] = useState(2);
   const [paymentMethodId, setPaymentMethodId] = useState("");
   // Kept as the typed string so the box can be cleared; "" is "not entered yet"
   // rather than zero.
@@ -220,6 +227,37 @@ function CheckoutContent() {
   const needsTreatingStaff =
     mode === "SINGLE" || (mode === "COURSE" && (subMode === "USE_EXISTING" ? !!useCourseId : useToday));
   const needsSalesperson = mode === "COURSE" && subMode === "PURCHASE";
+  const requiredSplitVisits = selectedPurchaseTemplate
+    ? selectedPurchaseTemplate.sessions + selectedPurchaseTemplate.bonusSessions
+    : 0;
+  const splitCreditTotal = commissionSplits.reduce(
+    (sum, split) => sum + (Number(split.salesCreditAmount) || 0),
+    0
+  );
+  const splitVisitTotal = commissionSplits.reduce(
+    (sum, split) => sum + (Number(split.visits) || 0),
+    0
+  );
+  const duplicateSplitOwner = new Set(commissionSplits.map((split) => split.employeeId)).size !== commissionSplits.length;
+  const splitProblem =
+    needsSalesperson && selectedPurchaseTemplate
+      ? commissionSplits.some(
+          (split) =>
+            !split.employeeId ||
+            !Number.isFinite(Number(split.salesCreditAmount)) ||
+            Number(split.salesCreditAmount) <= 0 ||
+            !Number.isInteger(Number(split.visits)) ||
+            Number(split.visits) <= 0
+        )
+        ? "Choose a physiotherapist and enter a positive amount and visit count for every split."
+        : duplicateSplitOwner
+          ? "Each physiotherapist can appear only once."
+          : Math.abs(splitCreditTotal - selectedPurchaseTemplate.price) > 0.001
+            ? `Sales credit must total the full course price (${formatCurrency(selectedPurchaseTemplate.price)}).`
+            : splitVisitTotal !== requiredSplitVisits
+              ? `Visits must total all paid and bonus visits (${requiredSplitVisits}).`
+              : null
+      : null;
 
   // Cash is the one method where the sum handed over differs from the sum
   // billed, so it is the only one that asks for a figure and owes change back.
@@ -245,6 +283,7 @@ function CheckoutContent() {
       : !!purchaseTemplateId) &&
     (!needsTreatingStaff || !!treatingStaffId) &&
     (!needsSalesperson || !!salespersonId) &&
+    !splitProblem &&
     !overDiscounted &&
     !cashIsShort;
 
@@ -261,6 +300,50 @@ function CheckoutContent() {
     setUseQty(1);
     setAppointmentId(undefined);
     setPatientQuery("");
+  }
+
+  function selectPurchaseCourse(courseId: string) {
+    const course = courseTemplates.find((item) => item.id === courseId);
+    setPurchaseTemplateId(courseId);
+    setPriceOverride("");
+    if (!course) return;
+    setCommissionSplits([
+      {
+        id: 1,
+        employeeId: branchPhysios.some((physio) => physio.id === salespersonId)
+          ? salespersonId
+          : branchPhysios.some((physio) => physio.id === treatingStaffId)
+            ? treatingStaffId
+            : "",
+        salesCreditAmount: String(course.price),
+        visits: String(course.sessions + course.bonusSessions),
+      },
+    ]);
+    setCommissionSplitSeq(2);
+  }
+
+  function changeSalesperson(employeeId: string) {
+    setSalespersonId(employeeId);
+    setCommissionSplits((current) =>
+      current.length === 1 && branchPhysios.some((physio) => physio.id === employeeId)
+        && (!current[0].employeeId || current[0].employeeId === salespersonId)
+        ? [{ ...current[0], employeeId }]
+        : current
+    );
+  }
+
+  function updateCommissionSplit(id: number, patch: Partial<CommissionSplitForm>) {
+    setCommissionSplits((current) =>
+      current.map((split) => (split.id === id ? { ...split, ...patch } : split))
+    );
+  }
+
+  function addCommissionSplit() {
+    setCommissionSplits((current) => [
+      ...current,
+      { id: commissionSplitSeq, employeeId: "", salesCreditAmount: "", visits: "" },
+    ]);
+    setCommissionSplitSeq((value) => value + 1);
   }
 
   async function handleConfirm() {
@@ -287,7 +370,13 @@ function CheckoutContent() {
         useNewlyPurchasedSession: mode === "COURSE" && subMode === "PURCHASE" ? useToday : undefined,
         treatingStaffId: needsTreatingStaff ? treatingStaffId : undefined,
         salespersonId: needsSalesperson ? salespersonId : undefined,
-        caseOwnerEmployeeId: needsSalesperson && caseOwnerId ? caseOwnerId : undefined,
+        commissionSplits: needsSalesperson
+          ? commissionSplits.map((split) => ({
+              employeeId: split.employeeId,
+              salesCreditAmount: Number(split.salesCreditAmount),
+              visits: Number(split.visits),
+            }))
+          : undefined,
         paymentMethodId,
         cashReceived: isCashPayment && cashReceived !== null ? cashReceived : undefined,
         adjustments: [
@@ -626,7 +715,7 @@ function CheckoutContent() {
                         {courseTemplates.filter((c) => c.status === "ACTIVE").map((c) => (
                           <button
                             key={c.id}
-                            onClick={() => { setPurchaseTemplateId(c.id); setPriceOverride(""); }}
+                            onClick={() => selectPurchaseCourse(c.id)}
                             className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${purchaseTemplateId === c.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
                           >
                             <p className="text-sm font-medium text-foreground">{c.name}</p>
@@ -656,7 +745,7 @@ function CheckoutContent() {
               <CardContent className="space-y-4">
                 {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && (
                   <p className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-                    ส่วนลดที่เพิ่มด้านล่างจะผูกกับคอร์สนี้โดยตรง และจะใช้ราคาหลังลดคำนวณ Commission Pool
+                    ส่วนลดจะบันทึกเป็นภาระของคลินิก ส่วน Tier, sales credit และ Commission Pool ยังคำนวณจากราคาเต็ม
                   </p>
                 )}
                 {baseItem ? (
@@ -794,7 +883,7 @@ function CheckoutContent() {
                   <div className="space-y-1.5">
                     <Label>Salesperson <span className="text-destructive">*</span></Label>
                     <p className="text-xs text-muted-foreground">Required only when purchasing a course package.</p>
-                    <Select value={salespersonId} onValueChange={setSalespersonId}>
+                    <Select value={salespersonId} onValueChange={changeSalesperson}>
                       <SelectTrigger className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
                       <SelectContent>
                         {branchSales.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
@@ -803,18 +892,78 @@ function CheckoutContent() {
                   </div>
                 )}
                 {needsSalesperson && (
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>Case Owner</Label>
-                    <p className="text-xs text-muted-foreground">
-                      Owns this course&apos;s commission pool. Leave as the salesperson unless the patient is handed to another physiotherapist from the start.
-                    </p>
-                    <Select value={caseOwnerId || "__SAME__"} onValueChange={(v) => setCaseOwnerId(v === "__SAME__" ? "" : v)}>
-                      <SelectTrigger className="w-full"><SelectValue placeholder="Same as salesperson" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__SAME__">Same as salesperson</SelectItem>
-                        {branchPhysios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-3 sm:col-span-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Label>Commission Owners</Label>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Split the full-price sales credit and all paid + bonus visits between physiotherapists. Each owner gets their own monthly tier and visit pool.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addCommissionSplit}
+                        disabled={commissionSplits.length >= branchPhysios.length}
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add PT
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {commissionSplits.map((split, index) => (
+                        <div key={split.id} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_150px_110px_auto]">
+                          <Select
+                            value={split.employeeId}
+                            onValueChange={(value) => updateCommissionSplit(split.id, { employeeId: value })}
+                          >
+                            <SelectTrigger className="w-full"><SelectValue placeholder={`Owner ${index + 1}`} /></SelectTrigger>
+                            <SelectContent>
+                              {branchPhysios.map((physio) => (
+                                <SelectItem key={physio.id} value={physio.id}>{physio.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            min={0.01}
+                            step="0.01"
+                            aria-label={`Sales credit for owner ${index + 1}`}
+                            placeholder="Amount (THB)"
+                            value={split.salesCreditAmount}
+                            onChange={(event) => updateCommissionSplit(split.id, { salesCreditAmount: event.target.value })}
+                          />
+                          <Input
+                            type="number"
+                            min={1}
+                            step={1}
+                            aria-label={`Visits for owner ${index + 1}`}
+                            placeholder="Visits"
+                            value={split.visits}
+                            onChange={(event) => updateCommissionSplit(split.id, { visits: event.target.value })}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={commissionSplits.length === 1}
+                            onClick={() => setCommissionSplits((current) => current.filter((item) => item.id !== split.id))}
+                            aria-label={`Remove owner ${index + 1}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 text-xs">
+                      <span className={splitCreditTotal === (selectedPurchaseTemplate?.price ?? 0) ? "text-success" : "text-muted-foreground"}>
+                        Sales credit: {formatCurrency(splitCreditTotal)} / {formatCurrency(selectedPurchaseTemplate?.price ?? 0)}
+                      </span>
+                      <span className={splitVisitTotal === requiredSplitVisits ? "text-success" : "text-muted-foreground"}>
+                        Visits: {splitVisitTotal} / {requiredSplitVisits}
+                      </span>
+                    </div>
+                    {splitProblem && <p className="text-xs text-destructive">{splitProblem}</p>}
                   </div>
                 )}
               </CardContent>

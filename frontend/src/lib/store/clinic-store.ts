@@ -56,6 +56,11 @@ export interface CheckoutInput {
   salespersonId?: string;
   /** Owner of the course's commission pool; defaults to the salesperson when omitted. */
   caseOwnerEmployeeId?: string;
+  commissionSplits?: Array<{
+    employeeId: string;
+    salesCreditAmount: number;
+    visits: number;
+  }>;
   paymentMethodId: string;
   /** Cash handed over at the counter. Only meaningful when paying by cash. */
   cashReceived?: number;

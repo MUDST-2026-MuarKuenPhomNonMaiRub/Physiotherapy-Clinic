@@ -136,6 +136,9 @@ export interface CourseTemplate {
   sessions: number;
   bonusSessions: number;
   expiryDays: number;
+  commissionMode: "STANDARD_TIERED" | "SPECIAL_IMMEDIATE";
+  specialCommissionType?: "FIXED" | "PERCENTAGE";
+  specialCommissionValue?: number;
   status: "ACTIVE" | "INACTIVE";
 }
 
@@ -401,6 +404,7 @@ export interface CourseCommissionReportRow {
   staffName: string;
   monthlyCourseSales: number;
   commissionGenerated: number;
+  specialImmediateCommission: number;
   grossAllocated: number;
   ownerNetReleased: number;
   treatmentFeeEarned: number;

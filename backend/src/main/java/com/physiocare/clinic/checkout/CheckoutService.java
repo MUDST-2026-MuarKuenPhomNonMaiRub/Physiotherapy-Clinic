@@ -1,6 +1,7 @@
 package com.physiocare.clinic.checkout;
 
 import com.physiocare.clinic.commission.CommissionAdjustmentService;
+import com.physiocare.clinic.commission.CourseCommissionSplitService;
 import com.physiocare.clinic.commission.CourseUsageService;
 import com.physiocare.clinic.common.AuditService;
 import com.physiocare.clinic.common.BranchAccessService;
@@ -38,6 +39,7 @@ public class CheckoutService {
   private final CurrentUser currentUser;
   private final TransactionReader reader;
   private final CourseUsageService courseUsage;
+  private final CourseCommissionSplitService commissionSplits;
   private final CommissionAdjustmentService adjustments;
   private final CheckoutCommissionService commissions;
   private final AuditService audit;
@@ -49,6 +51,7 @@ public class CheckoutService {
       CurrentUser currentUser,
       TransactionReader reader,
       CourseUsageService courseUsage,
+      CourseCommissionSplitService commissionSplits,
       CommissionAdjustmentService adjustments,
       CheckoutCommissionService commissions,
       AuditService audit) {
@@ -58,6 +61,7 @@ public class CheckoutService {
     this.currentUser = currentUser;
     this.reader = reader;
     this.courseUsage = courseUsage;
+    this.commissionSplits = commissionSplits;
     this.adjustments = adjustments;
     this.commissions = commissions;
     this.audit = audit;
@@ -117,6 +121,19 @@ public class CheckoutService {
     for (CheckoutDtos.Adjustment adjustment : adjustments) {
       InputRules.text(adjustment.label(), 250, "An adjustment label");
       InputRules.money(adjustment.amount().abs(), "An adjustment");
+    }
+
+    List<CourseCommissionSplitService.NormalizedSplit> normalizedSplits = List.of();
+    if (course != null) {
+      int totalVisits = ((Number) course.get("total_sessions")).intValue()
+          + ((Number) course.get("bonus_sessions")).intValue();
+      Long defaultOwner = r.caseOwnerEmployeeId() != null ? r.caseOwnerEmployeeId() : r.salespersonId();
+      normalizedSplits = commissionSplits.normalize(
+          r.commissionSplits(), defaultOwner, coursePrice, totalVisits);
+      for (CourseCommissionSplitService.NormalizedSplit split : normalizedSplits) {
+        branches.requireStaffInBranch(split.employeeId(), r.branchId(), "Commission owner");
+      }
+      commissionSplits.requireOpenSaleMonth(normalizedSplits, today);
     }
 
     CheckoutPricing pricing = CheckoutPricing.calculate(servicePrice, coursePrice, adjustments);
@@ -192,14 +209,41 @@ public class CheckoutService {
           repository.createPatientCourse(
               r.patientId(), r.branchId(), (Long) idOf(course), courseName, sessions, bonus,
               coursePrice, discountRatio, validityDays, transactionId, r.salespersonId(),
-              r.caseOwnerEmployeeId() != null ? r.caseOwnerEmployeeId() : r.salespersonId(), today);
+              normalizedSplits.get(0).employeeId(),
+              String.valueOf(course.getOrDefault("commission_mode", "STANDARD_TIERED")), today);
       patientCourseId = purchasedCourseId;
+
+      BigDecimal specialTotal =
+          commissionSplits.createForSale(purchasedCourseId, transactionId, course, normalizedSplits);
+      if ("SPECIAL_IMMEDIATE".equals(course.get("commission_mode"))) {
+        db.update(
+            "UPDATE patient_courses SET special_commission_total=?,total_course_commission_pool=0,"
+                + "commission_allocation_per_visit=0 WHERE id=?",
+            specialTotal,
+            purchasedCourseId);
+      }
 
       repository.addLedgerEntry(purchasedCourseId, "PURCHASE", sessions, sessions, r.branchId(),
           transactionId, actor, actorUserId, null, null);
       if (bonus > 0)
         repository.addLedgerEntry(purchasedCourseId, "BONUS", bonus, sessions + bonus, r.branchId(),
             transactionId, actor, actorUserId, null, null);
+
+      audit.record(
+          actorUserId,
+          r.branchId(),
+          "COURSE_COMMISSION_SPLIT_CREATED",
+          "patient_courses",
+          String.valueOf(purchasedCourseId),
+          null,
+          Map.of(
+              "commissionMode", String.valueOf(course.get("commission_mode")),
+              "fullCoursePrice", coursePrice,
+              "clinicDiscount", coursePrice.subtract(coursePrice.multiply(discountRatio)).max(BigDecimal.ZERO),
+              "totalVisitsIncludingBonus", sessions + bonus,
+              "splits", normalizedSplits,
+              "specialCommissionTotal", specialTotal),
+          "Commission ownership captured at course sale");
 
       // No immediate SALES commission here: a course's commission lives
       // entirely in the pool this purchase just created, released per visit
@@ -426,6 +470,9 @@ public class CheckoutService {
       }
       db.update(
           "UPDATE patient_courses SET status='REFUNDED',commission_status='CANCELLED' WHERE id=?",
+          courseId);
+      db.update(
+          "UPDATE course_commission_splits SET commission_status='CANCELLED' WHERE patient_course_id=?",
           courseId);
       Map<String, Object> after = new java.util.LinkedHashMap<>();
       after.put("courseId", course.get("course_id"));

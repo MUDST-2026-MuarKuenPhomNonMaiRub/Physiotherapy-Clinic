@@ -121,6 +121,10 @@ public class TreatmentFeeRuleService {
     if ("PERCENTAGE".equals(r.feeType())
         && (r.percentageBase() == null || r.percentageBase().isBlank()))
       throw new IllegalArgumentException("A percentage treatment fee needs a calculation base");
+    if ("PERCENTAGE".equals(r.feeType())
+        && !"COURSE_VALUE_PER_VISIT".equals(r.percentageBase()))
+      throw new IllegalArgumentException(
+          "Only COURSE_VALUE_PER_VISIT is currently supported as the percentage base");
     if (r.effectiveTo() != null && r.effectiveTo().isBefore(r.effectiveFrom()))
       throw new IllegalArgumentException("Effective To must not be before Effective From");
     if (r.employeeId() != null && r.employeeGroup() != null)

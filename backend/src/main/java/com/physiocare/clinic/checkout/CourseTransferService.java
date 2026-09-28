@@ -2,6 +2,7 @@ package com.physiocare.clinic.checkout;
 
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
+import com.physiocare.clinic.common.AuditService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import java.util.List;
@@ -25,16 +26,19 @@ public class CourseTransferService {
   private final CheckoutRepository repository;
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
+  private final AuditService audit;
 
   public CourseTransferService(
       JdbcTemplate db,
       CheckoutRepository repository,
       BranchAccessService branches,
-      CurrentUser currentUser) {
+      CurrentUser currentUser,
+      AuditService audit) {
     this.db = db;
     this.repository = repository;
     this.branches = branches;
     this.currentUser = currentUser;
+    this.audit = audit;
   }
 
   public record TransferRequest(
@@ -49,8 +53,14 @@ public class CourseTransferService {
     branches.requireFilter(authentication, branchId);
     return db.queryForList(
         "SELECT t.id,t.transfer_no,t.patient_course_id,t.to_patient_course_id,t.from_patient_id,"
-            + "t.to_patient_id,t.quantity,t.reason,t.created_at,pc.branch_id FROM course_transfers t"
-            + " JOIN patient_courses pc ON pc.id=t.patient_course_id WHERE (?::bigint IS NULL"
+            + "t.to_patient_id,t.quantity,t.reason,t.created_at,t.created_by,pc.branch_id,"
+            + "pc.case_owner_employee_id AS course_owner_employee_id,pc.case_owner_name_snapshot,"
+            + "fp.hn AS from_patient_hn,trim(concat_ws(' ',fp.prefix,fp.first_name_th,fp.last_name_th))"
+            + " AS from_patient_name,tp.hn AS to_patient_hn,"
+            + "trim(concat_ws(' ',tp.prefix,tp.first_name_th,tp.last_name_th)) AS to_patient_name"
+            + " FROM course_transfers t JOIN patient_courses pc ON pc.id=t.patient_course_id"
+            + " JOIN patients fp ON fp.id=t.from_patient_id JOIN patients tp ON tp.id=t.to_patient_id"
+            + " WHERE (?::bigint IS NULL"
             + " OR pc.branch_id=?) ORDER BY t.id DESC",
         branchId, branchId);
   }
@@ -135,6 +145,23 @@ public class CourseTransferService {
             Long.class,
             transferGroupId, r.patientCourseId(), targetId, fromPatientId, r.toPatientId(),
             r.sessions(), r.reason(), actorUserId, branchId, branchId);
+
+    Map<String, Object> transferAudit = new java.util.LinkedHashMap<>();
+    transferAudit.put("courseId", r.patientCourseId());
+    transferAudit.put("courseOwnerEmployeeId", source.get("case_owner_employee_id"));
+    transferAudit.put("fromPatientId", fromPatientId);
+    transferAudit.put("transferredByUserId", actorUserId);
+    transferAudit.put("toPatientId", r.toPatientId());
+    transferAudit.put("sessions", r.sessions());
+    audit.record(
+        actorUserId,
+        branchId,
+        "COURSE_TRANSFERRED",
+        "course_transfers",
+        String.valueOf(transferId),
+        null,
+        transferAudit,
+        r.reason());
 
     return db.queryForMap(
         "SELECT id,transfer_no,patient_course_id,to_patient_course_id,from_patient_id,"

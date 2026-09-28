@@ -77,33 +77,23 @@ public class CheckoutRepository {
   public long createPatientCourse(
       long patientId, long branchId, long packageId, String packageName, int sessions, int bonus,
       BigDecimal price, BigDecimal discountRatio, Integer validityDays, Long salesTransactionId,
-      Long sellerId, Long caseOwnerId, LocalDate today) {
+      Long sellerId, Long caseOwnerId, String commissionMode, LocalDate today) {
     Long seller = sellerId != null ? sellerId : caseOwnerId;
     Long owner = caseOwnerId != null ? caseOwnerId : seller;
-    if (seller != null) {
-      String saleMonth = today.withDayOfMonth(1).toString();
-      db.queryForList(
-          "SELECT pg_advisory_xact_lock(hashtext(?))",
-          Object.class,
-          "monthly-commission:" + seller + ":" + saleMonth);
-      if (Boolean.TRUE.equals(db.queryForObject(
-          "SELECT EXISTS(SELECT 1 FROM monthly_commission_closings WHERE closing_month=? AND employee_id=? AND status='CLOSED')",
-          Boolean.class, today.withDayOfMonth(1), seller))) {
-        throw new IllegalArgumentException(
-            "Cannot create a course sale: commission month " + saleMonth + " is closed for this seller");
-      }
-    }
     String sellerName = seller == null ? "" : staffName(seller);
     String ownerName = owner == null ? sellerName : staffName(owner);
     BigDecimal netSaleAmount = price.multiply(discountRatio).setScale(2, java.math.RoundingMode.HALF_UP);
+    BigDecimal clinicDiscount = price.subtract(netSaleAmount).max(BigDecimal.ZERO);
     long id =
         db.queryForObject(
             "INSERT INTO patient_courses(course_id,receipt_no,sales_transaction_id,patient_id,"
                 + "package_id,package_name_snapshot,patient_hn_snapshot,patient_name_snapshot,sale_date,sale_month,seller_employee_id,"
                 + "case_owner_employee_id,seller_name_snapshot,case_owner_name_snapshot,"
                 + "course_price,net_course_sale_amount,total_visits,commissionable_visit_count,"
-                + "bonus_visits,branch_id,valid_until,status)"
-                + " VALUES(?,?,?,?,?,?,(SELECT hn FROM patients WHERE id=?),(SELECT trim(concat_ws(' ',prefix,first_name_th,last_name_th)) FROM patients WHERE id=?),?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,?,'ACTIVE')"
+                + "bonus_visits,branch_id,valid_until,status,commission_mode,clinic_discount_amount,"
+                + "overflow_policy_snapshot,commission_status)"
+                + " VALUES(?,?,?,?,?,?,(SELECT hn FROM patients WHERE id=?),(SELECT trim(concat_ws(' ',prefix,first_name_th,last_name_th)) FROM patients WHERE id=?),?,date_trunc('month',?::date),?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',?,?,"
+                + "'COMPANY_TOP_UP',?)"
                 + " RETURNING id",
             Long.class,
             nextNumber("PC", "patient_courses", "course_id"),
@@ -127,10 +117,13 @@ public class CheckoutRepository {
             price,
             netSaleAmount,
             sessions,
-            sessions,
+            sessions + bonus,
             bonus,
             branchId,
-            validityDays == null ? null : today.plusDays(validityDays));
+            validityDays == null ? null : today.plusDays(validityDays),
+            commissionMode,
+            clinicDiscount,
+            "SPECIAL_IMMEDIATE".equals(commissionMode) ? "PAID_IMMEDIATE" : "PROVISIONAL");
     db.update(
         "INSERT INTO shared_course_members(patient_course_id,patient_id,role) VALUES(?,?,'OWNER')"
             + " ON CONFLICT (patient_course_id,patient_id) DO NOTHING",

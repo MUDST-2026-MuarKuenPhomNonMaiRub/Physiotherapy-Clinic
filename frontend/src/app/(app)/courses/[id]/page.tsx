@@ -42,6 +42,7 @@ type CourseCommissionDetail = {
   allocations?: unknown[];
   usages?: unknown[];
   adjustments?: unknown[];
+  commissionSplits?: unknown[];
 };
 
 export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -52,6 +53,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   const patientCourses = useClinicStore((s) => s.patientCourses);
   const courseLedger = useClinicStore((s) => s.courseLedger);
   const courseTemplates = useClinicStore((s) => s.courseTemplates);
+  const staff = useClinicStore((s) => s.staff);
   const transferCourseSessions = useClinicStore((s) => s.transferCourseSessions);
 
   const [step, setStep] = useState<TransferStep>("closed");
@@ -193,6 +195,38 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
           <InfoRow label="Pool" value={commissionDetail?.course?.total_course_commission_pool == null ? "—" : `฿${commissionDetail.course.total_course_commission_pool}`} />
           <InfoRow label="Outstanding" value={commissionDetail?.course?.total_course_commission_pool == null ? "—" : `฿${Number(commissionDetail.course.total_course_commission_pool) - Number(commissionDetail.course.gross_commission_allocated_total ?? 0)}`} />
         </div>
+        {(commissionDetail?.commissionSplits ?? []).length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <Table className="min-w-[850px] text-sm">
+              <TableHeader><TableRow>
+                <TableHead>Commission Owner</TableHead><TableHead>Status</TableHead>
+                <TableHead className="text-right">Full-price Sales Credit</TableHead>
+                <TableHead className="text-right">Visits</TableHead><TableHead className="text-right">Locked Rate</TableHead>
+                <TableHead className="text-right">Pool / Immediate</TableHead><TableHead className="text-right">Outstanding</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {(commissionDetail?.commissionSplits ?? []).map((raw, index) => {
+                  const split = raw as Record<string, unknown>;
+                  const employeeId = String(split.employee_id ?? "");
+                  const employee = staff.find((item) => item.id === employeeId)?.name
+                    ?? String(split.employee_name_snapshot ?? employeeId);
+                  const pool = Number(split.total_commission_pool ?? 0);
+                  const immediate = Number(split.immediate_commission_amount ?? 0);
+                  const allocated = Number(split.gross_commission_allocated_total ?? 0);
+                  return <TableRow key={String(split.id ?? index)}>
+                    <TableCell className="font-medium">{employee}</TableCell>
+                    <TableCell>{String(split.commission_status ?? "—")}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(Number(split.sales_credit_amount ?? 0))}</TableCell>
+                    <TableCell className="text-right">{String(split.used_visits ?? 0)} / {String(split.allocated_visits ?? 0)}</TableCell>
+                    <TableCell className="text-right">{split.locked_commission_rate == null ? "—" : `${Number(split.locked_commission_rate) * 100}%`}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(immediate || pool)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(Math.max(pool - allocated, 0))}</TableCell>
+                  </TableRow>;
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
 
       <div className="mb-5 rounded-xl border border-border bg-card p-4">

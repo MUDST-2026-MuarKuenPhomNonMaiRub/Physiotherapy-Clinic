@@ -148,6 +148,16 @@ export function toCourseTemplate(row: Row): CourseTemplate {
     sessions: num(row.total_sessions),
     bonusSessions: num(row.bonus_sessions),
     expiryDays: num(row.validity_days),
+    commissionMode:
+      str(row.commission_mode) === "SPECIAL_IMMEDIATE"
+        ? "SPECIAL_IMMEDIATE"
+        : "STANDARD_TIERED",
+    specialCommissionType:
+      row.special_commission_type == null
+        ? undefined
+        : (str(row.special_commission_type) as "FIXED" | "PERCENTAGE"),
+    specialCommissionValue:
+      row.special_commission_value == null ? undefined : num(row.special_commission_value),
     status: status(row.active),
   };
 }
@@ -479,6 +489,7 @@ export function toCourseCommissionReportRow(row: Row): CourseCommissionReportRow
     staffName: str(row.staffName),
     monthlyCourseSales: num(row.monthlyCourseSales),
     commissionGenerated: num(row.commissionGenerated),
+    specialImmediateCommission: num(row.specialImmediateCommission),
     grossAllocated: num(row.grossAllocated),
     ownerNetReleased: num(row.ownerNetReleased),
     treatmentFeeEarned: num(row.treatmentFeeEarned),

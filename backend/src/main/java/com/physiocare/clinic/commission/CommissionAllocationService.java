@@ -40,12 +40,27 @@ public class CommissionAllocationService {
     long patientCourseId = ((Number) usage.get("patient_course_id")).longValue();
     Map<String, Object> course =
         db.queryForMap("SELECT * FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
-    if (!"LOCKED".equals(course.get("commission_status")))
-      throw new IllegalStateException("Course " + patientCourseId + " is not locked yet — cannot allocate");
+    Long splitId = usage.get("course_commission_split_id") == null
+        ? null
+        : ((Number) usage.get("course_commission_split_id")).longValue();
+    Map<String, Object> split = splitId == null
+        ? null
+        : db.queryForMap("SELECT * FROM course_commission_splits WHERE id=? FOR UPDATE", splitId);
+    String status = split == null
+        ? (String) course.get("commission_status")
+        : (String) split.get("commission_status");
+    if (!"LOCKED".equals(status))
+      throw new IllegalStateException("Course commission owner split is not locked yet — cannot allocate");
 
-    BigDecimal perVisit = (BigDecimal) course.get("commission_allocation_per_visit");
-    BigDecimal pool = (BigDecimal) course.get("total_course_commission_pool");
-    BigDecimal allocatedSoFar = (BigDecimal) course.get("gross_commission_allocated_total");
+    BigDecimal perVisit = (BigDecimal) (split == null
+        ? course.get("commission_allocation_per_visit")
+        : split.get("commission_allocation_per_visit"));
+    BigDecimal pool = (BigDecimal) (split == null
+        ? course.get("total_course_commission_pool")
+        : split.get("total_commission_pool"));
+    BigDecimal allocatedSoFar = (BigDecimal) (split == null
+        ? course.get("gross_commission_allocated_total")
+        : split.get("gross_commission_allocated_total"));
     if (perVisit == null || pool == null) {
       // A locked course with no pool (e.g. legacy data, or a zero-price
       // transfer target) earns nothing — mark the usage settled either way.
@@ -54,10 +69,11 @@ public class CommissionAllocationService {
     }
     int qty = ((Number) usage.get("quantity")).intValue();
     BigDecimal remainingOutstanding = pool.subtract(allocatedSoFar).max(BigDecimal.ZERO);
-    int commissionableVisits =
-        course.get("commissionable_visit_count") != null
+    int commissionableVisits = split == null
+        ? (course.get("commissionable_visit_count") != null
             ? ((Number) course.get("commissionable_visit_count")).intValue()
-            : ((Number) course.get("total_visits")).intValue();
+            : ((Number) course.get("total_visits")).intValue())
+        : ((Number) split.get("allocated_visits")).intValue();
     // Truncating per-visit to 2dp (done once, at close) always leaves a few
     // cents of the pool unassigned by the time every commissionable visit is
     // spent — floor(pool/n) * n <= pool, with equality only when pool divides
@@ -65,12 +81,18 @@ public class CommissionAllocationService {
     // claims the whole remainder instead of just its own qty * per-visit
     // share, so the pool always reconciles to zero exactly when fully used,
     // and never goes negative before that.
-    Integer consumedBefore =
-        db.queryForObject(
+    Integer consumedBefore = splitId == null
+        ? db.queryForObject(
             "SELECT COALESCE(sum(visit_qty),0) FROM commission_allocations WHERE"
-                + " patient_course_id=? AND allocation_status='ALLOCATED'",
+                + " patient_course_id=? AND course_commission_split_id IS NULL"
+                + " AND allocation_status='ALLOCATED'",
             Integer.class,
-            patientCourseId);
+            patientCourseId)
+        : db.queryForObject(
+            "SELECT COALESCE(sum(visit_qty),0) FROM commission_allocations WHERE"
+                + " course_commission_split_id=? AND allocation_status='ALLOCATED'",
+            Integer.class,
+            splitId);
     boolean isLastCommissionableChunk = consumedBefore + qty >= commissionableVisits;
     BigDecimal gross =
         isLastCommissionableChunk
@@ -98,13 +120,12 @@ public class CommissionAllocationService {
       feeType = rule.feeType();
       feeRateOrAmount = rule.feeValue();
 
-      BigDecimal netSaleAmount =
-          course.get("net_course_sale_amount") != null
-              ? (BigDecimal) course.get("net_course_sale_amount")
-              : (BigDecimal) course.get("course_price");
+      BigDecimal fullPriceCredit = split == null
+          ? (BigDecimal) course.get("course_price")
+          : (BigDecimal) split.get("sales_credit_amount");
       feeBase =
           commissionableVisits > 0
-              ? netSaleAmount.divide(BigDecimal.valueOf(commissionableVisits), 8, RoundingMode.HALF_UP)
+              ? fullPriceCredit.divide(BigDecimal.valueOf(commissionableVisits), 8, RoundingMode.HALF_UP)
               : BigDecimal.ZERO;
 
       fee =
@@ -132,8 +153,8 @@ public class CommissionAllocationService {
             + "case_owner_employee_id,treating_employee_id,visit_date,gross_commission_allocation,"
             + "treatment_fee_rule_id,treatment_fee_type,treatment_fee_rate_or_amount,"
             + "treatment_fee_calculation_base,treatment_fee_amount,owner_net_commission,"
-            + "company_top_up_amount,overflow_policy_used,course_usage_id,visit_qty,created_by)"
-            + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            + "company_top_up_amount,overflow_policy_used,course_usage_id,visit_qty,created_by,"
+            + "course_commission_split_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         usage.get("visit_id"),
         patientCourseId,
         usage.get("patient_id"),
@@ -151,7 +172,8 @@ public class CommissionAllocationService {
         resolution.isPresent() ? overflowPolicyFor(course) : null,
         usageId,
         qty,
-        usage.get("created_by"));
+        usage.get("created_by"),
+        splitId);
 
     db.update("UPDATE course_usages SET status='ALLOCATED' WHERE id=?", usageId);
     db.update(
@@ -163,6 +185,17 @@ public class CommissionAllocationService {
         ownerNet,
         fee,
         patientCourseId);
+    if (splitId != null) {
+      db.update(
+          "UPDATE course_commission_splits SET"
+              + " gross_commission_allocated_total=gross_commission_allocated_total+?,"
+              + " owner_net_commission_released_total=owner_net_commission_released_total+?,"
+              + " substitute_treatment_fee_total=substitute_treatment_fee_total+? WHERE id=?",
+          gross,
+          ownerNet,
+          fee,
+          splitId);
+    }
   }
 
   /**
@@ -184,6 +217,8 @@ public class CommissionAllocationService {
   }
 
   private String overflowPolicyFor(Map<String, Object> course) {
+    if (course.get("overflow_policy_snapshot") != null)
+      return (String) course.get("overflow_policy_snapshot");
     Object schemeId = course.get("commission_scheme_id");
     if (schemeId == null) return "CAP_AT_COMMISSION";
     return db.queryForList(

@@ -80,6 +80,25 @@ public class CommissionAdjustmentService {
             ownerNet,
             fee,
             patientCourseId);
+        if (allocation.get("course_commission_split_id") != null) {
+          db.update(
+              "UPDATE course_commission_splits SET"
+                  + " gross_commission_allocated_total=gross_commission_allocated_total-?,"
+                  + " owner_net_commission_released_total=owner_net_commission_released_total-?,"
+                  + " substitute_treatment_fee_total=substitute_treatment_fee_total-? WHERE id=?",
+              gross,
+              ownerNet,
+              fee,
+              allocation.get("course_commission_split_id"));
+        }
+      }
+      Map<String, Object> usage = db.queryForMap(
+          "SELECT quantity,course_commission_split_id FROM course_usages WHERE id=?", usageId);
+      if (usage.get("course_commission_split_id") != null) {
+        db.update(
+            "UPDATE course_commission_splits SET used_visits=used_visits-? WHERE id=?",
+            usage.get("quantity"),
+            usage.get("course_commission_split_id"));
       }
       db.update(
           "UPDATE course_usages SET status='REVERSED', reversed_at=now(), reversed_by=?,"
@@ -195,6 +214,14 @@ public class CommissionAdjustmentService {
     Map<String, Object> course =
         db.queryForMap("SELECT * FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
     if (!"LOCKED".equals(course.get("commission_status"))) return BigDecimal.ZERO;
+    Integer splitCount = db.queryForObject(
+        "SELECT count(*) FROM course_commission_splits WHERE patient_course_id=?",
+        Integer.class,
+        patientCourseId);
+    if (splitCount != null && splitCount > 0) {
+      return reduceSplitOutstandingPool(
+          patientCourseId, visitsRemoved, entirely, actorUserId, reason);
+    }
     BigDecimal perVisit = (BigDecimal) course.get("commission_allocation_per_visit");
     BigDecimal pool = (BigDecimal) course.get("total_course_commission_pool");
     if (perVisit == null || pool == null) return BigDecimal.ZERO;
@@ -217,5 +244,57 @@ public class CommissionAdjustmentService {
         reason,
         actorUserId);
     return reduction;
+  }
+
+  private BigDecimal reduceSplitOutstandingPool(
+      long patientCourseId, int visitsRemoved, boolean entirely, Long actorUserId, String reason) {
+    List<Map<String, Object>> splits = db.queryForList(
+        "SELECT * FROM course_commission_splits WHERE patient_course_id=? AND"
+            + " commission_status='LOCKED' ORDER BY split_order DESC FOR UPDATE",
+        patientCourseId);
+    int visitsLeft = visitsRemoved;
+    BigDecimal totalReduction = BigDecimal.ZERO;
+    for (Map<String, Object> split : splits) {
+      int remainingVisits = ((Number) split.get("allocated_visits")).intValue()
+          - ((Number) split.get("used_visits")).intValue()
+          - ((Number) split.get("refunded_visits")).intValue();
+      int removedHere = entirely ? remainingVisits : Math.min(visitsLeft, remainingVisits);
+      BigDecimal pool = (BigDecimal) split.get("total_commission_pool");
+      BigDecimal allocated = (BigDecimal) split.get("gross_commission_allocated_total");
+      BigDecimal outstanding = pool.subtract(allocated).max(BigDecimal.ZERO);
+      BigDecimal perVisit = (BigDecimal) split.get("commission_allocation_per_visit");
+      BigDecimal reduction = entirely
+          ? outstanding
+          : perVisit.multiply(BigDecimal.valueOf(removedHere)).min(outstanding);
+      if (removedHere > 0 || reduction.signum() > 0) {
+        db.update(
+            "UPDATE course_commission_splits SET total_commission_pool=total_commission_pool-?,"
+                + " refunded_visits=refunded_visits+?"
+                + " WHERE id=?",
+            reduction,
+            removedHere,
+            split.get("id"));
+        totalReduction = totalReduction.add(reduction);
+        visitsLeft -= removedHere;
+      }
+      if (!entirely && visitsLeft == 0) break;
+    }
+    if (!entirely && visitsLeft > 0)
+      throw new IllegalArgumentException("Commission split visits are inconsistent with the course balance");
+    if (totalReduction.signum() > 0) {
+      db.update(
+          "UPDATE patient_courses SET total_course_commission_pool=total_course_commission_pool-?"
+              + " WHERE id=?",
+          totalReduction,
+          patientCourseId);
+      db.update(
+          "INSERT INTO commission_adjustments(patient_course_id,adjustment_type,gross_amount,reason,"
+              + "created_by) VALUES(?,'REFUND_POOL_REDUCTION',?,?,?)",
+          patientCourseId,
+          totalReduction.negate(),
+          reason,
+          actorUserId);
+    }
+    return totalReduction;
   }
 }

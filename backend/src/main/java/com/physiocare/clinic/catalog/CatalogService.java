@@ -39,7 +39,10 @@ public class CatalogService {
       @PositiveOrZero int bonusSessions,
       @Positive Integer validityDays,
       @NotNull @DecimalMin("0") BigDecimal price,
-      Boolean active) {}
+      Boolean active,
+      String commissionMode,
+      String specialCommissionType,
+      BigDecimal specialCommissionValue) {}
 
   public record MasterDataRequest(
       @NotBlank String dataType, @NotBlank String nameTh, String nameEn, Boolean active) {}
@@ -66,6 +69,18 @@ public class CatalogService {
     InputRules.inRange(r.validityDays(), 1, 3650, "The validity in days");
     InputRules.text(r.nameTh(), 200, "The name");
     InputRules.text(r.description(), 1000, "The description");
+    String mode = commissionMode(r);
+    InputRules.oneOf(mode, List.of("STANDARD_TIERED", "SPECIAL_IMMEDIATE"), "Commission mode");
+    if ("SPECIAL_IMMEDIATE".equals(mode)) {
+      InputRules.oneOf(
+          r.specialCommissionType(), List.of("FIXED", "PERCENTAGE"), "Special commission type");
+      InputRules.require(r.specialCommissionValue() != null, "A special commission value is required");
+      InputRules.money(r.specialCommissionValue(), "The special commission value");
+      if ("PERCENTAGE".equals(r.specialCommissionType()))
+        InputRules.require(
+            r.specialCommissionValue().compareTo(BigDecimal.valueOf(100)) <= 0,
+            "A special commission percentage cannot exceed 100%");
+    }
   }
 
   // ---------------------------------------------------------------- services
@@ -145,7 +160,8 @@ public class CatalogService {
   @GetMapping("/courses")
   public List<Map<String, Object>> courses() {
     return db.queryForList(
-        "SELECT id,code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active"
+        "SELECT id,code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active,"
+            + "commission_mode,special_commission_type,special_commission_value"
             + " FROM courses WHERE deleted_at IS NULL ORDER BY id");
   }
 
@@ -157,8 +173,9 @@ public class CatalogService {
     long id =
         db.queryForObject(
             "INSERT INTO"
-                + " courses(code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active)"
-                + " VALUES(?,?,?,?,?,?,?,?,?) RETURNING id",
+                + " courses(code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active,"
+                + "commission_mode,special_commission_type,special_commission_value)"
+                + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
             Long.class,
             nextCode(r.code(), "CRS", "courses"),
             r.nameTh(),
@@ -168,7 +185,10 @@ public class CatalogService {
             r.bonusSessions(),
             r.validityDays(),
             r.price(),
-            r.active() == null || r.active());
+            r.active() == null || r.active(),
+            commissionMode(r),
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionType() : null,
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionValue() : null);
     return course(id);
   }
 
@@ -180,7 +200,8 @@ public class CatalogService {
     int rows =
         db.update(
             "UPDATE courses SET"
-                + " code=COALESCE(NULLIF(?,''),code),name_th=?,name_en=?,description=?,total_sessions=?,bonus_sessions=?,validity_days=?,price=?,active=COALESCE(?,active),updated_at=now()"
+                + " code=COALESCE(NULLIF(?,''),code),name_th=?,name_en=?,description=?,total_sessions=?,bonus_sessions=?,validity_days=?,price=?,active=COALESCE(?,active),"
+                + "commission_mode=?,special_commission_type=?,special_commission_value=?,updated_at=now()"
                 + " WHERE id=? AND deleted_at IS NULL",
             r.code(),
             r.nameTh(),
@@ -191,6 +212,9 @@ public class CatalogService {
             r.validityDays(),
             r.price(),
             r.active(),
+            commissionMode(r),
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionType() : null,
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionValue() : null,
             id);
     if (rows == 0) throw new IllegalArgumentException("Course not found");
     return course(id);
@@ -210,9 +234,16 @@ public class CatalogService {
 
   private Map<String, Object> course(long id) {
     return db.queryForMap(
-        "SELECT id,code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active"
+        "SELECT id,code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active,"
+            + "commission_mode,special_commission_type,special_commission_value"
             + " FROM courses WHERE id=?",
         id);
+  }
+
+  private String commissionMode(CourseRequest request) {
+    return request.commissionMode() == null || request.commissionMode().isBlank()
+        ? "STANDARD_TIERED"
+        : request.commissionMode();
   }
 
   // --------------------------------------------------------- payment methods

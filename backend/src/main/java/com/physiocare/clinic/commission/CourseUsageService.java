@@ -29,10 +29,15 @@ import org.springframework.http.HttpStatus;
 public class CourseUsageService {
   private final JdbcTemplate db;
   private final CommissionAllocationService allocationService;
+  private final CourseCommissionSplitService splitService;
 
-  public CourseUsageService(JdbcTemplate db, CommissionAllocationService allocationService) {
+  public CourseUsageService(
+      JdbcTemplate db,
+      CommissionAllocationService allocationService,
+      CourseCommissionSplitService splitService) {
     this.db = db;
     this.allocationService = allocationService;
+    this.splitService = splitService;
   }
 
   /**
@@ -166,11 +171,14 @@ public class CourseUsageService {
             : ((Number) course.get("case_owner_employee_id")).longValue();
     if (caseOwnerId == null)
       throw new IllegalStateException("Course has no case owner staff; commission cannot be allocated");
-    long ownerId = caseOwnerId;
-    long treatingId = treatingStaffId != null ? treatingStaffId : ownerId;
+    long treatingId = treatingStaffId != null ? treatingStaffId : caseOwnerId;
+    CourseCommissionSplitService.UsageSplit split =
+        splitService.assignUsage(patientCourseId, treatingId, quantity);
+    long ownerId = split == null ? caseOwnerId : split.employeeId();
     Long visitId = resolveVisitId(transactionId, appointmentId);
 
-    String commissionStatus = (String) course.get("commission_status");
+    String commissionStatus =
+        split == null ? (String) course.get("commission_status") : split.commissionStatus();
     boolean everAllocatable = "PROVISIONAL".equals(commissionStatus) || "LOCKED".equals(commissionStatus);
     String initialStatus = everAllocatable ? "PENDING_RATE" : "LEGACY_UNALLOCATED";
 
@@ -178,8 +186,8 @@ public class CourseUsageService {
         db.queryForObject(
             "INSERT INTO course_usages(patient_course_id,patient_id,visit_id,sales_transaction_id,"
                 + "course_ledger_entry_id,treating_employee_id,case_owner_employee_id,quantity,"
-                + "usage_date,status,branch_id,created_by,idempotency_key) VALUES"
-                + "(?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+                + "usage_date,status,branch_id,created_by,idempotency_key,course_commission_split_id) VALUES"
+                + "(?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
             Long.class,
             patientCourseId,
             patientId,
@@ -193,7 +201,8 @@ public class CourseUsageService {
             initialStatus,
             branchId,
             performedByUserId,
-            idempotencyKey);
+            idempotencyKey,
+            split == null ? null : split.id());
 
     if ("PENDING_RATE".equals(initialStatus) && "LOCKED".equals(commissionStatus)) {
       allocationService.allocate(usageId);

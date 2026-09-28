@@ -32,7 +32,18 @@ import type { CourseTemplate, Service, ServiceType } from "@/types";
 import { toast } from "sonner";
 
 const emptyServiceForm = { name: "", type: "SINGLE_VISIT" as ServiceType, price: 0, duration: 60, code: "" };
-const emptyCourseForm = { code: "", name: "", description: "", price: 0, sessions: 10, bonusSessions: 0, expiryDays: 180 };
+const emptyCourseForm = {
+  code: "",
+  name: "",
+  description: "",
+  price: 0,
+  sessions: 10,
+  bonusSessions: 0,
+  expiryDays: 180,
+  commissionMode: "STANDARD_TIERED" as CourseTemplate["commissionMode"],
+  specialCommissionType: "PERCENTAGE" as NonNullable<CourseTemplate["specialCommissionType"]>,
+  specialCommissionValue: 0,
+};
 
 function formatDuration(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -108,7 +119,18 @@ export default function ServicesSettingsPage() {
   function openCreateCourse() { setEditingCourse(null); setCourseForm(emptyCourseForm); setCourseOpen(true); }
   function openEditCourse(c: CourseTemplate) {
     setEditingCourse(c);
-    setCourseForm({ code: c.code, name: c.name, description: c.description, price: c.price, sessions: c.sessions, bonusSessions: c.bonusSessions, expiryDays: c.expiryDays });
+    setCourseForm({
+      code: c.code,
+      name: c.name,
+      description: c.description,
+      price: c.price,
+      sessions: c.sessions,
+      bonusSessions: c.bonusSessions,
+      expiryDays: c.expiryDays,
+      commissionMode: c.commissionMode,
+      specialCommissionType: c.specialCommissionType ?? "PERCENTAGE",
+      specialCommissionValue: c.specialCommissionValue ?? 0,
+    });
     setCourseOpen(true);
   }
   /**
@@ -127,6 +149,10 @@ export default function ServicesSettingsPage() {
             ? "Bonus sessions cannot be negative"
             : courseForm.expiryDays <= 0
               ? "The expiry must be at least one day"
+              : courseForm.commissionMode === "SPECIAL_IMMEDIATE" && courseForm.specialCommissionValue < 0
+                ? "Special commission cannot be negative"
+                : courseForm.commissionMode === "SPECIAL_IMMEDIATE" && courseForm.specialCommissionType === "PERCENTAGE" && courseForm.specialCommissionValue > 100
+                  ? "Special commission percentage cannot exceed 100%"
               : courseForm.code.trim() && !/^[A-Z0-9_-]+$/.test(courseForm.code.trim())
                 ? "Item code may contain only letters, numbers, hyphens and underscores"
                 : null;
@@ -248,6 +274,7 @@ export default function ServicesSettingsPage() {
                     <TableHead>Price</TableHead>
                     <TableHead>Sessions</TableHead>
                     <TableHead>Bonus</TableHead>
+                    <TableHead>Commission</TableHead>
                     <TableHead>Expiry (days)</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -255,7 +282,7 @@ export default function ServicesSettingsPage() {
                 </TableHeader>
                 <TableBody>
                   {visibleCourses.length === 0 && (
-                    <TableRow><TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">No matching course</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">No matching course</TableCell></TableRow>
                   )}
                   {visibleCourses.map((c) => (
                     <TableRow key={c.id} className="[&>td]:py-3.5">
@@ -271,6 +298,11 @@ export default function ServicesSettingsPage() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{c.sessions}</TableCell>
                       <TableCell className="text-muted-foreground">{c.bonusSessions > 0 ? `+${c.bonusSessions}` : "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {c.commissionMode === "SPECIAL_IMMEDIATE"
+                          ? `Immediate ${c.specialCommissionType === "PERCENTAGE" ? `${c.specialCommissionValue}%` : formatCurrency(c.specialCommissionValue ?? 0)}`
+                          : "Tier / visit pool"}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{c.expiryDays} days</TableCell>
                       <TableCell><StatusBadge status={c.status} /></TableCell>
                       <TableCell className="text-right">
@@ -369,6 +401,56 @@ export default function ServicesSettingsPage() {
                 <Input type="number" min={1} value={courseForm.expiryDays} onChange={(e) => setCourseForm((f) => ({ ...f, expiryDays: Number(e.target.value) }))} />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label>Commission Method</Label>
+              <Select
+                value={courseForm.commissionMode}
+                onValueChange={(value: CourseTemplate["commissionMode"]) =>
+                  setCourseForm((form) => ({ ...form, commissionMode: value }))
+                }
+              >
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="STANDARD_TIERED">Tier pool released per visit</SelectItem>
+                  <SelectItem value="SPECIAL_IMMEDIATE">Special commission paid in full at purchase</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Special commission is paid once at checkout and does not create a visit pool or treatment-fee allocation.
+              </p>
+            </div>
+            {courseForm.commissionMode === "SPECIAL_IMMEDIATE" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Special Commission Type</Label>
+                  <Select
+                    value={courseForm.specialCommissionType}
+                    onValueChange={(value: "FIXED" | "PERCENTAGE") =>
+                      setCourseForm((form) => ({ ...form, specialCommissionType: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PERCENTAGE">Percentage of full price</SelectItem>
+                      <SelectItem value="FIXED">Fixed amount per sale</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{courseForm.specialCommissionType === "PERCENTAGE" ? "Percentage" : "Amount (THB)"}</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={courseForm.specialCommissionType === "PERCENTAGE" ? 100 : undefined}
+                    step="0.01"
+                    value={courseForm.specialCommissionValue}
+                    onChange={(event) =>
+                      setCourseForm((form) => ({ ...form, specialCommissionValue: Number(event.target.value) }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter className="items-center gap-2 sm:justify-between">
             {courseProblem ? (

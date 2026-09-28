@@ -43,9 +43,16 @@ public class MonthlyCommissionClosingService {
   public List<EmployeePreview> preview(YearMonth month) {
     List<Long> employees =
         db.queryForList(
-            "SELECT DISTINCT seller_employee_id FROM patient_courses WHERE sale_month=? AND"
-                + " commission_status='PROVISIONAL' AND seller_employee_id IS NOT NULL",
+            "SELECT DISTINCT employee_id FROM ("
+                + " SELECT split.employee_id FROM course_commission_splits split JOIN patient_courses pc"
+                + " ON pc.id=split.patient_course_id WHERE pc.sale_month=? AND"
+                + " split.commission_status='PROVISIONAL'"
+                + " UNION SELECT pc.seller_employee_id FROM patient_courses pc WHERE pc.sale_month=?"
+                + " AND pc.commission_status='PROVISIONAL' AND pc.seller_employee_id IS NOT NULL"
+                + " AND NOT EXISTS(SELECT 1 FROM course_commission_splits split WHERE"
+                + " split.patient_course_id=pc.id)) employees",
             Long.class,
+            month.atDay(1),
             month.atDay(1));
 
     Map<String, Object> scheme = resolveScheme(month);
@@ -106,9 +113,16 @@ public class MonthlyCommissionClosingService {
     requireMonthEnded(month, YearMonth.now(), earlyClose);
     List<Long> employees =
         db.queryForList(
-            "SELECT DISTINCT seller_employee_id FROM patient_courses WHERE sale_month=? AND"
-                + " commission_status='PROVISIONAL' AND seller_employee_id IS NOT NULL",
+            "SELECT DISTINCT employee_id FROM ("
+                + " SELECT split.employee_id FROM course_commission_splits split JOIN patient_courses pc"
+                + " ON pc.id=split.patient_course_id WHERE pc.sale_month=? AND"
+                + " split.commission_status='PROVISIONAL'"
+                + " UNION SELECT pc.seller_employee_id FROM patient_courses pc WHERE pc.sale_month=?"
+                + " AND pc.commission_status='PROVISIONAL' AND pc.seller_employee_id IS NOT NULL"
+                + " AND NOT EXISTS(SELECT 1 FROM course_commission_splits split WHERE"
+                + " split.patient_course_id=pc.id)) employees",
             Long.class,
+            month.atDay(1),
             month.atDay(1));
     int closedCount = 0;
     for (Long employee : employees) {
@@ -161,12 +175,13 @@ public class MonthlyCommissionClosingService {
     long closingId = closingIds.get(0);
 
     db.update(
-        "UPDATE patient_courses SET commission_status='LOCKED', commission_scheme_id=?,"
-            + " commission_scheme_version=?, locked_commission_rate=?, monthly_closing_id=?,"
-            + " total_course_commission_pool=round(net_course_sale_amount*?,2),"
-            + " commission_allocation_per_visit="
-            + "   floor(round(net_course_sale_amount*?,2) / GREATEST(commissionable_visit_count,1) * 100) / 100"
-            + " WHERE sale_month=? AND seller_employee_id=? AND commission_status='PROVISIONAL'",
+        "UPDATE course_commission_splits split SET commission_status='LOCKED',"
+            + " commission_scheme_id=?,commission_scheme_version=?,locked_commission_rate=?,"
+            + " monthly_closing_id=?,total_commission_pool=round(split.sales_credit_amount*?,2),"
+            + " commission_allocation_per_visit=floor(round(split.sales_credit_amount*?,2)"
+            + " / GREATEST(split.allocated_visits,1)*100)/100 FROM patient_courses pc WHERE"
+            + " pc.id=split.patient_course_id AND pc.sale_month=? AND split.employee_id=?"
+            + " AND split.commission_status='PROVISIONAL'",
         schemeId,
         schemeVersion,
         rate,
@@ -176,12 +191,35 @@ public class MonthlyCommissionClosingService {
         month.atDay(1),
         employee);
 
+    db.update(
+        "UPDATE patient_courses SET commission_status='LOCKED', commission_scheme_id=?,"
+            + " commission_scheme_version=?, locked_commission_rate=?, monthly_closing_id=?,"
+            + " total_course_commission_pool=round(net_course_sale_amount*?,2),"
+            + " commission_allocation_per_visit="
+            + "   floor(round(net_course_sale_amount*?,2) / GREATEST(commissionable_visit_count,1) * 100) / 100"
+            + " WHERE sale_month=? AND seller_employee_id=? AND commission_status='PROVISIONAL'"
+            + " AND NOT EXISTS(SELECT 1 FROM course_commission_splits split WHERE"
+            + " split.patient_course_id=patient_courses.id)",
+        schemeId,
+        schemeVersion,
+        rate,
+        closingId,
+        rate,
+        rate,
+        month.atDay(1),
+        employee);
+
+    refreshSplitCourseAggregates(month);
+
     List<Long> pendingUsages =
         db.queryForList(
-            "SELECT cu.id FROM course_usages cu JOIN patient_courses pc ON pc.id=cu.patient_course_id"
-                + " WHERE pc.monthly_closing_id=? AND cu.status='PENDING_RATE' ORDER BY cu.usage_date,"
-                + " cu.id",
+            "SELECT cu.id FROM course_usages cu LEFT JOIN course_commission_splits split"
+                + " ON split.id=cu.course_commission_split_id JOIN patient_courses pc"
+                + " ON pc.id=cu.patient_course_id WHERE cu.status='PENDING_RATE' AND"
+                + " (split.monthly_closing_id=? OR (split.id IS NULL AND pc.monthly_closing_id=?))"
+                + " ORDER BY cu.usage_date,cu.id",
             Long.class,
+            closingId,
             closingId);
     for (Long usageId : pendingUsages) allocationService.allocate(usageId);
 
@@ -231,10 +269,33 @@ public class MonthlyCommissionClosingService {
 
     db.update("UPDATE monthly_commission_closings SET locked_commission_rate=? WHERE id=?", newRate, closingId);
 
+    List<Map<String, Object>> splitRows = db.queryForList(
+        "SELECT * FROM course_commission_splits WHERE monthly_closing_id=? FOR UPDATE", closingId);
+    for (Map<String, Object> split : splitRows) {
+      long splitId = ((Number) split.get("id")).longValue();
+      long courseId = ((Number) split.get("patient_course_id")).longValue();
+      BigDecimal credit = (BigDecimal) split.get("sales_credit_amount");
+      BigDecimal oldPool = (BigDecimal) split.get("total_commission_pool");
+      BigDecimal newPool = credit.multiply(newRate).setScale(2, RoundingMode.HALF_UP);
+      BigDecimal newPerVisit = newPool.multiply(BigDecimal.valueOf(100))
+          .divide(BigDecimal.valueOf(((Number) split.get("allocated_visits")).longValue()), 0,
+              RoundingMode.FLOOR)
+          .divide(BigDecimal.valueOf(100), 2, RoundingMode.UNNECESSARY);
+      db.update(
+          "UPDATE course_commission_splits SET locked_commission_rate=?,total_commission_pool=?,"
+              + "commission_allocation_per_visit=? WHERE id=?",
+          newRate, newPool, newPerVisit, splitId);
+      db.update(
+          "INSERT INTO commission_adjustments(patient_course_id,monthly_closing_id,adjustment_type,"
+              + "gross_amount,reason,approved_by,created_by) VALUES(?,?,'RATE_OVERRIDE',?,?,?,?)",
+          courseId, closingId, newPool.subtract(oldPool), reason, actorUserId, actorUserId);
+    }
+
     List<Map<String, Object>> courses =
         db.queryForList(
             "SELECT id, net_course_sale_amount, total_course_commission_pool FROM patient_courses"
-                + " WHERE monthly_closing_id=?",
+                + " WHERE monthly_closing_id=? AND NOT EXISTS(SELECT 1 FROM"
+                + " course_commission_splits split WHERE split.patient_course_id=patient_courses.id)",
             closingId);
     for (Map<String, Object> course : courses) {
       long courseId = ((Number) course.get("id")).longValue();
@@ -266,6 +327,8 @@ public class MonthlyCommissionClosingService {
           actorUserId);
     }
 
+    refreshAllSplitCourseAggregates();
+
     audit.record(
         actorUserId,
         null,
@@ -288,11 +351,58 @@ public class MonthlyCommissionClosingService {
 
   private BigDecimal monthlySales(YearMonth month, long employee) {
     return db.queryForObject(
-        "SELECT COALESCE(sum(net_course_sale_amount),0) FROM patient_courses WHERE sale_month=? AND"
-            + " seller_employee_id=? AND commission_status='PROVISIONAL'",
+        "SELECT COALESCE(sum(amount),0) FROM ("
+            + " SELECT split.sales_credit_amount amount FROM course_commission_splits split"
+            + " JOIN patient_courses pc ON pc.id=split.patient_course_id WHERE pc.sale_month=?"
+            + " AND split.employee_id=? AND split.commission_status='PROVISIONAL'"
+            + " UNION ALL SELECT pc.course_price FROM patient_courses pc WHERE pc.sale_month=?"
+            + " AND pc.seller_employee_id=? AND pc.commission_status='PROVISIONAL'"
+            + " AND NOT EXISTS(SELECT 1 FROM course_commission_splits split WHERE"
+            + " split.patient_course_id=pc.id)) sales",
         BigDecimal.class,
         month.atDay(1),
+        employee,
+        month.atDay(1),
         employee);
+  }
+
+  private void refreshSplitCourseAggregates(YearMonth month) {
+    db.update(
+        "UPDATE patient_courses pc SET commission_status=CASE WHEN EXISTS(SELECT 1 FROM"
+            + " course_commission_splits p WHERE p.patient_course_id=pc.id AND"
+            + " p.commission_status='PROVISIONAL') THEN 'PROVISIONAL' ELSE 'LOCKED' END,"
+            + " locked_commission_rate=(SELECT CASE WHEN count(DISTINCT s.locked_commission_rate)=1"
+            + " THEN max(s.locked_commission_rate) END FROM course_commission_splits s WHERE"
+            + " s.patient_course_id=pc.id),"
+            + " commission_scheme_id=(SELECT CASE WHEN count(DISTINCT s.commission_scheme_id)=1"
+            + " THEN max(s.commission_scheme_id) END FROM course_commission_splits s WHERE"
+            + " s.patient_course_id=pc.id),"
+            + " commission_scheme_version=(SELECT CASE WHEN count(DISTINCT s.commission_scheme_version)=1"
+            + " THEN max(s.commission_scheme_version) END FROM course_commission_splits s WHERE"
+            + " s.patient_course_id=pc.id),"
+            + " monthly_closing_id=(SELECT CASE WHEN count(DISTINCT s.monthly_closing_id)=1"
+            + " THEN max(s.monthly_closing_id) END FROM course_commission_splits s WHERE"
+            + " s.patient_course_id=pc.id),"
+            + " total_course_commission_pool=(SELECT sum(s.total_commission_pool) FROM"
+            + " course_commission_splits s WHERE s.patient_course_id=pc.id),"
+            + " commission_allocation_per_visit=(SELECT floor(sum(s.total_commission_pool) /"
+            + " GREATEST(sum(s.allocated_visits),1)*100)/100 FROM course_commission_splits s WHERE"
+            + " s.patient_course_id=pc.id) WHERE pc.sale_month=? AND EXISTS(SELECT 1 FROM"
+            + " course_commission_splits s WHERE s.patient_course_id=pc.id)",
+        month.atDay(1));
+  }
+
+  private void refreshAllSplitCourseAggregates() {
+    db.update(
+        "UPDATE patient_courses pc SET locked_commission_rate=(SELECT CASE WHEN"
+            + " count(DISTINCT s.locked_commission_rate)=1 THEN max(s.locked_commission_rate) END"
+            + " FROM course_commission_splits s WHERE s.patient_course_id=pc.id),"
+            + " total_course_commission_pool=(SELECT sum(s.total_commission_pool)"
+            + " FROM course_commission_splits s WHERE s.patient_course_id=pc.id),"
+            + " commission_allocation_per_visit=(SELECT floor(sum(s.total_commission_pool) /"
+            + " GREATEST(sum(s.allocated_visits),1)*100)/100 FROM course_commission_splits s WHERE"
+            + " s.patient_course_id=pc.id) WHERE EXISTS(SELECT 1 FROM course_commission_splits s"
+            + " WHERE s.patient_course_id=pc.id)");
   }
 
   private Map<String, Object> resolveScheme(YearMonth month) {

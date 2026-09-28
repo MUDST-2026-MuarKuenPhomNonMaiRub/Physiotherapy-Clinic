@@ -22,7 +22,15 @@ public class CatalogController {
       @NotNull @DecimalMin("0") BigDecimal basePrice, Boolean active) {}
   public record CourseRequest(String code, @NotBlank String nameTh, String nameEn,
       String description, @Positive int totalSessions, @PositiveOrZero int bonusSessions,
-      @Positive Integer validityDays, @NotNull @DecimalMin("0") BigDecimal price, Boolean active) {}
+      @Positive Integer validityDays, @NotNull @DecimalMin("0") BigDecimal price, Boolean active,
+      String commissionMode, String specialCommissionType, BigDecimal specialCommissionValue) {
+    public CourseRequest(String code, String nameTh, String nameEn, String description,
+        int totalSessions, int bonusSessions, Integer validityDays, BigDecimal price,
+        Boolean active) {
+      this(code, nameTh, nameEn, description, totalSessions, bonusSessions, validityDays, price,
+          active, null, null, null);
+    }
+  }
   public record MasterDataRequest(@NotBlank String dataType, @NotBlank String nameTh,
       String nameEn, Boolean active) {}
   public record ActiveRequest(boolean active) {}
@@ -75,6 +83,8 @@ public class CatalogController {
     return new CatalogService.ServiceRequest(r.code(), r.nameTh(), r.nameEn(), r.serviceType(), r.durationMinutes(), r.basePrice(), r.active());
   }
   private static CatalogService.CourseRequest toCourse(CourseRequest r) {
-    return new CatalogService.CourseRequest(r.code(), r.nameTh(), r.nameEn(), r.description(), r.totalSessions(), r.bonusSessions(), r.validityDays(), r.price(), r.active());
+    return new CatalogService.CourseRequest(r.code(), r.nameTh(), r.nameEn(), r.description(),
+        r.totalSessions(), r.bonusSessions(), r.validityDays(), r.price(), r.active(),
+        r.commissionMode(), r.specialCommissionType(), r.specialCommissionValue());
   }
 }

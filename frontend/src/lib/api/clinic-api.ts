@@ -373,6 +373,9 @@ const courseBody = (course: Omit<CourseTemplate, "id">) => ({
   bonusSessions: course.bonusSessions,
   validityDays: course.expiryDays,
   price: course.price,
+  commissionMode: course.commissionMode,
+  specialCommissionType: course.specialCommissionType ?? null,
+  specialCommissionValue: course.specialCommissionValue ?? null,
   active: course.status === "ACTIVE",
 });
 
@@ -846,6 +849,11 @@ export interface CheckoutInput {
   salespersonId?: string;
   /** Owner of the course's commission pool; defaults to the salesperson when omitted. */
   caseOwnerEmployeeId?: string;
+  commissionSplits?: Array<{
+    employeeId: string;
+    salesCreditAmount: number;
+    visits: number;
+  }>;
   paymentMethodId: string;
   /** Cash handed over at the counter. Only meaningful when paying by cash. */
   cashReceived?: number;
@@ -873,6 +881,12 @@ export const checkout = (input: CheckoutInput): Promise<Transaction> =>
       treatingStaffId: input.treatingStaffId ? Number(input.treatingStaffId) : null,
       salespersonId: input.salespersonId ? Number(input.salespersonId) : null,
       caseOwnerEmployeeId: input.caseOwnerEmployeeId ? Number(input.caseOwnerEmployeeId) : null,
+      commissionSplits:
+        input.commissionSplits?.map((split) => ({
+          employeeId: Number(split.employeeId),
+          salesCreditAmount: split.salesCreditAmount,
+          visits: split.visits,
+        })) ?? [],
       paymentMethodId: Number(input.paymentMethodId),
       cashReceived: input.cashReceived ?? null,
       servicePrice: input.servicePrice ?? null,

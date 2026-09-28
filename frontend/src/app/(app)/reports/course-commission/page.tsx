@@ -124,6 +124,7 @@ export default function CourseCommissionReportPage() {
                   <TableHead>Staff</TableHead>
                   <TableHead className="text-right">Monthly Course Sales</TableHead>
                   <TableHead className="text-right">Generated</TableHead>
+                  <TableHead className="text-right">Special Immediate</TableHead>
                   <TableHead className="text-right">Gross Allocated</TableHead>
                   <TableHead className="text-right">Owner Net</TableHead>
                   <TableHead className="text-right">Treatment Fee</TableHead>
@@ -141,6 +142,9 @@ export default function CourseCommissionReportPage() {
                     </TableCell>
                     <TableCell className="text-right">{formatCurrency(r.monthlyCourseSales)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(r.commissionGenerated)}</TableCell>
+                    <TableCell className="text-right text-success">
+                      {formatCurrency(r.specialImmediateCommission)}
+                    </TableCell>
                     <TableCell className="text-right">{formatCurrency(r.grossAllocated)}</TableCell>
                     <TableCell className="text-right text-success">{formatCurrency(r.ownerNetReleased)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(r.treatmentFeeEarned)}</TableCell>

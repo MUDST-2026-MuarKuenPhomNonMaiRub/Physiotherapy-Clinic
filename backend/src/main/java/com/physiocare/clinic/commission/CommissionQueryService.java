@@ -32,6 +32,7 @@ public class CommissionQueryService {
       String staffName,
       BigDecimal monthlyCourseSales,
       BigDecimal commissionGenerated,
+      BigDecimal specialImmediateCommission,
       BigDecimal grossAllocated,
       BigDecimal ownerNetReleased,
       BigDecimal treatmentFeeEarned,
@@ -108,20 +109,36 @@ public class CommissionQueryService {
                 + "    ON ca.id=a.commission_allocation_id"
                 + "    WHERE a.created_at::date BETWEEN ? AND ? AND a.treatment_fee_amount<>0"
                 + "  ) x GROUP BY staff_id"
-                + " ), sales AS ("
-                + "  SELECT seller_employee_id AS staff_id, sum(net_course_sale_amount) AS"
-                + "  monthly_sales, sum(total_course_commission_pool) AS generated FROM"
-                + "  patient_courses WHERE sale_month BETWEEN ? AND ? AND commission_status<>"
-                + "  'LEGACY_EXCLUDED' AND commission_status<>'CANCELLED' GROUP BY seller_employee_id"
-                + " ), outstanding AS ("
-                + "  SELECT case_owner_employee_id AS staff_id, sum(total_course_commission_pool -"
-                + "  gross_commission_allocated_total) AS outstanding FROM patient_courses WHERE"
-                + "  commission_status='LOCKED' AND sale_month BETWEEN ? AND ? GROUP BY"
-                + "  case_owner_employee_id"
+                + " ), sales AS (SELECT staff_id,sum(monthly_sales) monthly_sales,sum(generated)"
+                + " generated,sum(immediate) immediate FROM ("
+                + "  SELECT split.employee_id staff_id,split.sales_credit_amount monthly_sales,"
+                + "  COALESCE(split.total_commission_pool,split.immediate_commission_amount,0) generated,"
+                + "  CASE WHEN split.commission_status='PAID_IMMEDIATE' THEN"
+                + "  split.immediate_commission_amount ELSE 0 END immediate"
+                + "  FROM course_commission_splits split JOIN patient_courses pc ON"
+                + "  pc.id=split.patient_course_id WHERE pc.sale_month BETWEEN ? AND ? AND"
+                + "  split.commission_status<>'CANCELLED'"
+                + "  UNION ALL SELECT pc.seller_employee_id,pc.course_price,"
+                + "  COALESCE(pc.total_course_commission_pool,0),0 FROM patient_courses pc WHERE"
+                + "  pc.sale_month BETWEEN ? AND ? AND pc.commission_status NOT IN"
+                + "  ('LEGACY_EXCLUDED','CANCELLED') AND NOT EXISTS(SELECT 1 FROM"
+                + "  course_commission_splits split WHERE split.patient_course_id=pc.id)"
+                + " ) sale_lines GROUP BY staff_id"
+                + " ), outstanding AS (SELECT staff_id,sum(outstanding) outstanding FROM ("
+                + "  SELECT split.employee_id staff_id,split.total_commission_pool-"
+                + "  split.gross_commission_allocated_total outstanding FROM course_commission_splits"
+                + "  split JOIN patient_courses pc ON pc.id=split.patient_course_id WHERE"
+                + "  split.commission_status='LOCKED' AND pc.sale_month BETWEEN ? AND ?"
+                + "  UNION ALL SELECT pc.case_owner_employee_id,pc.total_course_commission_pool-"
+                + "  pc.gross_commission_allocated_total FROM patient_courses pc WHERE"
+                + "  pc.commission_status='LOCKED' AND pc.sale_month BETWEEN ? AND ? AND NOT EXISTS"
+                + "  (SELECT 1 FROM course_commission_splits split WHERE split.patient_course_id=pc.id)"
+                + " ) outstanding_lines GROUP BY staff_id"
                 + " )"
                 + " SELECT s.id AS staff_id, s.name,"
                 + "   COALESCE(sales.monthly_sales,0) AS monthly_sales,"
                 + "   COALESCE(sales.generated,0) AS generated,"
+                + "   COALESCE(sales.immediate,0) AS immediate,"
                 + "   COALESCE(owner.gross,0) AS gross,"
                 + "   COALESCE(owner.owner_net,0) AS owner_net,"
                 + "   COALESCE(treating.fee,0) AS fee,"
@@ -138,7 +155,9 @@ public class CommissionQueryService {
                 + "        treating.staff_id IS NOT NULL OR adj.staff_id IS NOT NULL OR"
                 + "        outstanding.staff_id IS NOT NULL)"
                 + " ORDER BY s.name",
-            from, to, from, to, from, to, from, to, fromMonth, toMonth, fromMonth, toMonth,
+            from, to, from, to, from, to, from, to,
+            fromMonth, toMonth, fromMonth, toMonth,
+            fromMonth, toMonth, fromMonth, toMonth,
             staffFilter, staffFilter);
 
     return rows.stream()
@@ -147,17 +166,19 @@ public class CommissionQueryService {
               BigDecimal ownerNet = (BigDecimal) r.get("owner_net");
               BigDecimal fee = (BigDecimal) r.get("fee");
               BigDecimal adjustment = (BigDecimal) r.get("adjustment");
+              BigDecimal immediate = (BigDecimal) r.get("immediate");
               return new ReportRow(
                   ((Number) r.get("staff_id")).longValue(),
                   (String) r.get("name"),
                   (BigDecimal) r.get("monthly_sales"),
                   (BigDecimal) r.get("generated"),
+                  immediate,
                   (BigDecimal) r.get("gross"),
                   ownerNet,
                   fee,
                   adjustment,
                   (BigDecimal) r.get("outstanding"),
-                  ownerNet.add(fee).add(adjustment));
+                  ownerNet.add(fee).add(adjustment).add(immediate));
             })
         .toList();
   }
@@ -165,7 +186,7 @@ public class CommissionQueryService {
   public Map<String, Object> courseDetail(long patientCourseId, Authentication auth) {
     Map<String, Object> course =
         db.queryForMap("SELECT * FROM patient_courses WHERE id=?", patientCourseId);
-    requireOwnRecordOrPrivileged((Number) course.get("case_owner_employee_id"), auth);
+    requireOwnCourseOrPrivileged(patientCourseId, (Number) course.get("case_owner_employee_id"), auth);
 
     List<Map<String, Object>> allocations =
         db.queryForList(
@@ -188,13 +209,18 @@ public class CommissionQueryService {
                 + " cmb.patient_course_id=scm.patient_course_id AND cmb.patient_id=scm.patient_id"
                 + " WHERE scm.patient_course_id=?",
             patientCourseId);
+    List<Map<String, Object>> splits =
+        db.queryForList(
+            "SELECT * FROM course_commission_splits WHERE patient_course_id=? ORDER BY split_order",
+            patientCourseId);
 
     return Map.of(
         "course", course,
         "allocations", allocations,
         "usages", usages,
         "adjustments", adjustments,
-        "members", members);
+        "members", members,
+        "commissionSplits", splits);
   }
 
   public List<Map<String, Object>> staffDetail(
@@ -231,6 +257,22 @@ public class CommissionQueryService {
     if (seesEveryone(auth)) return;
     Long ownStaffId = currentUser.staffId(auth);
     if (caseOwnerId == null || ownStaffId == null || caseOwnerId.longValue() != ownStaffId)
+      throw new IllegalArgumentException("Not authorized to view this course's commission detail");
+  }
+
+  private void requireOwnCourseOrPrivileged(
+      long patientCourseId, Number caseOwnerId, Authentication auth) {
+    if (seesEveryone(auth)) return;
+    Long ownStaffId = currentUser.staffId(auth);
+    if (ownStaffId == null)
+      throw new IllegalArgumentException("This account has no staff profile to report on");
+    boolean splitOwner = Boolean.TRUE.equals(db.queryForObject(
+        "SELECT EXISTS(SELECT 1 FROM course_commission_splits WHERE patient_course_id=?"
+            + " AND employee_id=?)",
+        Boolean.class,
+        patientCourseId,
+        ownStaffId));
+    if (!splitOwner && (caseOwnerId == null || caseOwnerId.longValue() != ownStaffId))
       throw new IllegalArgumentException("Not authorized to view this course's commission detail");
   }
 

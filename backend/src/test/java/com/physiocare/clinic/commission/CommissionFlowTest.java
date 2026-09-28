@@ -560,7 +560,7 @@ class CommissionFlowTest extends AbstractCommissionIntegrationTest {
             patient, branch, null, null, courseTemplate, null, null, false, seller, seller, cash,
             null, price, null, null, List.of()),
         adminAuthentication()))
-        .hasRootCauseInstanceOf(IllegalArgumentException.class)
+        .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("closed");
     assertThat(db.queryForObject(
         "SELECT count(*) FROM patient_courses WHERE seller_employee_id=? AND sale_month=?",
