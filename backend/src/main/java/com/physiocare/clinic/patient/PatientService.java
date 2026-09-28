@@ -172,8 +172,10 @@ public class PatientService {
     String like = "%" + search + "%";
     return db.queryForList(
         "SELECT " + COLUMNS
-            + " FROM patients WHERE deleted_at IS NULL AND (?='' OR hn ILIKE ? OR first_name_th"
-            + " ILIKE ? OR last_name_th ILIKE ? OR nickname ILIKE ? OR phone ILIKE ?) AND"
+            + " FROM patients WHERE deleted_at IS NULL AND (?='' OR hn ILIKE ?"
+            + " OR (COALESCE(first_name_th,'') || ' ' || COALESCE(last_name_th,'')) ILIKE ?"
+            + " OR (COALESCE(first_name_en,'') || ' ' || COALESCE(last_name_en,'')) ILIKE ?"
+            + " OR nickname ILIKE ? OR phone ILIKE ?) AND"
             + " (?::bigint IS NULL OR registered_branch_id=? OR EXISTS (SELECT 1 FROM appointments a"
             + " WHERE a.patient_id=patients.id AND a.branch_id=?) OR EXISTS (SELECT 1 FROM sales_transactions st"
             + " WHERE st.patient_id=patients.id AND st.branch_id=?) OR EXISTS (SELECT 1 FROM patient_courses pc"
@@ -198,8 +200,10 @@ public class PatientService {
     int size = PageResponse.size(requestedSize);
     int page = Math.max(requestedPage, 0);
     String like = "%" + search + "%";
-    String where = " FROM patients WHERE deleted_at IS NULL AND (?='' OR hn ILIKE ? OR first_name_th"
-        + " ILIKE ? OR last_name_th ILIKE ? OR nickname ILIKE ? OR phone ILIKE ?) AND"
+    String where = " FROM patients WHERE deleted_at IS NULL AND (?='' OR hn ILIKE ?"
+        + " OR (COALESCE(first_name_th,'') || ' ' || COALESCE(last_name_th,'')) ILIKE ?"
+        + " OR (COALESCE(first_name_en,'') || ' ' || COALESCE(last_name_en,'')) ILIKE ?"
+        + " OR nickname ILIKE ? OR phone ILIKE ?) AND"
         + " (?::bigint IS NULL OR registered_branch_id=? OR EXISTS (SELECT 1 FROM appointments a"
         + " WHERE a.patient_id=patients.id AND a.branch_id=?) OR EXISTS (SELECT 1 FROM sales_transactions st"
         + " WHERE st.patient_id=patients.id AND st.branch_id=?) OR EXISTS (SELECT 1 FROM patient_courses pc"

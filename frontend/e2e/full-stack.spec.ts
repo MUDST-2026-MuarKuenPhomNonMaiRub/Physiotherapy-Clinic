@@ -92,7 +92,46 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await expect(page.getByRole("table").getByText(uniqueName)).toBeVisible();
   */
 
+  const firstPageResponsePromise = page.waitForResponse((response) => {
+    if (!response.ok() || !response.url().includes("/api/v1/patients/page")) return false;
+    const params = new URL(response.url()).searchParams;
+    return params.get("page") === "0" && params.get("size") === "25" && !params.has("search");
+  });
   await page.goto("/patients");
+  const firstPageResponse = await firstPageResponsePromise;
+  const firstPageBody = await firstPageResponse.json();
+  expect(firstPageBody.size).toBe(25);
+  expect(firstPageBody.items.length).toBeLessThanOrEqual(25);
+
+  const searchResponsePromise = page.waitForResponse((response) => {
+    if (!response.ok() || !response.url().includes("/api/v1/patients/page")) return false;
+    return new URL(response.url()).searchParams.get("search") === uniqueName;
+  });
   await page.getByPlaceholder(/search by hn, name/i).fill(uniqueName);
+  const searchResponse = await searchResponsePromise;
+  const searchBody = await searchResponse.json();
+  expect(searchBody.totalItems).toBe(1);
+  expect(searchBody.items).toHaveLength(1);
   await expect(page.getByRole("table").getByText(uniqueName)).toBeVisible();
+
+  const noResultResponsePromise = page.waitForResponse((response) => {
+    if (!response.ok() || !response.url().includes("/api/v1/patients/page")) return false;
+    return new URL(response.url()).searchParams.get("search") === "PATIENT_SEARCH_NO_MATCH_9F8C";
+  });
+  await page.getByPlaceholder(/search by hn, name/i).fill("PATIENT_SEARCH_NO_MATCH_9F8C");
+  const noResultResponse = await noResultResponsePromise;
+  const noResultBody = await noResultResponse.json();
+  expect(noResultBody.totalItems).toBe(0);
+  expect(noResultBody.items).toHaveLength(0);
+  await expect(page.getByText("No patients found")).toBeVisible();
+
+  const clearResponsePromise = page.waitForResponse((response) => {
+    if (!response.ok() || !response.url().includes("/api/v1/patients/page")) return false;
+    return !new URL(response.url()).searchParams.has("search");
+  });
+  await page.getByPlaceholder(/search by hn, name/i).fill("");
+  const clearResponse = await clearResponsePromise;
+  const clearBody = await clearResponse.json();
+  expect(clearBody.page).toBe(0);
+  expect(clearBody.size).toBe(25);
 });

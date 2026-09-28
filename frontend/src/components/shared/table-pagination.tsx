@@ -28,11 +28,15 @@ export function TablePagination({
   page,
   totalItems,
   pageSize = DEFAULT_PAGE_SIZE,
+  hasNext,
+  hasPrevious,
   onPageChange,
 }: {
   page: number;
   totalItems: number;
   pageSize?: number;
+  hasNext?: boolean;
+  hasPrevious?: boolean;
   onPageChange: (page: number) => void;
 }) {
   const pageCount = Math.max(1, Math.ceil(totalItems / pageSize));
@@ -58,7 +62,7 @@ export function TablePagination({
           variant="outline"
           size="icon"
           className="h-8 w-8"
-          disabled={page <= 1}
+          disabled={hasPrevious ?? page <= 1}
           onClick={() => onPageChange(page - 1)}
           aria-label="Previous page"
         >
@@ -86,7 +90,7 @@ export function TablePagination({
           variant="outline"
           size="icon"
           className="h-8 w-8"
-          disabled={page >= pageCount}
+          disabled={!(hasNext ?? page < pageCount)}
           onClick={() => onPageChange(page + 1)}
           aria-label="Next page"
         >
