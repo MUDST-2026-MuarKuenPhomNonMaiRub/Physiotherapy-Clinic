@@ -1,12 +1,11 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarPlus, Plus, Search, ShoppingCart, UserRound, Loader2, RotateCcw } from "lucide-react";
+import { CalendarPlus, Plus, Search, ShoppingCart, UserRound, Loader2, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Patient } from "@/types";
 import { useSession } from "@/lib/auth/use-session";
-import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import * as api from "@/lib/api/clinic-api";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { formatDate, formatPhone, formatThaiNationalId } from "@/lib/format";
@@ -39,10 +38,11 @@ function PatientsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, activeBranchId, can } = useSession();
-  const { isAccessible } = useBranchScope();
   const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [appliedSearch, setAppliedSearch] = useState(searchParams.get("q")?.trim() ?? "");
   const [branchFilter, setBranchFilter] = useState("ALL");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const [items, setItems] = useState<Patient[]>([]);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -59,9 +59,8 @@ function PatientsPageContent() {
     setLoading(true);
     setError(null);
     try {
-      const response = await api.listPatientsPage(page, 100, requestBranchId);
-      const visible = response.items.filter((p) => isAccessible(p.registrationBranchId));
-      setItems(visible);
+      const response = await api.listPatientsPage(page, pageSize, appliedSearch, requestBranchId);
+      setItems(response.items);
       setTotalItems(response.totalItems);
       setTotalPages(response.totalPages);
       setHasNext(response.hasNext);
@@ -72,18 +71,22 @@ function PatientsPageContent() {
     } finally {
       setLoading(false);
     }
-  }, [page, requestBranchId, isAccessible]);
+  }, [appliedSearch, page, pageSize, requestBranchId]);
+
+  // Debounce search so the browser calls the backend once the user pauses typing.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAppliedSearch(query.trim());
+      setPage(0);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   // The effect synchronizes the page view with the server-side page state.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void loadPage(); }, [loadPage]);
 
-  const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return items
-      .filter((p) => !q || [p.hn, p.firstNameTh, p.lastNameTh, p.firstNameEn, p.lastNameEn, p.nickname, p.phone].some((v) => String(v ?? "").toLowerCase().includes(q)))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [items, query]);
+  const results = items;
 
   return (
     <>
@@ -94,10 +97,41 @@ function PatientsPageContent() {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative w-full max-w-md">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => { setQuery(e.target.value); setPage(0); }} placeholder="Search by HN, name, nickname or phone..." className="pl-9" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by HN, name, nickname or phone..." className="pl-9" />
         </div>
         <BranchFilterSelect value={branchFilter} onValueChange={(value) => { setBranchFilter(value); setPage(0); }} className="w-44" />
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <span>Rows</span>
+          <select
+            value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
+            className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+            aria-label="Patients per page"
+          >
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </label>
         <p className="text-sm text-muted-foreground">Page {totalPages ? page + 1 : 0} of {totalPages}</p>
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasPrevious || loading}
+            onClick={() => setPage((current) => Math.max(0, current - 1))}
+          >
+            <ChevronLeft className="h-4 w-4" /> Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!hasNext || loading}
+            onClick={() => setPage((current) => current + 1)}
+          >
+            Next <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -141,7 +175,14 @@ function PatientsPageContent() {
                   </div></TableCell>
                 </TableRow>)}</TableBody></Table>
             </div>
-            <TablePagination page={page + 1} totalItems={totalItems} onPageChange={(next) => setPage(next - 1)} />
+            <TablePagination
+              page={page + 1}
+              pageSize={pageSize}
+              totalItems={totalItems}
+              hasNext={hasNext}
+              hasPrevious={hasPrevious}
+              onPageChange={(next) => setPage(next - 1)}
+            />
           </>
         )}
       </div>

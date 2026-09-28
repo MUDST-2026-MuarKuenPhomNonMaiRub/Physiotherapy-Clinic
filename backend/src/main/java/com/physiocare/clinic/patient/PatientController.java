@@ -48,7 +48,7 @@ public class PatientController {
       @RequestParam(defaultValue = "") String search,
       @RequestParam(required = false) Long branchId,
       @RequestParam(defaultValue = "0") int page,
-      @RequestParam(defaultValue = "50") int size,
+      @RequestParam(defaultValue = "25") int size,
       Authentication authentication) {
     return service.page(search, branchId, page, size, authentication);
   }
