@@ -107,21 +107,21 @@ export function ServicePicker({
         <span aria-live="polite">{visibleServices.length}</span>
       </div>
       {visibleServices.length > 0 ? (
-        <div className="max-h-80 space-y-1 overflow-y-auto p-1">
+        <div className="max-h-80 grid-cols-1 gap-2 overflow-y-auto p-1 sm:grid sm:grid-cols-2">
           {visibleServices.map((service) => {
             const isFavorite = favoriteIds.includes(service.id);
             const isSelected = value === service.id;
             return (
-              <div key={service.id} className={`flex items-center gap-1 rounded-lg border ${isSelected ? "border-primary/40 bg-primary/5" : "border-transparent hover:bg-muted/50"}`}>
-                <button type="button" onClick={() => choose(service.id)} aria-pressed={isSelected} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-3 text-left focus-visible:outline-ring">
+              <div key={service.id} className={`flex min-h-14 items-center gap-1 rounded-lg border ${isSelected ? "border-primary/40 bg-primary/5" : "border-transparent hover:bg-muted/50"}`}>
+                <button type="button" onClick={() => choose(service.id)} aria-pressed={isSelected} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-2 text-left focus-visible:outline-ring">
                   <span className="min-w-0 flex-1">
-                    <span className="block break-words text-sm font-medium">{service.name}</span>
+                    <span className="block line-clamp-2 break-words text-sm font-medium">{service.name}</span>
                     <span className="block text-xs text-muted-foreground">{service.code || "—"} · {service.duration} min</span>
                   </span>
                   {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
                 </button>
-                <Button type="button" variant="ghost" size="icon" aria-pressed={isFavorite} aria-label={`${t(isFavorite ? "Remove from favorites" : "Add to favorites")}: ${service.name}`} title={t(isFavorite ? "Remove from favorites" : "Add to favorites")} onClick={() => toggleFavorite(service.id)} className={`mr-1 shrink-0 ${isFavorite ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground"}`}>
-                  <Star className={`h-4 w-4 ${isFavorite ? "fill-current" : ""}`} />
+                <Button type="button" variant="ghost" size="icon" aria-pressed={isFavorite} aria-label={`${t(isFavorite ? "Remove from favorites" : "Add to favorites")}: ${service.name}`} title={t(isFavorite ? "Remove from favorites" : "Add to favorites")} onClick={() => toggleFavorite(service.id)} className={`mr-0.5 h-8 w-8 shrink-0 ${isFavorite ? "text-amber-500 hover:text-amber-600" : "text-muted-foreground"}`}>
+                  <Star className={`h-3.5 w-3.5 ${isFavorite ? "fill-current" : ""}`} />
                 </Button>
               </div>
             );
