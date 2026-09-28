@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Minus, Plus, Search, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Minus, Plus, Search, X, Clock, CalendarDays } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh, searchPatients, today } from "@/lib/domain";
@@ -34,7 +34,7 @@ function addMinutes(time: string, minutes: number): string {
 function NewAppointmentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, activeBranchId } = useSession();
+  const { user, activeBranchId, can } = useSession();
   const patients = useClinicStore((s) => s.patients);
   const branches = useClinicStore((s) => s.branches);
   const staff = useClinicStore((s) => s.staff);
@@ -45,11 +45,11 @@ function NewAppointmentContent() {
   const preselectPatientId = searchParams.get("patientId");
   const [patientId, setPatientId] = useState(preselectPatientId ?? "");
   const [patientQuery, setPatientQuery] = useState("");
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("09:00");
-  const [branchId, setBranchId] = useState(activeBranchId ?? branches[0]?.id ?? "");
-  const [physioId, setPhysioId] = useState("");
+  const [date, setDate] = useState(searchParams.get("date") ?? "");
+  const [startTime, setStartTime] = useState(searchParams.get("time") ?? "09:00");
+  const [endTime, setEndTime] = useState(addMinutes(searchParams.get("time") ?? "09:00", 30));
+  const [branchId, setBranchId] = useState(searchParams.get("branchId") ?? activeBranchId ?? branches[0]?.id ?? "");
+  const [physioId, setPhysioId] = useState(searchParams.get("physioId") ?? "");
   const [serviceId, setServiceId] = useState("");
   const [resourceId, setResourceId] = useState("");
   const [note, setNote] = useState("");
@@ -60,6 +60,11 @@ function NewAppointmentContent() {
   const accessibleBranches = branches.filter((b) => user?.branchIds.includes(b.id) && b.status === "ACTIVE");
   const service = services.find((s) => s.id === serviceId);
   const branchPhysios = staff.filter((s) => s.position === "Physiotherapist" && s.status === "ACTIVE" && s.branchIds.includes(branchId));
+  const physioEmptyMessage = !branchId
+    ? "Select a branch first"
+    : staff.length === 0
+      ? "No staff have been added yet"
+      : "No active physiotherapists in this branch";
   const branchResources = resources.filter((r) => r.branchId === branchId && r.status === "ACTIVE");
 
   const patientMatches = useMemo(
@@ -91,8 +96,11 @@ function NewAppointmentContent() {
     // A visit that has already happened is recorded by moving an existing
     // appointment through its statuses, not by booking one behind today.
     else if (date < today()) e.date = "An appointment cannot be booked in the past";
-    if (!branchId) e.branchId = "Required";
-    if (!physioId) e.physioId = "Required";
+    if (!accessibleBranches.some((b) => b.id === branchId)) e.branchId = "Select a branch";
+    if (!startTime || !endTime || minutesBetween(startTime, endTime) <= 0) e.time = "End time must be after start time";
+    if (!branchPhysios.some((p) => p.id === physioId)) {
+      e.physioId = branchPhysios.length ? "Select physiotherapist" : physioEmptyMessage;
+    }
     if (!serviceId) e.serviceId = "Required";
     if (!resourceId) e.resourceId = "Required";
     setFieldErrors(e);
@@ -120,7 +128,7 @@ function NewAppointmentContent() {
     <>
       <PageHeader
         title="New Appointment"
-        description="Schedule a new patient visit"
+        description="Choose a time, select a service and preview your appointment block"
         actions={
           <Button variant="outline" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4" /> Back
@@ -128,9 +136,10 @@ function NewAppointmentContent() {
         }
       />
 
-      <form onSubmit={handleSubmit} className="max-w-2xl space-y-5 pb-10">
+      <form onSubmit={handleSubmit} className="grid items-start gap-6 pb-10 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-5">
         <Card className="relative z-20 overflow-visible">
-          <CardHeader><CardTitle className="text-base">Patient</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">1. Patient</CardTitle></CardHeader>
           <CardContent>
             {selectedPatient ? (
               <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-3 py-2.5">
@@ -175,7 +184,7 @@ function NewAppointmentContent() {
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-base">Schedule</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">2. Appointment block</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">
@@ -196,6 +205,7 @@ function NewAppointmentContent() {
                 </div>
               </div>
             </div>
+            {fieldErrors.time && <p role="alert" className="text-xs text-destructive">{fieldErrors.time}</p>}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Branch</Label>
@@ -205,20 +215,36 @@ function NewAppointmentContent() {
                     {accessibleBranches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+                {fieldErrors.branchId && <p className="text-xs text-destructive">{fieldErrors.branchId}</p>}
               </div>
               <div className="space-y-1.5">
-                <Label>Service</Label>
-                <ServicePicker services={services.filter((s) => s.status === "ACTIVE")} value={serviceId} onValueChange={selectService} />
-                {fieldErrors.serviceId && <p className="text-xs text-destructive">{fieldErrors.serviceId}</p>}
-              </div>
-              <div className="space-y-1.5">
-                <Label>Physiotherapist</Label>
+                <Label htmlFor="appointment-physiotherapist">Physiotherapist</Label>
                 <Select value={physioId} onValueChange={setPhysioId}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select physiotherapist" /></SelectTrigger>
-                  <SelectContent>
+                  <SelectTrigger
+                    id="appointment-physiotherapist"
+                    className="w-full"
+                    aria-describedby={branchPhysios.length === 0 ? "physiotherapist-help" : undefined}
+                    aria-invalid={!!fieldErrors.physioId}
+                  ><SelectValue placeholder={branchPhysios.length ? "Select physiotherapist" : physioEmptyMessage} /></SelectTrigger>
+                  <SelectContent position="popper" align="start">
                     {branchPhysios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                    {branchPhysios.length === 0 && (
+                      <SelectItem value="no-physiotherapists" disabled>{physioEmptyMessage}</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                {branchPhysios.length === 0 && (
+                  <div id="physiotherapist-help" className="space-y-1 text-xs text-muted-foreground">
+                    <p>{can("settings.manage")
+                      ? "Add an active physiotherapist and assign them to this branch."
+                      : "Ask an administrator to add an active physiotherapist to this branch."}</p>
+                    {can("settings.manage") && (
+                      <a href="/settings/staff-access" target="_blank" rel="noopener noreferrer" className="inline-block text-primary underline underline-offset-4">
+                        Manage staff (opens in a new tab)
+                      </a>
+                    )}
+                  </div>
+                )}
                 {fieldErrors.physioId && <p className="text-xs text-destructive">{fieldErrors.physioId}</p>}
               </div>
               <div className="space-y-1.5">
@@ -239,6 +265,39 @@ function NewAppointmentContent() {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">3. Choose what goes in this block</CardTitle>
+            <p className="text-sm text-muted-foreground">Search or browse a category. Selecting a service sets the duration; you can adjust it above.</p>
+          </CardHeader>
+          <CardContent>
+            <ServicePicker inline services={services.filter((s) => s.status === "ACTIVE")} value={serviceId} onValueChange={selectService} />
+            {fieldErrors.serviceId && <p role="alert" className="mt-2 text-xs text-destructive">{fieldErrors.serviceId}</p>}
+          </CardContent>
+        </Card>
+        </div>
+        <aside className="space-y-4 xl:sticky xl:top-6">
+          <Card className="overflow-hidden">
+            <CardHeader className="bg-muted/30">
+              <CardTitle className="flex items-center gap-2 text-base"><CalendarDays className="h-4 w-4" /> Block preview</CardTitle>
+              <p className="text-xs text-muted-foreground">Review before creating the appointment</p>
+            </CardHeader>
+            <CardContent className="space-y-5 pt-5">
+              <div className="rounded-xl border border-primary/20 border-l-4 border-l-primary bg-primary/5 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-primary"><Clock className="h-4 w-4" />{startTime || "—"} – {endTime || "—"}</p>
+                <p className="mt-3 font-semibold">{selectedPatient ? getPatientFullNameTh(selectedPatient) : "Select a patient"}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{service?.name ?? "Select service"}</p>
+                <p className="mt-3 text-xs text-muted-foreground">{staff.find((p) => p.id === physioId)?.name ?? "Select physiotherapist"}</p>
+              </div>
+              <dl className="space-y-3 text-sm">
+                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Date</dt><dd>{date || "—"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Branch</dt><dd className="text-right">{branches.find((b) => b.id === branchId)?.name ?? "—"}</dd></div>
+                <div className="flex justify-between gap-4"><dt className="text-muted-foreground">Room / Resource</dt><dd className="text-right">{branchResources.find((r) => r.id === resourceId)?.name ?? "—"}</dd></div>
+                <div className="flex justify-between gap-4 border-t pt-3"><dt className="text-muted-foreground">Duration</dt><dd>{Math.max(0, minutesBetween(startTime, endTime)) || 0} min</dd></div>
+              </dl>
+            </CardContent>
+          </Card>
+
         {error && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
@@ -251,6 +310,7 @@ function NewAppointmentContent() {
           <Button type="button" variant="outline" onClick={() => router.back()}>Cancel</Button>
           <Button type="submit" disabled={saving}>{saving ? "Creating…" : "Create Appointment"}</Button>
         </div>
+        </aside>
       </form>
     </>
   );

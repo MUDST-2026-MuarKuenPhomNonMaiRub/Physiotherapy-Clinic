@@ -63,6 +63,7 @@ export function AppointmentTimeGrid({
   date,
   today,
   onSelect,
+  onCreate,
 }: {
   physios: Staff[];
   appointments: Appointment[];
@@ -72,6 +73,7 @@ export function AppointmentTimeGrid({
   date: string;
   today: string;
   onSelect: (id: string) => void;
+  onCreate?: (physioId: string, time: string) => void;
 }) {
   const isToday = date === today;
   const epochMinute = useSyncExternalStore(subscribeToMinute, minuteSnapshot, serverSnapshot);
@@ -116,7 +118,7 @@ export function AppointmentTimeGrid({
             <CalendarOff className="mx-auto mb-2 h-5 w-5 text-muted-foreground" aria-hidden="true" />
             <p className="text-sm font-medium text-foreground">Nothing booked for this day</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Use New Appointment to add one, or pick another date above.
+              {onCreate ? "Click an empty time slot to add an appointment block." : "Use New Appointment to add one, or pick another date above."}
             </p>
           </div>
         </div>
@@ -194,6 +196,13 @@ export function AppointmentTimeGrid({
                       )}
                     </div>
                   ))}
+
+                  {onCreate && date >= today && Array.from({ length: (END_HOUR - START_HOUR) * 2 }, (_, slot) => {
+                    const time = `${String(START_HOUR + Math.floor(slot / 2)).padStart(2, "0")}:${slot % 2 ? "30" : "00"}`;
+                    const occupied = items.some((item) => !["CANCELLED", "RESCHEDULED", "NO_SHOW"].includes(item.status) && toMinutes(item.startTime) < toMinutes(time) + 30 && toMinutes(item.endTime) > toMinutes(time));
+                    if (occupied) return null;
+                    return <button key={time} type="button" aria-label={`Add appointment ${phy.name} ${time}`} onClick={() => onCreate(phy.id, time)} className="group absolute inset-x-1 rounded-md text-left hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-ring" style={{ top: slot * HOUR_HEIGHT / 2, height: HOUR_HEIGHT / 2 }}><span className="px-3 text-xs text-primary opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">+ {time}</span></button>;
+                  })}
 
                   {nowOffset !== null && (
                     <div

@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { TableScrollArea } from "@/components/shared/table-scroll-area";
 import { AppointmentTimeGrid } from "@/components/appointments/appointment-time-grid";
+import { ServicePicker } from "@/components/shared/service-picker";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,7 @@ function AppointmentsPageContent() {
   const resources = useClinicStore((s) => s.resources);
   const branches = useClinicStore((s) => s.branches);
 
-  const [view, setView] = useState<"list" | "calendar">(searchParams.get("view") === "calendar" ? "calendar" : "list");
+  const [view, setView] = useState<"list" | "calendar">(searchParams.get("view") === "list" ? "list" : "calendar");
   const [dateFilter, setDateFilter] = useState(view === "calendar" ? today() : "");
   const [branchFilter, setBranchFilter] = useState(activeBranchId ?? "ALL");
   const [physioFilter, setPhysioFilter] = useState("ALL");
@@ -124,13 +125,10 @@ function AppointmentsPageContent() {
             {physios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={serviceFilter} onValueChange={setServiceFilter}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Service" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Services</SelectItem>
-            {services.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <div className="flex w-64 items-center gap-1">
+          <ServicePicker services={services} value={serviceFilter === "ALL" ? "" : serviceFilter} onValueChange={setServiceFilter} placeholder="All Services" />
+          {serviceFilter !== "ALL" && <Button variant="ghost" size="sm" onClick={() => setServiceFilter("ALL")}>Clear</Button>}
+        </div>
         {view === "list" && (
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as AppointmentStatus | "ALL")}>
             <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -141,7 +139,8 @@ function AppointmentsPageContent() {
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {view === "calendar" && can("appointment.create") && <p className="mb-3 text-xs text-muted-foreground">Click an empty time slot to add an appointment block.</p>}
+      {filtered.length === 0 && view === "list" ? (
         <EmptyState icon={CalendarDays} title="No appointments found" description="Try adjusting your filters or create a new appointment." />
       ) : view === "list" ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -220,7 +219,7 @@ function AppointmentsPageContent() {
       ) : (
         <AppointmentTimeGrid
           key={dateFilter || today()}
-          physios={calendarPhysios}
+          physios={calendarPhysios.filter((p) => p.status === "ACTIVE" && p.branchIds.some(isAccessible) && (physioFilter === "ALL" || p.id === physioFilter))}
           appointments={filtered}
           patients={patients}
           services={services}
@@ -228,6 +227,13 @@ function AppointmentsPageContent() {
           date={dateFilter || today()}
           today={today()}
           onSelect={(id) => router.push(`/appointments/${id}`)}
+          onCreate={can("appointment.create") ? (physioId, time) => {
+            const physio = staff.find((p) => p.id === physioId);
+            const branchId = branchFilter !== "ALL" ? branchFilter : physio?.branchIds.find(isAccessible);
+            const params = new URLSearchParams({ date: dateFilter || today(), time, physioId });
+            if (branchId) params.set("branchId", branchId);
+            router.push(`/appointments/new?${params}`);
+          } : undefined}
         />
       )}
     </>

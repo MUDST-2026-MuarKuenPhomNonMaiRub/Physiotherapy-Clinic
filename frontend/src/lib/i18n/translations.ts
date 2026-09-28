@@ -6,6 +6,18 @@ export type Locale = "en" | "th";
  * domain values, request payloads, or API response contracts.
  */
 export const thaiTranslations: Record<string, string> = {
+  "Choose a time, select a service and preview your appointment block": "กำหนดเวลา เลือกบริการ และตรวจสอบบล็อคนัดหมาย",
+  "1. Patient": "1. ผู้ป่วย",
+  "2. Appointment block": "2. บล็อคนัดหมาย",
+  "3. Choose what goes in this block": "3. เลือกบริการในบล็อค",
+  "Search or browse a category. Selecting a service sets the duration; you can adjust it above.": "ค้นหาหรือเลือกตามประเภท ระบบกำหนดระยะเวลาตามบริการ โดยปรับเวลาได้ด้านบน",
+  "Block preview": "ตัวอย่างบล็อคนัดหมาย",
+  "Review before creating the appointment": "ตรวจสอบรายละเอียดก่อนบันทึกนัดหมาย",
+  "Frequently selected on this device": "เลือกใช้บ่อยบนเครื่องนี้",
+  "Search services": "ค้นหาบริการ",
+  "Service categories": "ประเภทบริการ",
+  "Click an empty time slot to add an appointment block.": "กดช่องเวลาว่างเพื่อเพิ่มบล็อคนัดหมาย",
+  "End time must be after start time": "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่มต้น",
   // Global navigation and shared actions
   "Overview": "ภาพรวม",
   "Calendar": "ปฏิทิน",
@@ -172,6 +184,12 @@ export const thaiTranslations: Record<string, string> = {
   "Schedule a new patient visit": "กำหนดเวลาการรักษาผู้ป่วย",
   "Schedule date": "วันที่นัดหมาย",
   "Select physiotherapist": "เลือกนักกายภาพบำบัด",
+  "Select a branch first": "กรุณาเลือกสาขาก่อน",
+  "No staff have been added yet": "ยังไม่มีข้อมูลพนักงานในระบบ",
+  "No active physiotherapists in this branch": "ยังไม่มีนักกายภาพบำบัดที่เปิดใช้งานในสาขานี้",
+  "Add an active physiotherapist and assign them to this branch.": "เพิ่มพนักงานตำแหน่งนักกายภาพบำบัด เปิดใช้งาน และกำหนดสาขานี้ให้พนักงาน",
+  "Ask an administrator to add an active physiotherapist to this branch.": "กรุณาให้ผู้ดูแลระบบเพิ่มนักกายภาพบำบัดที่เปิดใช้งานในสาขานี้",
+  "Manage staff (opens in a new tab)": "จัดการพนักงาน (เปิดในแท็บใหม่)",
   "Select room": "เลือกห้อง",
   "Select service": "เลือกบริการ",
   "No appointments": "ไม่มีนัดหมาย",
