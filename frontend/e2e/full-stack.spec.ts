@@ -76,8 +76,8 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await expect(salespersonSelect).not.toHaveText(/Select staff/i);
   await expect(caseOwnerSelect).not.toHaveText(/Owner 1/i);
   await page.getByRole("button", { name: /cash/i }).click();
-  // Use a comfortably large amount so the E2E remains valid when course catalogue prices change.
-  await page.locator("#cash-received").fill("999999999");
+  // Stay above the course price while respecting the backend's MAX_MONEY guard.
+  await page.locator("#cash-received").fill("1000000");
   await page.getByRole("button", { name: /^confirm payment$/i }).click();
   await expect(page.getByText("Payment Successful")).toBeVisible({ timeout: 10_000 });
 
