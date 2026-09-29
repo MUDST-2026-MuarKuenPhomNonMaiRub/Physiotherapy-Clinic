@@ -49,9 +49,11 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await page.getByRole("link", { name: /view patient/i }).click();
   await expect(page).toHaveURL(/\/patients\/\d+$/);
   await expect(page.getByText(uniqueName).first()).toBeVisible();
-  /* Course-commission flow is covered separately; this local smoke test focuses on patient persistence.
-  // Exercise the real course-commission entry point: select a course package,
-  // assign the seller, take payment, and verify the created transaction.
+
+  // Exercise the real course entry point and verify that the printable course
+  // slip is reachable from the database-backed course row.
+  const patientId = page.url().match(/\/patients\/(\d+)$/)?.[1];
+  expect(patientId).toBeTruthy();
   await page.goto(`/checkout?patientId=${patientId}`);
   await page.getByRole("button", { name: /course \/ package/i }).click();
   await page.getByRole("button", { name: /purchase new course/i }).click();
@@ -67,30 +69,17 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await page.getByRole("button", { name: /cash/i }).click();
   // Use a comfortably large amount so the E2E remains valid when course catalogue prices change.
   await page.locator("#cash-received").fill("999999999");
-  console.log("CHECKOUT_DEBUG", await page.getByRole("combobox").allTextContents(), await page.getByRole("button", { name: /^confirm payment$/i }).isDisabled());
   await page.getByRole("button", { name: /^confirm payment$/i }).click();
   await expect(page.getByText("Payment Successful")).toBeVisible({ timeout: 10_000 });
 
-  // Close the current month through the admin UI so the provisional pool is
-  // frozen and the course commission report can be checked end to end.
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  await page.goto("/settings/monthly-closing");
-  await page.locator('input[type="month"]').fill(currentMonth);
-  await expect(page.getByRole("button", { name: /close early/i })).toBeEnabled({ timeout: 10_000 });
-  await page.getByRole("button", { name: /close early/i }).click();
-  await page.locator("#early-close-reason").fill("E2E commission verification");
-  await page.getByRole("dialog").getByRole("button", { name: /^close early$/i }).click();
-  await expect(page.getByText(/closed commission for/i)).toBeVisible({ timeout: 10_000 });
-
-  await page.goto("/reports/course-commission");
-  await expect(page.getByText("Commission Generated")).toBeVisible();
-  await expect(page.getByText("E2E Commission Owner")).toBeVisible({ timeout: 10_000 });
-
-  await page.goto("/patients");
-  await page.getByPlaceholder(/search by hn, name/i).fill(uniqueName);
-  await expect(page.getByRole("table").getByText(uniqueName)).toBeVisible();
-  */
+  await page.goto("/courses");
+  await page.getByPlaceholder(/search patient or hn/i).fill(uniqueName);
+  await expect(page.getByText(uniqueName).first()).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("row").filter({ hasText: uniqueName }).click();
+  await expect(page).toHaveURL(/\/courses\/\d+$/);
+  await page.getByRole("link", { name: /พิมพ์ใบตัดคอร์ส/i }).click();
+  await expect(page).toHaveURL(/\/courses\/\d+\/course-slip$/);
+  await expect(page.getByRole("heading", { name: "ใบตัดคอร์สการรักษา" })).toBeVisible();
 
   const firstPageResponsePromise = page.waitForResponse((response) => {
     if (!response.ok() || !response.url().includes("/api/v1/patients/page")) return false;

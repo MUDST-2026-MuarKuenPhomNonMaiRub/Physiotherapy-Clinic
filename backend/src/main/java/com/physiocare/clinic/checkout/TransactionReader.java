@@ -220,16 +220,18 @@ public class TransactionReader {
     if (patientId == null) {
       ledgerSql =
           "SELECT e.id,e.patient_course_id,e.entry_type,e.quantity,e.balance_after,e.branch_id,"
-              + "e.related_transaction_id,e.transfer_group_id,e.counterparty_patient_id,"
-              + "e.performed_by_name,e.created_at FROM course_ledger_entries e JOIN"
+              + "e.related_transaction_id,e.related_visit_id,v.appointment_id AS related_appointment_id,"
+              + "e.transfer_group_id,e.counterparty_patient_id,"
+              + "e.performed_by_name,e.created_at FROM course_ledger_entries e LEFT JOIN visits v ON v.id=e.related_visit_id JOIN"
               + " patient_courses pc ON pc.id=e.patient_course_id WHERE (?::bigint IS NULL OR"
               + " pc.patient_id=?) AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id LIMIT ?";
       ledgerArgs = new Object[] {null, null, branchId, branchId, limit};
     } else {
       ledgerSql =
           "SELECT e.id,e.patient_course_id,e.entry_type,e.quantity,e.balance_after,e.branch_id,"
-              + "e.related_transaction_id,e.transfer_group_id,e.counterparty_patient_id,"
-              + "e.performed_by_name,e.created_at FROM course_ledger_entries e JOIN"
+              + "e.related_transaction_id,e.related_visit_id,v.appointment_id AS related_appointment_id,"
+              + "e.transfer_group_id,e.counterparty_patient_id,"
+              + "e.performed_by_name,e.created_at FROM course_ledger_entries e LEFT JOIN visits v ON v.id=e.related_visit_id JOIN"
               + " patient_courses pc ON pc.id=e.patient_course_id JOIN course_member_balances cmb"
               + " ON cmb.patient_course_id=e.patient_course_id WHERE cmb.patient_id=?"
               + " AND (?::bigint IS NULL OR pc.branch_id=?) ORDER BY e.id LIMIT ?";

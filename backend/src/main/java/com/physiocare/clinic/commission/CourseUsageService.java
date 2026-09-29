@@ -141,10 +141,12 @@ public class CourseUsageService {
         patientId);
     Map<String, Object> updated = lockCourse(patientCourseId);
 
+    Long visitId = resolveVisitId(transactionId, appointmentId);
+
     long ledgerEntryId =
         db.queryForObject(
             "INSERT INTO course_ledger_entries(patient_course_id,entry_type,quantity,balance_after,"
-                + "branch_id,related_transaction_id,performed_by_name,created_by) VALUES(?,?,?,?,?,?,?,?)"
+                + "branch_id,related_transaction_id,related_visit_id,performed_by_name,created_by) VALUES(?,?,?,?,?,?,?,?,?)"
                 + " RETURNING id",
             Long.class,
             patientCourseId,
@@ -153,6 +155,7 @@ public class CourseUsageService {
             CheckoutService.remaining(updated),
             branchId,
             transactionId,
+            visitId,
             performedByName,
             performedByUserId);
 
@@ -175,8 +178,6 @@ public class CourseUsageService {
     CourseCommissionSplitService.UsageSplit split =
         splitService.assignUsage(patientCourseId, treatingId, quantity);
     long ownerId = split == null ? caseOwnerId : split.employeeId();
-    Long visitId = resolveVisitId(transactionId, appointmentId);
-
     String commissionStatus =
         split == null ? (String) course.get("commission_status") : split.commissionStatus();
     boolean everAllocatable = "PROVISIONAL".equals(commissionStatus) || "LOCKED".equals(commissionStatus);

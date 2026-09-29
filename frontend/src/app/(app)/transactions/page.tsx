@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { getPatientFullNameTh, localDate, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh, localDate } from "@/lib/domain";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -52,7 +53,7 @@ const typeLabel: Record<TransactionType, string> = {
 
 export default function TransactionsPage() {
   const router = useRouter();
-  const { activeBranchId, can } = useSession();
+  const { activeBranchId, user, can } = useSession();
   const { isAccessible } = useBranchScope();
   const transactions = useClinicStore((s) => s.transactions);
   const patients = useClinicStore((s) => s.patients);
@@ -69,9 +70,11 @@ export default function TransactionsPage() {
   const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
 
+  const searchBranchId = branchFilter !== "ALL" ? branchFilter : (user?.role === "ADMIN" ? undefined : activeBranchId ?? user?.branchIds[0]);
+  const { items: patientSearchMatches } = usePatientSearch(query, searchBranchId, 1000);
   const matchingPatientIds = useMemo(
-    () => (query ? new Set(searchPatients(query, patients).map((p) => p.id)) : null),
-    [query, patients]
+    () => query ? new Set(patientSearchMatches.map((p) => p.id)) : null,
+    [patientSearchMatches, query]
   );
 
   const filtered = useMemo(() => {

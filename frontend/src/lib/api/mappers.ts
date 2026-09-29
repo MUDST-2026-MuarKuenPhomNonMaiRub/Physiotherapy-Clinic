@@ -360,6 +360,8 @@ export function toLedgerEntry(row: Row): CourseLedgerEntry {
     branchId: row.branch_id == null ? "" : id(row.branch_id),
     relatedTransactionId:
       row.related_transaction_id == null ? undefined : id(row.related_transaction_id),
+    relatedAppointmentId:
+      row.related_appointment_id == null ? undefined : id(row.related_appointment_id),
     transferGroupId: row.transfer_group_id == null ? undefined : str(row.transfer_group_id),
     transferCounterpartyPatientId:
       row.counterparty_patient_id == null ? undefined : id(row.counterparty_patient_id),

@@ -6,7 +6,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRightLeft, HandCoins, Printer, Search, UsersRound } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh } from "@/lib/domain";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { remainingSessions } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
@@ -47,7 +48,7 @@ type CourseCommissionDetail = {
 
 export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { can, user } = useSession();
+  const { can, user, activeBranchId } = useSession();
   const patients = useClinicStore((s) => s.patients);
   const branches = useClinicStore((s) => s.branches);
   const patientCourses = useClinicStore((s) => s.patientCourses);
@@ -85,9 +86,11 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   const rem = remainingSessions(pc);
   const total = pc.purchased + pc.bonus + pc.transferIn;
 
-  const matches = query ? searchPatients(query, patients).filter((p) => p.id !== pc.patientId).slice(0, 6) : [];
+  const { items: transferSearchMatches } = usePatientSearch(query, pc.branchId || activeBranchId);
+  const matches = transferSearchMatches.filter((p) => p.id !== pc.patientId);
   const toPatient = patients.find((p) => p.id === toPatientId);
-  const memberMatches = memberQuery ? searchPatients(memberQuery, patients).filter((p) => p.id !== pc.patientId).slice(0, 6) : [];
+  const { items: memberSearchMatches } = usePatientSearch(memberQuery, pc.branchId || activeBranchId);
+  const memberMatches = memberSearchMatches.filter((p) => p.id !== pc.patientId);
   const memberPatient = patients.find((p) => p.id === memberPatientId);
 
   useEffect(() => {

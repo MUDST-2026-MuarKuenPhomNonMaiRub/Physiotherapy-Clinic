@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useClinicStore } from "@/lib/store/clinic-store";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh } from "@/lib/domain";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
+import { useSession } from "@/lib/auth/use-session";
 import { formatDate } from "@/lib/format";
 import { addDays, remainingSessions, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
@@ -15,13 +17,16 @@ import { AlertTriangle, Ticket, Search } from "lucide-react";
 
 export default function CourseBalanceReportPage() {
   const patients = useClinicStore((s) => s.patients);
+  const { user, activeBranchId } = useSession();
   const patientCourses = useClinicStore((s) => s.patientCourses);
   const courseTemplates = useClinicStore((s) => s.courseTemplates);
   const [query, setQuery] = useState("");
 
+  const searchBranchId = user?.role === "ADMIN" ? undefined : activeBranchId ?? user?.branchIds[0];
+  const { items: patientSearchMatches } = usePatientSearch(query, searchBranchId, 1000);
   const matchingPatientIds = useMemo(
-    () => (query ? new Set(searchPatients(query, patients).map((p) => p.id)) : null),
-    [query, patients]
+    () => query ? new Set(patientSearchMatches.map((p) => p.id)) : null,
+    [patientSearchMatches, query]
   );
 
   const rows = useMemo(

@@ -1,11 +1,12 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Minus, Plus, Search, X, Clock, CalendarDays } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getPatientFullNameTh, searchPatients, today } from "@/lib/domain";
+import { getPatientFullNameTh, today } from "@/lib/domain";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageLoading } from "@/components/shared/page-loading";
 import { Button } from "@/components/ui/button";
@@ -67,10 +68,7 @@ function NewAppointmentContent() {
       : "No active physiotherapists in this branch";
   const branchResources = resources.filter((r) => r.branchId === branchId && r.status === "ACTIVE");
 
-  const patientMatches = useMemo(
-    () => (patientQuery ? searchPatients(patientQuery, patients).slice(0, 6) : []),
-    [patientQuery, patients]
-  );
+  const { items: patientMatches, loading: patientSearchLoading } = usePatientSearch(patientQuery, branchId);
   const selectedPatient = patients.find((p) => p.id === patientId);
 
   function selectService(nextServiceId: string) {
@@ -162,6 +160,7 @@ function NewAppointmentContent() {
                     className="pl-9"
                   />
                 </div>
+                {patientSearchLoading && <p className="mt-2 text-xs text-muted-foreground">Searching patients…</p>}
                 {patientMatches.length > 0 && (
                   <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-lg border border-border bg-popover shadow-lg ring-1 ring-black/5">
                     {patientMatches.map((p) => (

@@ -20,9 +20,10 @@ import {
 import { toast } from "sonner";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh } from "@/lib/domain";
 import { formatCurrency, formatCurrencySigned, formatDate } from "@/lib/format";
 import { remainingSessions, today } from "@/lib/domain";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { PageHeader } from "@/components/shared/page-header";
 import { PageLoading } from "@/components/shared/page-loading";
 import { Button } from "@/components/ui/button";
@@ -127,10 +128,7 @@ function CheckoutContent() {
   const [adjustmentSeq, setAdjustmentSeq] = useState(1);
 
   const patient = patients.find((p) => p.id === patientId);
-  const patientMatches = useMemo(
-    () => (patientQuery ? searchPatients(patientQuery, patients).slice(0, 6) : []),
-    [patientQuery, patients]
-  );
+  const { items: patientMatches, loading: patientSearchLoading } = usePatientSearch(patientQuery, branchId);
   const readyForCheckout = useMemo(
     () =>
       appointments
@@ -499,6 +497,7 @@ function CheckoutContent() {
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input value={patientQuery} onChange={(e) => setPatientQuery(e.target.value)} placeholder="Search HN, name or phone..." className="pl-9" autoFocus />
               </div>
+              {patientSearchLoading && <p className="mt-2 text-xs text-muted-foreground">Searching patients…</p>}
               {patientMatches.length > 0 && (
                 <div className="mt-2 overflow-hidden rounded-lg border border-border">
                   {patientMatches.map((p) => (

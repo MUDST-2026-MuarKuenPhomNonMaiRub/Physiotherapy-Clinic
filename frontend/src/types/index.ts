@@ -185,6 +185,7 @@ export interface CourseLedgerEntry {
   balanceAfter: number;
   branchId: string;
   relatedTransactionId?: string;
+  relatedAppointmentId?: string;
   transferGroupId?: string;
   transferCounterpartyPatientId?: string;
   performedBy: string; // staff name

@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { Search, Ticket } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh } from "@/lib/domain";
+import { useSession } from "@/lib/auth/use-session";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { formatDate } from "@/lib/format";
 import { remainingSessions } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
@@ -27,6 +29,7 @@ import type { PatientCourseStatus } from "@/types";
 export default function CoursesPage() {
   const router = useRouter();
   const { isAccessible } = useBranchScope();
+  const { user, activeBranchId } = useSession();
   const patients = useClinicStore((s) => s.patients);
   const patientCourses = useClinicStore((s) => s.patientCourses);
   const courseTemplates = useClinicStore((s) => s.courseTemplates);
@@ -37,9 +40,11 @@ export default function CoursesPage() {
   const [statusFilter, setStatusFilter] = useState<PatientCourseStatus | "ALL">("ALL");
   const [page, setPage] = useState(1);
 
+  const searchBranchId = branchFilter !== "ALL" ? branchFilter : (user?.role === "ADMIN" ? undefined : activeBranchId ?? user?.branchIds[0]);
+  const { items: patientSearchMatches } = usePatientSearch(query, searchBranchId, 1000);
   const matchingPatientIds = useMemo(
-    () => (query ? new Set(searchPatients(query, patients).map((p) => p.id)) : null),
-    [query, patients]
+    () => query ? new Set(patientSearchMatches.map((p) => p.id)) : null,
+    [patientSearchMatches, query]
   );
 
   const rows = useMemo(() => {

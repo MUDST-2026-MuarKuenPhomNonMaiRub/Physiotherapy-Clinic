@@ -28,33 +28,12 @@ export default function CourseSlipPage({ params }: { params: Promise<{ id: strin
   const treatmentEntries = courseLedger
     .filter((entry) => entry.patientCourseId === id && entry.type === "TREATMENT")
     .sort((left, right) => left.date.localeCompare(right.date));
-  const unmatchedCourseAppointments = appointments
-    .filter((appointment) => appointment.usedPatientCourseId === id && appointment.status === "COMPLETED")
-    .sort((left, right) => `${left.date}T${left.startTime}`.localeCompare(`${right.date}T${right.startTime}`));
-
   const rows: CourseSlipRow[] = treatmentEntries.map((entry) => {
       const transaction = transactions.find((item) => item.id === entry.relatedTransactionId);
-      let appointment = transaction?.appointmentId
-        ? appointments.find((item) => item.id === transaction.appointmentId)
+      const appointmentId = entry.relatedAppointmentId ?? transaction?.appointmentId;
+      const appointment = appointmentId
+        ? appointments.find((item) => item.id === appointmentId)
         : undefined;
-
-      if (appointment) {
-        const matchedIndex = unmatchedCourseAppointments.findIndex((item) => item.id === appointment?.id);
-        if (matchedIndex >= 0) unmatchedCourseAppointments.splice(matchedIndex, 1);
-      } else if (unmatchedCourseAppointments.length > 0) {
-        const treatmentTime = new Date(entry.date).getTime();
-        let closestIndex = 0;
-        let closestDistance = Number.POSITIVE_INFINITY;
-        unmatchedCourseAppointments.forEach((item, index) => {
-          const appointmentTime = new Date(`${item.date}T${item.startTime}:00+07:00`).getTime();
-          const distance = Math.abs(treatmentTime - appointmentTime);
-          if (distance < closestDistance) {
-            closestIndex = index;
-            closestDistance = distance;
-          }
-        });
-        [appointment] = unmatchedCourseAppointments.splice(closestIndex, 1);
-      }
 
       const patientId = transaction?.patientId ?? appointment?.patientId ?? patientCourse.patientId;
       const therapistId = transaction?.treatingStaffId ?? appointment?.physiotherapistId;

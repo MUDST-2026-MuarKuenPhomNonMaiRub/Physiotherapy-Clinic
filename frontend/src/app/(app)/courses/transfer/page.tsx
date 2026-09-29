@@ -6,7 +6,8 @@ import { ArrowLeftRight, ArrowRight, Search, Ticket } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { getPatientFullNameTh, searchPatients } from "@/lib/domain";
+import { getPatientFullNameTh } from "@/lib/domain";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { remainingSessions } from "@/lib/domain";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
@@ -30,7 +31,7 @@ import { toast } from "sonner";
 type Step = "closed" | "source" | "target" | "review";
 
 export default function CoursesTransferPage() {
-  const { user, can } = useSession();
+  const { user, activeBranchId, can } = useSession();
   const { isAccessible } = useBranchScope();
   const patients = useClinicStore((s) => s.patients);
   const branches = useClinicStore((s) => s.branches);
@@ -85,15 +86,13 @@ export default function CoursesTransferPage() {
   const totalSessions = history.reduce((s, r) => s + r.sessions, 0);
 
   // --- transfer wizard -----------------------------------------------------
-  const sourceMatches = sourceQuery ? searchPatients(sourceQuery, patients).slice(0, 6) : [];
+  const searchBranchId = branchFilter !== "ALL" ? branchFilter : (user?.role === "ADMIN" ? undefined : activeBranchId ?? user?.branchIds[0]);
+  const { items: sourceMatches } = usePatientSearch(sourceQuery, searchBranchId);
   const sourceCourse = patientCourses.find((p) => p.id === sourceCourseId && p.patientId === p.ownerPatientId);
   const sourcePatient = sourceCourse ? patients.find((p) => p.id === sourceCourse.patientId) : undefined;
   const sourceRemaining = sourceCourse ? remainingSessions(sourceCourse) : 0;
-  const targetMatches = targetQuery
-    ? searchPatients(targetQuery, patients)
-        .filter((p) => p.id !== sourceCourse?.patientId)
-        .slice(0, 6)
-    : [];
+  const { items: targetSearchMatches } = usePatientSearch(targetQuery, searchBranchId);
+  const targetMatches = targetSearchMatches.filter((p) => p.id !== sourceCourse?.patientId);
   const targetPatient = patients.find((p) => p.id === targetPatientId);
 
   // Only the buyer can pass sessions on; someone who received sessions holds
