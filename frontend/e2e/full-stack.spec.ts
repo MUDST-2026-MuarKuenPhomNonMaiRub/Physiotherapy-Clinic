@@ -59,13 +59,18 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await page.getByRole("button", { name: /purchase new course/i }).click();
   await page.getByRole("button", { name: /sessions/i }).first().click();
   await expect(page.getByLabel("Charged price")).toBeVisible();
-  // Select a salesperson explicitly from the populated salesperson selector.
+  // Course purchase requires both a salesperson and at least one case owner.
+  // Keep the selectors explicit: the two comboboxes are different fields even
+  // though both are populated from the staff table.
   const staffSelects = page.getByRole("combobox");
-  const salespersonSelect = staffSelects.last();
+  const salespersonSelect = staffSelects.nth(0);
+  const caseOwnerSelect = staffSelects.nth(1);
   await salespersonSelect.click();
-  await expect(page.getByRole("option").first()).toBeVisible();
-  await page.getByRole("option").last().click();
+  await page.getByRole("option", { name: "E2E Commission Owner" }).click();
+  await caseOwnerSelect.click();
+  await page.getByRole("option", { name: "E2E Commission Owner" }).click();
   await expect(salespersonSelect).not.toHaveText(/Select staff/i);
+  await expect(caseOwnerSelect).not.toHaveText(/Owner 1/i);
   await page.getByRole("button", { name: /cash/i }).click();
   // Use a comfortably large amount so the E2E remains valid when course catalogue prices change.
   await page.locator("#cash-received").fill("999999999");
