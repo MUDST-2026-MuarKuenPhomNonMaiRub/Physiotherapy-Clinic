@@ -78,10 +78,11 @@ test.describe("critical browser access", () => {
     await page.getByRole("button", { name: /new role/i }).click();
 
     const code = `E2E_${Date.now()}`;
-    await page.getByPlaceholder("FINANCE").fill(code);
-    await page.getByPlaceholder("Finance").fill("E2E Test Role");
-    await page.getByRole("checkbox").first().check();
-    await page.getByRole("button", { name: /create role/i }).click();
+    const roleDialog = page.getByRole("dialog");
+    await roleDialog.locator('input[placeholder="FINANCE"]').fill(code);
+    await roleDialog.locator('input[placeholder="Finance"]').fill("E2E Test Role");
+    await roleDialog.getByRole("checkbox").first().check();
+    await roleDialog.getByRole("button", { name: /create role/i }).click();
 
     await expect(page.getByText("E2E Test Role")).toBeVisible();
   });
