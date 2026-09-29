@@ -60,15 +60,19 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await page.getByRole("button", { name: /sessions/i }).first().click();
   await expect(page.getByLabel("Charged price")).toBeVisible();
   // Course purchase requires both a salesperson and at least one case owner.
-  // Keep the selectors explicit: the two comboboxes are different fields even
-  // though both are populated from the staff table.
-  const staffSelects = page.getByRole("combobox");
-  const salespersonSelect = staffSelects.nth(0);
-  const caseOwnerSelect = staffSelects.nth(1);
+  // Scope each trigger by its placeholder so a future branch/filter combobox
+  // cannot silently change which field this test fills.
+  const salespersonSelect = page.locator('button[role="combobox"]').filter({ hasText: "Select staff" });
+  const caseOwnerSelect = page.locator('button[role="combobox"]').filter({ hasText: "Owner 1" });
+  await expect(salespersonSelect).toBeVisible();
+  await expect(caseOwnerSelect).toBeVisible();
   await salespersonSelect.click();
-  await page.getByRole("option", { name: "E2E Commission Owner" }).click();
+  const commissionOwnerOption = page.getByRole("option", { name: "E2E Commission Owner", exact: true });
+  await expect(commissionOwnerOption).toBeVisible();
+  await commissionOwnerOption.click();
   await caseOwnerSelect.click();
-  await page.getByRole("option", { name: "E2E Commission Owner" }).click();
+  await expect(commissionOwnerOption).toBeVisible();
+  await commissionOwnerOption.click();
   await expect(salespersonSelect).not.toHaveText(/Select staff/i);
   await expect(caseOwnerSelect).not.toHaveText(/Owner 1/i);
   await page.getByRole("button", { name: /cash/i }).click();
