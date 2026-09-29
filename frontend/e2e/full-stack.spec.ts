@@ -62,8 +62,8 @@ test("real backend flow registers a patient and shows it in the database-backed 
   // Course purchase requires both a salesperson and at least one case owner.
   // Locate the triggers from their field labels, not their current text: a
   // logged-in staff account may legitimately preselect itself.
-  const salespersonSelect = page.locator("label").filter({ hasText: "Salesperson" }).locator("..").getByRole("combobox");
-  const caseOwnerSelect = page.locator("label").filter({ hasText: "Case Owners" }).locator("..").locator("..").getByRole("combobox").first();
+  const salespersonSelect = page.getByRole("combobox", { name: "Salesperson" });
+  const caseOwnerSelect = page.getByRole("combobox", { name: "Case Owner 1" });
   await expect(salespersonSelect).toBeVisible();
   await expect(caseOwnerSelect).toBeVisible();
   await salespersonSelect.click();

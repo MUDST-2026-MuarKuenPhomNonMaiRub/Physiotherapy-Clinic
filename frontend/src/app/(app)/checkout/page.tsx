@@ -887,7 +887,7 @@ function CheckoutContent() {
                     <Label>Salesperson <span className="text-destructive">*</span></Label>
                     <p className="text-xs text-muted-foreground">Required only when purchasing a course package.</p>
                     <Select value={salespersonId} onValueChange={changeSalesperson}>
-                      <SelectTrigger className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
+                      <SelectTrigger aria-label="Salesperson" className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
                       <SelectContent>
                         {branchSales.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
@@ -920,7 +920,7 @@ function CheckoutContent() {
                             value={split.employeeId}
                             onValueChange={(value) => updateCommissionSplit(split.id, { employeeId: value })}
                           >
-                            <SelectTrigger className="w-full"><SelectValue placeholder={`Owner ${index + 1}`} /></SelectTrigger>
+                            <SelectTrigger aria-label={`Case Owner ${index + 1}`} className="w-full"><SelectValue placeholder={`Owner ${index + 1}`} /></SelectTrigger>
                             <SelectContent>
                               {branchPhysios.map((physio) => (
                                 <SelectItem key={physio.id} value={physio.id}>{physio.name}</SelectItem>
