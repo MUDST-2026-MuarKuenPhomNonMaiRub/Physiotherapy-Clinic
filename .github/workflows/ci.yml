@@ -112,24 +112,18 @@ jobs:
       - name: Seed a commission-eligible staff profile for E2E
         run: |
           docker compose exec -T postgres psql -U physiocare -d physiocare -v ON_ERROR_STOP=1 -c "
-            -- The bootstrap admin already owns the only staff row allowed for
-            -- that user. Reuse that row in CI so the test has a branch-scoped
-            -- physiotherapist without violating staff.user_id uniqueness.
-            UPDATE staff
-            SET name = 'E2E Commission Owner',
-                name_en = 'E2E Commission Owner',
-                position = 'Physiotherapist',
-                phone = '0812345678',
-                email = 'admin.e2e@example.com',
-                branch_ids = '[1]',
-                status = 'ACTIVE'
-            WHERE user_id = (SELECT id FROM users WHERE email = 'admin.e2e@example.com');
-
+            -- Keep the login used by Playwright as a pure admin account. The
+            -- commission owner is a separate staff profile without a login,
+            -- so the checkout dropdown has a deterministic option without
+            -- changing the admin's staff identity or branch scope.
             INSERT INTO staff (name, name_en, position, phone, email, branch_ids, status, user_id)
-            SELECT 'E2E Commission Owner', 'E2E Commission Owner', 'Physiotherapist', '0812345678', 'admin.e2e@example.com', '[1]', 'ACTIVE', u.id
-            FROM users u
-            WHERE u.email = 'admin.e2e@example.com'
-              AND NOT EXISTS (SELECT 1 FROM staff s WHERE s.user_id = u.id);
+            SELECT 'E2E Commission Owner', 'E2E Commission Owner', 'Physiotherapist', '0812345678',
+                   'e2e-commission-owner@example.com', '[1]', 'ACTIVE', NULL
+            WHERE NOT EXISTS (
+              SELECT 1 FROM staff
+              WHERE email = 'e2e-commission-owner@example.com'
+                AND deleted_at IS NULL
+            );
           "
 
       - name: Run full-stack E2E flow

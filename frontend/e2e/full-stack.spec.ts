@@ -60,10 +60,10 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await page.getByRole("button", { name: /sessions/i }).first().click();
   await expect(page.getByLabel("Charged price")).toBeVisible();
   // Course purchase requires both a salesperson and at least one case owner.
-  // Scope each trigger by its placeholder so a future branch/filter combobox
-  // cannot silently change which field this test fills.
-  const salespersonSelect = page.locator('button[role="combobox"]').filter({ hasText: "Select staff" });
-  const caseOwnerSelect = page.locator('button[role="combobox"]').filter({ hasText: "Owner 1" });
+  // Locate the triggers from their field labels, not their current text: a
+  // logged-in staff account may legitimately preselect itself.
+  const salespersonSelect = page.locator("label").filter({ hasText: "Salesperson" }).locator("..").getByRole("combobox");
+  const caseOwnerSelect = page.locator("label").filter({ hasText: "Case Owners" }).locator("..").locator("..").getByRole("combobox").first();
   await expect(salespersonSelect).toBeVisible();
   await expect(caseOwnerSelect).toBeVisible();
   await salespersonSelect.click();
