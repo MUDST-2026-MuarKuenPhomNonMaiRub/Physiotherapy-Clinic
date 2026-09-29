@@ -83,7 +83,10 @@ test("real backend flow registers a patient and shows it in the database-backed 
 
   await page.goto("/courses");
   await page.getByPlaceholder(/search patient or hn/i).fill(uniqueName);
-  await expect(page.getByText(uniqueName).first()).toBeVisible({ timeout: 10_000 });
+  // The course table has a mobile card list that remains mounted but hidden
+  // at desktop widths. Scope the assertion to the visible desktop table so
+  // Playwright does not select the hidden mobile duplicate first.
+  await expect(page.getByRole("table").getByText(uniqueName).first()).toBeVisible({ timeout: 10_000 });
   await page.getByRole("row").filter({ hasText: uniqueName }).click();
   await expect(page).toHaveURL(/\/courses\/\d+$/);
   await page.getByRole("link", { name: /พิมพ์ใบตัดคอร์ส/i }).click();
