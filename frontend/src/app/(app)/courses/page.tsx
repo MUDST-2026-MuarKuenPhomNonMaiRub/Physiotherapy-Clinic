@@ -1,19 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Ticket } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { useSession } from "@/lib/auth/use-session";
-import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { formatDate } from "@/lib/format";
 import { remainingSessions } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
-import { TablePagination, paginate, usePageReset } from "@/components/shared/table-pagination";
+import { TablePagination, usePageReset } from "@/components/shared/table-pagination";
+import { listPatientCoursesPage } from "@/lib/api/clinic-api";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,14 +24,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { PatientCourseStatus } from "@/types";
+import type { PatientCourse, PatientCourseStatus } from "@/types";
 
 export default function CoursesPage() {
   const router = useRouter();
   const { isAccessible } = useBranchScope();
   const { user, activeBranchId } = useSession();
   const patients = useClinicStore((s) => s.patients);
-  const patientCourses = useClinicStore((s) => s.patientCourses);
   const courseTemplates = useClinicStore((s) => s.courseTemplates);
 
   const [query, setQuery] = useState("");
@@ -39,31 +38,54 @@ export default function CoursesPage() {
   const [courseFilter, setCourseFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<PatientCourseStatus | "ALL">("ALL");
   const [page, setPage] = useState(1);
+  const [serverRows, setServerRows] = useState<PatientCourse[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
 
   const searchBranchId = branchFilter !== "ALL" ? branchFilter : (user?.role === "ADMIN" ? undefined : activeBranchId ?? user?.branchIds[0]);
-  const { items: patientSearchMatches } = usePatientSearch(query, searchBranchId, 1000);
-  const matchingPatientIds = useMemo(
-    () => query ? new Set(patientSearchMatches.map((p) => p.id)) : null,
-    [patientSearchMatches, query]
-  );
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void listPatientCoursesPage(
+        page - 1,
+        10,
+        query,
+        searchBranchId,
+        courseFilter === "ALL" ? "" : courseFilter,
+        statusFilter === "ALL" ? "" : statusFilter,
+      ).then((response) => {
+        if (cancelled) return;
+        setServerRows(response.items);
+        setTotalItems(response.totalItems);
+        setHasNext(response.hasNext);
+        setHasPrevious(response.hasPrevious);
+      }).catch(() => {
+        if (!cancelled) {
+          setServerRows([]);
+          setTotalItems(0);
+          setHasNext(false);
+          setHasPrevious(false);
+        }
+      });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [courseFilter, page, query, searchBranchId, statusFilter]);
 
   const rows = useMemo(() => {
-    return patientCourses
-      .filter((pc) => !matchingPatientIds || matchingPatientIds.has(pc.patientId))
+    return serverRows
       .filter((pc) => (branchFilter === "ALL" ? isAccessible(pc.branchId) : pc.branchId === branchFilter))
-      .filter((pc) => courseFilter === "ALL" || pc.courseId === courseFilter)
-      .filter((pc) => statusFilter === "ALL" || pc.status === statusFilter)
       .map((pc) => ({
         pc,
         patient: patients.find((p) => p.id === pc.patientId),
         template: courseTemplates.find((c) => c.id === pc.courseId),
       }))
       .sort((a, b) => b.pc.purchaseDate.localeCompare(a.pc.purchaseDate));
-  }, [patientCourses, matchingPatientIds, branchFilter, courseFilter, statusFilter, patients, courseTemplates, isAccessible]);
+  }, [serverRows, branchFilter, patients, courseTemplates, isAccessible]);
 
   usePageReset(`${query}|${branchFilter}|${courseFilter}|${statusFilter}`, setPage);
 
-  const pageRows = paginate(rows, page);
+  const pageRows = rows;
 
   return (
     <>
@@ -91,7 +113,7 @@ export default function CoursesPage() {
             <SelectItem value="USED_UP">Used Up</SelectItem>
           </SelectContent>
         </Select>
-        <p className="ml-auto text-sm text-muted-foreground">{rows.length} courses</p>
+        <p className="ml-auto text-sm text-muted-foreground">{totalItems} courses</p>
       </div>
 
       {rows.length === 0 ? (
@@ -182,7 +204,7 @@ export default function CoursesPage() {
               </TableBody>
             </Table>
           </div>
-          <TablePagination page={page} totalItems={rows.length} onPageChange={setPage} />
+          <TablePagination page={page} pageSize={10} totalItems={totalItems} hasNext={hasNext} hasPrevious={hasPrevious} onPageChange={setPage} />
         </div>
       )}
     </>

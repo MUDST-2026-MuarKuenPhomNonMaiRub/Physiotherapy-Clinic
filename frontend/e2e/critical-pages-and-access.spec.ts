@@ -71,6 +71,21 @@ test.describe("critical browser access", () => {
     await expect(page.getByRole("button", { name: /new role/i })).toBeVisible();
   });
 
+  test("admin can create a role with a selected permission", async ({ page }) => {
+    await signIn(page);
+    await page.goto("/settings/staff-access");
+    await page.getByRole("button", { name: /manage roles.*permissions/i }).click();
+    await page.getByRole("button", { name: /new role/i }).click();
+
+    const code = `E2E_${Date.now()}`;
+    await page.getByPlaceholder("FINANCE").fill(code);
+    await page.getByPlaceholder("Finance").fill("E2E Test Role");
+    await page.getByRole("checkbox").first().check();
+    await page.getByRole("button", { name: /create role/i }).click();
+
+    await expect(page.getByText("E2E Test Role")).toBeVisible();
+  });
+
   test("direct navigation to an administration route requires authentication", async ({ page }) => {
     await page.goto("/settings/monthly-closing");
     await expect(page).toHaveURL(/\/login$/);

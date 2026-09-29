@@ -83,4 +83,18 @@ public class CheckoutController {
     branches.requireFilter(authentication, branchId);
     return reader.courseLedger(patientId, branchId, Math.min(Math.max(limit, 1), 1000));
   }
+
+  @GetMapping("/patient-courses/page")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.view', 'course.use', 'checkout.create')")
+  public PageResponse<Map<String, Object>> coursePage(
+      @RequestParam(required = false) Long branchId,
+      @RequestParam(defaultValue = "") String search,
+      @RequestParam(defaultValue = "") String courseId,
+      @RequestParam(defaultValue = "") String status,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "10") int size,
+      Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
+    return reader.coursePage(branchId, search, courseId, status, page, size);
+  }
 }

@@ -243,6 +243,38 @@ public class TransactionReader {
     return result;
   }
 
+  /** Server-side page for the course-balance directory. */
+  public PageResponse<Map<String, Object>> coursePage(
+      Long branchId, String search, String courseId, String status, int requestedPage, int requestedSize) {
+    int size = PageResponse.size(requestedSize);
+    int page = Math.max(requestedPage, 0);
+    String like = "%" + search.trim() + "%";
+    String where = " FROM patient_courses pc JOIN course_member_balances cmb"
+        + " ON cmb.patient_course_id=pc.id JOIN patients p ON p.id=cmb.patient_id"
+        + " WHERE (?::bigint IS NULL OR pc.branch_id=?)"
+        + " AND (?='' OR p.hn ILIKE ? OR COALESCE(p.first_name_th,'') || ' ' || COALESCE(p.last_name_th,'') ILIKE ?"
+        + " OR COALESCE(p.first_name_en,'') || ' ' || COALESCE(p.last_name_en,'') ILIKE ?"
+        + " OR COALESCE(p.nickname,'') ILIKE ? OR COALESCE(p.phone,'') ILIKE ?)"
+        + " AND (?='' OR CAST(pc.course_id AS text)=?)"
+        + " AND (?='' OR pc.status=?)";
+    Object[] args = {branchId, branchId, search.trim(), like, like, like, like, like,
+        courseId, courseId, status, status};
+    long total = db.queryForObject("SELECT count(*)" + where, Long.class, args);
+    List<Map<String, Object>> rows = db.queryForList(
+        "SELECT pc.id,pc.course_id,cmb.patient_id,pc.patient_id AS owner_patient_id,pc.package_id,"
+            + "pc.package_name_snapshot,pc.sale_date,pc.valid_until,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.total_visits ELSE 0 END AS total_visits,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.bonus_visits ELSE 0 END AS bonus_visits,"
+            + "cmb.used_visits AS visits_used,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN 0 ELSE cmb.allocated_visits END AS transfer_in_visits,"
+            + "CASE WHEN cmb.patient_id=pc.patient_id THEN pc.transfer_out_visits ELSE 0 END AS transfer_out_visits,"
+            + "pc.branch_id,pc.status" + where
+            + " ORDER BY pc.id DESC, (cmb.patient_id=pc.patient_id) DESC, cmb.patient_id LIMIT ? OFFSET ?",
+        branchId, branchId, search.trim(), like, like, like, like, like,
+        courseId, courseId, status, status, size, PageResponse.offset(page, size));
+    return PageResponse.of(rows, page, size, total);
+  }
+
   private static Long asLong(Object value) {
     return value == null ? null : ((Number) value).longValue();
   }

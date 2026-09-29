@@ -814,6 +814,20 @@ export const listPatientCourses = (branchId?: string | null, limit = 1000): Prom
     courseLedger: response.ledger.map(toLedgerEntry),
   }));
 
+export const listPatientCoursesPage = async (
+  page = 0,
+  size = 10,
+  search = "",
+  branchId?: string | null,
+  courseId = "",
+  status = ""
+): Promise<PageResult<PatientCourse>> => {
+  const response = await apiRequest<PageResponse<Row>>(
+    `/api/v1/patient-courses/page${query({ branchId, search, courseId, status, page, size })}`
+  );
+  return { ...response, items: response.items.map(toPatientCourse) };
+};
+
 export const listPatientCoursesFor = async (scope: BranchScope): Promise<CourseSnapshot> => {
   if (scope === null) return listPatientCourses();
   const parts = await Promise.all(scope.map((branchId) => listPatientCourses(branchId)));
