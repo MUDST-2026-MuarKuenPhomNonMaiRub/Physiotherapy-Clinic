@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, LogOut, Search } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
@@ -22,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 
 const labelMap: Record<string, string> = {
   calendar: "Calendar",
@@ -185,19 +186,27 @@ export function AppHeader() {
         <Breadcrumb className="hidden md:block">
           <BreadcrumbList className="flex-nowrap overflow-hidden">
             <BreadcrumbItem className="hidden shrink-0 xl:inline-flex">
-              <BreadcrumbPage className="text-muted-foreground">LA BALANCE</BreadcrumbPage>
+              <BreadcrumbLink asChild>
+                <Link href="/calendar">LA BALANCE</Link>
+              </BreadcrumbLink>
             </BreadcrumbItem>
             {segments.map((seg, i) => (
-              <span key={i} className="flex min-w-0 items-center gap-1.5">
+              <Fragment key={i}>
                 <BreadcrumbSeparator className={i === 0 ? "hidden xl:block" : undefined} />
                 <BreadcrumbItem className="min-w-0">
-                  <BreadcrumbPage
-                    className={`truncate ${i === segments.length - 1 ? "font-medium text-foreground" : "text-muted-foreground"}`}
-                  >
-                    {humanize(seg)}
-                  </BreadcrumbPage>
+                  {i === segments.length - 1 ? (
+                    <BreadcrumbPage className="truncate font-medium text-foreground">
+                      {humanize(seg)}
+                    </BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink asChild className="truncate">
+                      <Link href={`/${segments.slice(0, i + 1).join("/")}`}>
+                        {humanize(seg)}
+                      </Link>
+                    </BreadcrumbLink>
+                  )}
                 </BreadcrumbItem>
-              </span>
+              </Fragment>
             ))}
           </BreadcrumbList>
         </Breadcrumb>
