@@ -5,7 +5,12 @@
  * the counter.
  */
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+/**
+ * An empty value is deliberate: the production build sets it to "" so requests
+ * go to the page's own origin, where Caddy hands /api to the backend. Only an
+ * unset variable falls back to the local API.
+ */
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export class ApiError extends Error {
   readonly status: number;
