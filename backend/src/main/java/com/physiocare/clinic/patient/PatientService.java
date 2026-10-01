@@ -4,6 +4,7 @@ import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.common.InputRules;
 import com.physiocare.clinic.common.PageResponse;
+import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.nio.charset.StandardCharsets;
@@ -30,12 +31,15 @@ public class PatientService {
   private final BranchAccessService branches;
   private final CurrentUser currentUser;
   private final PiiCryptoService pii;
+  private final GoogleCalendarSyncService calendarSync;
 
-  public PatientService(JdbcTemplate db, BranchAccessService branches, CurrentUser currentUser, PiiCryptoService pii) {
+  public PatientService(JdbcTemplate db, BranchAccessService branches, CurrentUser currentUser, PiiCryptoService pii,
+      GoogleCalendarSyncService calendarSync) {
     this.db = db;
     this.branches = branches;
     this.currentUser = currentUser;
     this.pii = pii;
+    this.calendarSync = calendarSync;
   }
 
   private static final String COLUMNS =
@@ -277,6 +281,8 @@ public class PatientService {
     } catch (DuplicateKeyException e) {
       throw duplicatePatient(e);
     }
+    // Upcoming calendar events show the nickname (or HN).
+    calendarSync.detailChanged(GoogleCalendarSyncService.EventDetail.PATIENT, id);
     return get(id, authentication);
   }
 

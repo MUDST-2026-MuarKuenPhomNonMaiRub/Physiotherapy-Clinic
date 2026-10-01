@@ -1,6 +1,7 @@
 package com.physiocare.clinic.catalog;
 
 import com.physiocare.clinic.common.InputRules;
+import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import java.math.BigDecimal;
@@ -17,9 +18,11 @@ import org.springframework.web.bind.annotation.*;
 @Service
 public class CatalogService {
   private final JdbcTemplate db;
+  private final GoogleCalendarSyncService calendarSync;
 
-  public CatalogService(JdbcTemplate db) {
+  public CatalogService(JdbcTemplate db, GoogleCalendarSyncService calendarSync) {
     this.db = db;
+    this.calendarSync = calendarSync;
   }
 
   public record ServiceRequest(
@@ -133,6 +136,8 @@ public class CatalogService {
             r.active(),
             id);
     if (rows == 0) throw new IllegalArgumentException("Service not found");
+    // Upcoming calendar events show the service name and are coloured by its type.
+    calendarSync.detailChanged(GoogleCalendarSyncService.EventDetail.SERVICE, id);
     return service(id);
   }
 

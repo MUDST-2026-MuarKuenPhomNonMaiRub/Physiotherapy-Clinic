@@ -16,6 +16,7 @@ public record AppointmentEventSource(
     String hn,
     String nickname,
     String serviceName,
+    String serviceType,
     String roomName,
     String branchName,
     String branchAddress,

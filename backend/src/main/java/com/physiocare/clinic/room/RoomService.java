@@ -1,6 +1,7 @@
 package com.physiocare.clinic.room;
 
 import com.physiocare.clinic.common.BranchAccessService;
+import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
@@ -18,10 +19,12 @@ import org.springframework.web.bind.annotation.*;
 public class RoomService {
   private final JdbcTemplate db;
   private final BranchAccessService branches;
+  private final GoogleCalendarSyncService calendarSync;
 
-  public RoomService(JdbcTemplate db, BranchAccessService branches) {
+  public RoomService(JdbcTemplate db, BranchAccessService branches, GoogleCalendarSyncService calendarSync) {
     this.db = db;
     this.branches = branches;
+    this.calendarSync = calendarSync;
   }
 
   public record RoomRequest(
@@ -68,6 +71,8 @@ public class RoomService {
             r.active(),
             id);
     if (rows == 0) throw new IllegalArgumentException("Room not found");
+    // Upcoming calendar events show the room name.
+    calendarSync.detailChanged(GoogleCalendarSyncService.EventDetail.ROOM, id);
     return room(id);
   }
 

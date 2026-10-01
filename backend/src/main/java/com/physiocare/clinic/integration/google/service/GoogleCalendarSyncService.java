@@ -91,6 +91,31 @@ public class GoogleCalendarSyncService {
     pushAfterCommit();
   }
 
+  /** What an event shows besides the appointment itself, and the appointment column that links to it. */
+  public enum EventDetail {
+    PATIENT("patient_id"),
+    SERVICE("service_id"),
+    ROOM("room_id"),
+    BRANCH("branch_id");
+
+    private final String appointmentColumn;
+
+    EventDetail(String appointmentColumn) {
+      this.appointmentColumn = appointmentColumn;
+    }
+  }
+
+  /**
+   * An event carries the patient's nickname and the service, room and branch
+   * names, none of which an appointment change touches. When one of those is
+   * edited, the upcoming events that show it are pushed again. Called by
+   * the editing service after it has written the change.
+   */
+  @Transactional
+  public void detailChanged(EventDetail detail, long id) {
+    if (outbox.requeueUpcomingBy(detail.appointmentColumn, id) > 0) pushAfterCommit();
+  }
+
   /** Everything still to come for a newly connected therapist. */
   @Transactional
   public int backfill(long staffId) {

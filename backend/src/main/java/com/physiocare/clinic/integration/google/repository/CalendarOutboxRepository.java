@@ -50,6 +50,24 @@ public class CalendarOutboxRepository {
         staffId);
   }
 
+  /**
+   * Re-pushes the events still on a calendar (or still to be placed) whose
+   * appointment points at the given row — e.g. every upcoming visit of a
+   * patient whose nickname changed. {@code column} is one of a fixed set of
+   * appointment columns chosen by {@link
+   * com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService},
+   * never caller input.
+   */
+  public int requeueUpcomingBy(String column, long id) {
+    return db.update(
+        "UPDATE appointment_calendar_events e SET sync_status='PENDING', attempts=0,"
+            + " next_attempt_at=now(), updated_at=now() FROM appointments a"
+            + " WHERE a.id=e.appointment_id AND a." + column + "=?"
+            + " AND e.pending_action='UPSERT' AND e.sync_status<>'DELETED'"
+            + " AND a.ends_at >= now() - interval '1 day'",
+        id);
+  }
+
   public void requeue(long appointmentId) {
     db.update(
         "UPDATE appointment_calendar_events SET sync_status='PENDING', attempts=0, next_attempt_at=now(),"
