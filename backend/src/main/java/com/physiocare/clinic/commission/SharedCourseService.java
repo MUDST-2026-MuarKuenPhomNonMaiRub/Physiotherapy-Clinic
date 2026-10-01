@@ -31,7 +31,9 @@ public class SharedCourseService {
   @Transactional
   public void addMember(long patientCourseId, long newPatientId, int visitsFromOwner, Long actorUserId, String reason) {
     Map<String, Object> course =
-        db.queryForMap("SELECT patient_id FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
+        db.queryForMap(
+            "SELECT patient_id,status,valid_until FROM patient_courses WHERE id=? FOR UPDATE", patientCourseId);
+    CourseUsageService.requireSpendable(course, java.time.LocalDate.now(), "shared");
     long ownerPatientId = ((Number) course.get("patient_id")).longValue();
     if (ownerPatientId == newPatientId)
       throw new IllegalArgumentException("That patient already owns this course");

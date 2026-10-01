@@ -107,16 +107,7 @@ public class CourseUsageService {
     }
 
     Map<String, Object> course = lockCourse(patientCourseId);
-    // The member balance alone is not enough: a voided or refunded course
-    // keeps its balance rows, and an expired course is only marked EXPIRED
-    // lazily, so both are checked here at the moment a session is spent.
-    if (!"ACTIVE".equals(course.get("status")))
-      throw new IllegalArgumentException(
-          "This course is " + String.valueOf(course.get("status")).toLowerCase().replace('_', ' ')
-              + " and cannot be used");
-    java.sql.Date validUntil = (java.sql.Date) course.get("valid_until");
-    if (validUntil != null && validUntil.toLocalDate().isBefore(usageDate))
-      throw new IllegalArgumentException("This course expired on " + validUntil.toLocalDate());
+    requireSpendable(course, usageDate, "used");
     Map<String, Object> balance;
     try {
       balance =
@@ -209,6 +200,23 @@ public class CourseUsageService {
       allocationService.allocate(usageId);
     }
     return usageId;
+  }
+
+  /**
+   * Whether sessions can still leave this course — spent, transferred or
+   * shared. The member balance alone is not enough: a voided or refunded
+   * course keeps its balance rows, and an expired course is only marked
+   * EXPIRED lazily, so both are checked against the locked row at the moment
+   * sessions move.
+   */
+  public static void requireSpendable(Map<String, Object> course, LocalDate on, String action) {
+    if (!"ACTIVE".equals(course.get("status")))
+      throw new IllegalArgumentException(
+          "This course is " + String.valueOf(course.get("status")).toLowerCase().replace('_', ' ')
+              + " and cannot be " + action);
+    java.sql.Date validUntil = (java.sql.Date) course.get("valid_until");
+    if (validUntil != null && validUntil.toLocalDate().isBefore(on))
+      throw new IllegalArgumentException("This course expired on " + validUntil.toLocalDate());
   }
 
   private Map<String, Object> lockCourse(long id) {

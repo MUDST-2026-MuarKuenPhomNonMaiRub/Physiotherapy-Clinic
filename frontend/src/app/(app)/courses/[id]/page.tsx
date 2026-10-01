@@ -9,7 +9,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
-import { remainingSessions } from "@/lib/domain";
+import { isCourseSpendable, remainingSessions } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
@@ -175,12 +175,12 @@ function CourseDetailContent({ params }: { params: Promise<{ id: string }> }) {
                 </Link>
               </Button>
             )}
-            {can("course.transfer") && pc.status === "ACTIVE" && rem > 0 && (
+            {can("course.transfer") && isCourseSpendable(pc) && rem > 0 && (
               <Button variant="outline" onClick={openTransfer}>
                 <ArrowRightLeft className="h-4 w-4" /> Transfer Course
               </Button>
             )}
-            {pc.status === "ACTIVE" && rem > 0 && can("course.share") && <Button variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Share</Button>}
+            {isCourseSpendable(pc) && rem > 0 && can("course.share") && <Button variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Share</Button>}
             {can("commission.adjust") && rem > 0 && <Button variant="outline" onClick={() => { setRefundOpen(true); setRefundVisits(1); setRefundReason(""); }}><HandCoins className="h-4 w-4" /> Refund Unused</Button>}
           </div>
         }

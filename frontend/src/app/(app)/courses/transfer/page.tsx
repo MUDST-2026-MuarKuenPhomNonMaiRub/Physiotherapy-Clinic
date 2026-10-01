@@ -8,7 +8,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { usePatientSearch } from "@/lib/hooks/use-patient-search";
-import { remainingSessions } from "@/lib/domain";
+import { isCourseSpendable, remainingSessions } from "@/lib/domain";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -103,7 +103,7 @@ export default function CoursesTransferPage() {
       (pc) =>
         pc.patientId === patientId &&
         pc.ownerPatientId === patientId &&
-        pc.status === "ACTIVE" &&
+        isCourseSpendable(pc) &&
         remainingSessions(pc) > 0
     );
   }
