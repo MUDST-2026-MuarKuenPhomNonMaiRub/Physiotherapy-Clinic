@@ -227,7 +227,10 @@ public class GoogleCalendarSyncService {
       connections.clearError(row.staffId());
     } catch (GoogleApiException e) {
       if (e.unauthorised()) connections.forgetAccessToken(row.staffId());
-      fail(row, e.getMessage(), e.permanent());
+      // A grant without the calendar permission (connected before that was
+      // checked) needs the person to reconnect; say so instead of Google's wording.
+      fail(row, e.missingScope() ? GoogleCalendarConnectionService.CALENDAR_NOT_ALLOWED : e.getMessage(),
+          e.permanent());
     } catch (RuntimeException e) {
       log.warn("Google Calendar push failed for appointment {}", appointmentId, e);
       fail(row, e.getMessage() == null ? e.toString() : e.getMessage(), false);

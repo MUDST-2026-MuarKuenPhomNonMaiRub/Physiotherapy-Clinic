@@ -33,7 +33,12 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class GoogleCalendarConnectionService {
   /** Enough to write events; "email" so the linked address can be shown. */
-  static final String SCOPES = "https://www.googleapis.com/auth/calendar.events openid email";
+  static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+  static final String SCOPES = CALENDAR_SCOPE + " openid email";
+  /** Shown when the calendar permission was not granted, at connect time or on a later push. */
+  public static final String CALENDAR_NOT_ALLOWED =
+      "LA BALANCE was not allowed to add events to your Google Calendar. Connect again and, on"
+          + " Google's permission page, tick the box to see and edit events on your calendars.";
   private static final long STATE_TTL_SECONDS = 600;
 
   private record CachedToken(String accessToken, Instant expiresAt) {}
@@ -111,6 +116,14 @@ public class GoogleCalendarConnectionService {
       throw new IllegalArgumentException(
           "Google did not grant offline access. Remove LA BALANCE from your Google account's"
               + " third-party access and connect again.");
+    // Google's consent page lists each permission as a checkbox. Signing in
+    // without ticking the calendar one still returns a working grant — for
+    // the email only — and every push would then fail with 403. Refuse it
+    // here, where the person can still fix it, and give the grant back.
+    if (!tokens.grants(CALENDAR_SCOPE)) {
+      google.revoke(tokens.refreshToken());
+      throw new IllegalArgumentException(CALENDAR_NOT_ALLOWED);
+    }
     String email = null;
     try {
       email = google.email(tokens.accessToken());

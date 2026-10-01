@@ -77,6 +77,40 @@ class GoogleCalendarSyncTest extends AbstractCommissionIntegrationTest {
   }
 
   @Test
+  void aGrantWithoutTheCalendarPermissionIsRefusedAndGivenBack() {
+    // On Google's consent page each permission is a checkbox; leaving the
+    // calendar one unticked still returns a grant, for the email only.
+    long staffId = seedStaff("Dr Unticked");
+    long userId = seedActorUserId();
+    when(google.exchangeCode("email-only")).thenReturn(
+        new GoogleTokens("access-2", "refresh-2", 3600, "openid https://www.googleapis.com/auth/userinfo.email"));
+    Matcher state = Pattern.compile("state=([A-Za-z0-9_-]+)")
+        .matcher(connections.authorizationUrl(staffId, userId));
+    assertThat(state.find()).isTrue();
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> connections.completeConnection(state.group(1), "email-only"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("tick the box");
+    verify(google).revoke("refresh-2");
+    assertThat(connections.status(staffId).connected()).isFalse();
+  }
+
+  @Test
+  void aGrantThatListsTheCalendarPermissionConnects() {
+    long staffId = seedStaff("Dr Ticked");
+    long userId = seedActorUserId();
+    when(google.exchangeCode("all-ticked")).thenReturn(new GoogleTokens("access-3", "refresh-3", 3600,
+        "openid https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email"));
+    Matcher state = Pattern.compile("state=([A-Za-z0-9_-]+)")
+        .matcher(connections.authorizationUrl(staffId, userId));
+    assertThat(state.find()).isTrue();
+
+    assertThat(connections.completeConnection(state.group(1), "all-ticked")).isEqualTo(staffId);
+    assertThat(connections.status(staffId).connected()).isTrue();
+  }
+
+  @Test
   void aBookingReachesGoogleWithoutThePatientsFullNameOrPhone() {
     long staffId = seedStaff("Dr Push");
     long patientId = seedPatient("Somchai");
