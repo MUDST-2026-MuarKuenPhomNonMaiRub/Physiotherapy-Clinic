@@ -11,12 +11,11 @@ export default function RootPage() {
   const router = useRouter();
   const hasHydrated = useClinicStore((s) => s.hasHydrated);
   const user = useClinicStore((s) => s.session.user);
-  const accessToken = useClinicStore((s) => s.session.accessToken);
   const logout = useClinicStore((s) => s.logout);
 
   useEffect(() => {
     if (!hasHydrated) return;
-    if (!user || !accessToken) {
+    if (!user) {
       router.replace("/login");
       return;
     }
@@ -35,7 +34,7 @@ export default function RootPage() {
     return () => {
       active = false;
     };
-  }, [hasHydrated, user, accessToken, logout, router]);
+  }, [hasHydrated, user, logout, router]);
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">

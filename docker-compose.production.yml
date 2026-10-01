@@ -23,6 +23,9 @@ services:
       DATABASE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       DATABASE_USERNAME: ${POSTGRES_USER}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Served over HTTPS by Caddy: the session cookie is always Secure here,
+      # whatever a copied .env says.
+      APP_COOKIE_SECURE: "true"
     expose:
       - "8080"
     depends_on:

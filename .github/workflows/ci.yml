@@ -67,6 +67,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run browser E2E smoke tests
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
         run: |
           npm run start -- --hostname 127.0.0.1 &
           for i in {1..30}; do curl -fsS http://127.0.0.1:3000/login >/dev/null && break; sleep 1; done
@@ -150,7 +152,8 @@ jobs:
       - name: Run full-stack E2E flow
         working-directory: frontend
         env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          # Same site as the API (localhost:8080), so the session cookie is sent.
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
           E2E_ADMIN_EMAIL: admin.e2e@example.com
           E2E_ADMIN_PASSWORD: AdminE2E!123456
         run: npx playwright test e2e/full-stack.spec.ts e2e/critical-pages-and-access.spec.ts

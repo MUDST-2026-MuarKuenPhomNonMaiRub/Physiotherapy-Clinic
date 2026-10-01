@@ -38,6 +38,30 @@ and staff accounts.
 
 Frontend: http://localhost:3000 · API: http://localhost:8080
 
+### Demo data
+
+To fill every screen on a fresh local database (about three months of visits,
+receipts, courses and commission closings, plus today's schedule and the next
+two weeks of bookings):
+
+```bash
+python3 database/seed/seed-demo.py
+```
+
+It goes through the API, so balances and commission are the app's own figures.
+It refuses to run once patients, appointments, receipts or staff exist. The
+demo therapists sign in as `ploy`, `fah`, `tee`, `mint` or `beam` `.demo@example.com`
+with the password it stores in `.env` as `DEMO_STAFF_PASSWORD`. Never run it
+against a shared or production database.
+
+Open the app at `http://localhost:3000`, not `127.0.0.1:3000`. The sign-in
+session is an HttpOnly, SameSite=Strict cookie issued by the API at
+`localhost:8080`, and the browser only sends it between pages of the same site.
+Page script never sees the token (it is not in `localStorage`), so a cross-site
+scripting bug cannot carry a session off. Signing out asks the API to expire the
+cookie. Locally `APP_COOKIE_SECURE=false` lets it travel over plain http; the
+production compose file always sets it back to `true`.
+
 To stop the application without deleting data:
 
 ```bash

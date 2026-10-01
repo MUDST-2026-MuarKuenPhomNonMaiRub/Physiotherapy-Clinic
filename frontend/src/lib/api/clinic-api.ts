@@ -2,7 +2,7 @@
  * Every clinic endpoint the app talks to, returning domain types rather than
  * wire shapes. Screens never see a raw API row.
  */
-import { API_URL, apiRequest } from "./client";
+import { apiRequest } from "./client";
 import {
   toAppointment,
   toBranch,
@@ -130,25 +130,23 @@ async function forBranches<T>(
 }
 
 export interface LoginResult {
-  accessToken: string;
   user: AppUser;
 }
 
 export async function login(email: string, password: string): Promise<LoginResult> {
-  const session = await apiRequest<{ accessToken: string; tokenType: string }>(
-    "/api/v1/auth/login",
-    { method: "POST", body: { email, password }, anonymous: true }
-  );
+  // The API answers with an HttpOnly session cookie; there is no token to keep.
+  await apiRequest<{ expiresIn: number }>("/api/v1/auth/login", {
+    method: "POST",
+    body: { email, password },
+    anonymous: true,
+  });
 
-  // The profile is fetched with the token login just issued, before the store
-  // has had a chance to record it.
-  const profile = await fetchMe(session.accessToken);
+  const profile = await apiRequest<MeResponse>("/api/v1/auth/me", { anonymous: true });
   // The backend now orders roles with the highest-privilege one first, but
   // picking ADMIN explicitly when present costs nothing and keeps this
   // correct even if that ordering ever regresses.
   const role = primaryRole(profile.roles);
   return {
-    accessToken: session.accessToken,
     user: {
       id: String(profile.id),
       username: profile.email,
@@ -186,16 +184,12 @@ interface MeResponse {
   branchIds: number[];
 }
 
-async function fetchMe(accessToken: string): Promise<MeResponse> {
-  const response = await fetch(`${API_URL}/api/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok) throw new Error("Unable to load your profile");
-  return (await response.json()) as MeResponse;
-}
-
-/** Re-reads the signed-in account, used after a refresh restores a saved token. */
+/** Re-reads the signed-in account, used after a refresh to check the session cookie. */
 export const me = () => apiRequest<MeResponse>("/api/v1/auth/me");
+
+/** Page script cannot delete an HttpOnly cookie, so the API expires it. */
+export const logout = () =>
+  apiRequest<void>("/api/v1/auth/logout", { method: "POST", anonymous: true });
 
 export interface ConfiguredRole { id: number; code: string; name: string; permissions: string[] }
 export interface ConfiguredPermission { id: number; code: string; name: string }
@@ -1008,11 +1002,16 @@ export interface ClinicSnapshot {
 }
 
 /**
- * One round of loading for the whole app. The user list is admin-only, so a
- * physiotherapist simply gets an empty one rather than a failed sign-in, and
- * the branch-scoped lists are read for the branches they are assigned to.
+ * One round of loading for the whole app. The user list is admin-only and the
+ * commission rules need settings access, so a physiotherapist simply gets
+ * empty ones rather than a failed sign-in, and the branch-scoped lists are
+ * read for the branches they are assigned to.
  */
-export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promise<ClinicSnapshot> {
+export async function loadSnapshot(
+  isAdmin: boolean,
+  scope: BranchScope,
+  canManageSettings = isAdmin
+): Promise<ClinicSnapshot> {
   const [
     branches,
     staff,
@@ -1032,7 +1031,7 @@ export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promis
     listPaymentMethods(),
     listResourcesFor(scope),
     listMasterData(),
-    listCommissionRules(),
+    canManageSettings ? listCommissionRules() : Promise.resolve([]),
   ]);
 
   return {

@@ -37,7 +37,8 @@ public class AuthService {
     this.db = db;
   }
 
-  public AuthDtos.LoginResponse login(AuthDtos.LoginRequest request) {
+  /** Checks the credentials and returns the signed session token for the cookie. */
+  public String login(AuthDtos.LoginRequest request) {
     String email = request.email().trim().toLowerCase();
     Integer blocked = db.queryForObject("SELECT count(*) FROM login_rate_limits WHERE email=? AND blocked_until > now()", Integer.class, email);
     if (blocked != null && blocked > 0) {
@@ -54,8 +55,7 @@ public class AuthService {
 
     AppUser user = users.findByEmailIgnoreCaseAndDeletedAtIsNull(email).orElseThrow();
     db.update("UPDATE users SET last_login=now() WHERE id=?", user.getId());
-    return new AuthDtos.LoginResponse(
-        jwt.generateToken(user), "Bearer", jwt.getExpirationMs() / 1000);
+    return jwt.generateToken(user);
   }
 
   public AuthDtos.MeResponse me(String email) {

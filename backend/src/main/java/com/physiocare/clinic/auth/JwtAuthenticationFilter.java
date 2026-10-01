@@ -13,10 +13,13 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
   private final JwtService jwt;
   private final CustomUserDetailsService users;
+  private final AuthCookies cookies;
 
-  public JwtAuthenticationFilter(JwtService jwt, CustomUserDetailsService users) {
+  public JwtAuthenticationFilter(
+      JwtService jwt, CustomUserDetailsService users, AuthCookies cookies) {
     this.jwt = jwt;
     this.users = users;
+    this.cookies = cookies;
   }
 
   @Override
@@ -25,11 +28,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
       jakarta.servlet.http.HttpServletResponse response,
       FilterChain chain)
       throws ServletException, IOException {
-    String header = request.getHeader("Authorization");
+    // The session is read only from the HttpOnly cookie set at login.
+    String token = cookies.read(request).orElse(null);
 
-    if (header != null && header.startsWith("Bearer ")) {
-      String token = header.substring(7);
-
+    if (token != null) {
       if (jwt.isValid(token) && SecurityContextHolder.getContext().getAuthentication() == null) {
         try {
           UserDetails details = users.loadUserByUsername(jwt.subject(token));

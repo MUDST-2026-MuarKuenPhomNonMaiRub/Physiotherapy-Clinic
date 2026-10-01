@@ -1,7 +1,8 @@
 /**
- * The single door to the clinic API. Every request carries the signed-in
- * session's bearer token, and every failure arrives as an ApiError whose
- * message is safe to show at the counter.
+ * The single door to the clinic API. The signed-in session is an HttpOnly
+ * cookie the browser attaches by itself — page script never holds the token —
+ * and every failure arrives as an ApiError whose message is safe to show at
+ * the counter.
  */
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -14,17 +15,6 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = status;
   }
-}
-
-/**
- * Set once the session is known. Reading the token through a getter rather than
- * importing the store keeps this module free of a cycle: the store imports the
- * API, not the other way round.
- */
-let tokenReader: () => string | null = () => null;
-
-export function setTokenReader(reader: () => string | null) {
-  tokenReader = reader;
 }
 
 /** Called when the API rejects the token, so the app can send the user back to sign in. */
@@ -45,11 +35,8 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, anonymous = false } = options;
-  const token = anonymous ? null : tokenReader();
-
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
-  if (token) headers.Authorization = `Bearer ${token}`;
 
   let response: Response;
   const controller = new AbortController();
@@ -59,6 +46,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      // The API is another origin in development; send the session cookie to it.
+      credentials: "include",
       signal: controller.signal,
     });
   } catch (error) {
