@@ -7,8 +7,19 @@ import { Forbidden } from "@/components/shared/forbidden";
 import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh, remainingSessions } from "@/lib/domain";
 import { useClinicStore } from "@/lib/store/clinic-store";
+import { RecordGate } from "@/components/shared/record-gate";
 
 export default function CourseSlipPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const found = useClinicStore((s) => s.patientCourses.some((item) => item.id === id));
+  return (
+    <RecordGate found={found} title="Course not found" backHref="/courses" backLabel="Back to Patient Courses">
+      <CourseSlipContent params={params} />
+    </RecordGate>
+  );
+}
+
+function CourseSlipContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { can } = useSession();
   const patients = useClinicStore((state) => state.patients);

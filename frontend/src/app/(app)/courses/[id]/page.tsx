@@ -27,6 +27,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { addSharedCourseMember, getCourseCommissionDetail, listSharedCourseMembers, refundRemainingVisits, removeSharedCourseMember } from "@/lib/api/clinic-api";
 import type { LedgerEntryType, SharedCourseMember } from "@/types";
+import { RecordGate } from "@/components/shared/record-gate";
 
 const ledgerTypeLabel: Record<LedgerEntryType, string> = {
   PURCHASE: "Purchase",
@@ -48,6 +49,16 @@ type CourseCommissionDetail = {
 };
 
 export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const found = useClinicStore((s) => s.patientCourses.some((item) => item.id === id));
+  return (
+    <RecordGate found={found} title="Course not found" backHref="/courses" backLabel="Back to Patient Courses">
+      <CourseDetailContent params={params} />
+    </RecordGate>
+  );
+}
+
+function CourseDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { can, user, activeBranchId } = useSession();
   const patients = useClinicStore((s) => s.patients);

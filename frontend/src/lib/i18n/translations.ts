@@ -1080,6 +1080,7 @@ export const thaiTranslations: Record<string, string> = {
   "Appointment not found": "ไม่พบนัดหมาย",
   "Transaction not found": "ไม่พบรายการชำระเงิน",
   "Course not found": "ไม่พบคอร์ส",
+  "It may have been removed, or it belongs to a branch you cannot see.": "อาจถูกลบไปแล้ว หรืออยู่ในสาขาที่คุณไม่มีสิทธิ์เข้าถึง",
   "Service not found": "ไม่พบบริการ",
   "Branch not found": "ไม่พบสาขา",
   "Room not found": "ไม่พบห้อง",

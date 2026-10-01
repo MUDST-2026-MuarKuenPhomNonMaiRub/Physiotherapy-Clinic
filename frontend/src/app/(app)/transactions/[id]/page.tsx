@@ -32,8 +32,19 @@ import {
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { RecordGate } from "@/components/shared/record-gate";
 
 export default function TransactionDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const found = useClinicStore((s) => s.transactions.some((item) => item.id === id));
+  return (
+    <RecordGate found={found} title="Transaction not found" backHref="/transactions" backLabel="Back to Transactions">
+      <TransactionDetailContent params={params} />
+    </RecordGate>
+  );
+}
+
+function TransactionDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { can, user } = useSession();
   const transactions = useClinicStore((s) => s.transactions);

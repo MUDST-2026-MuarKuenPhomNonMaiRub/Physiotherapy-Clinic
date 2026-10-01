@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import { RecordGate } from "@/components/shared/record-gate";
 
 const bloodGroups = ["A", "B", "AB", "O"];
 
@@ -50,6 +51,16 @@ interface FormState {
 }
 
 export default function EditPatientPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const found = useClinicStore((s) => s.patients.some((item) => item.id === id));
+  return (
+    <RecordGate found={found} title="Patient not found" backHref="/patients" backLabel="Back to Patients">
+      <EditPatientContent params={params} />
+    </RecordGate>
+  );
+}
+
+function EditPatientContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { can } = useSession();

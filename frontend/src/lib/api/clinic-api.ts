@@ -984,6 +984,12 @@ export const retryAppointmentCalendarSync = (appointmentId: string) =>
 
 // ------------------------------------------------------------ full hydration
 
+/**
+ * The reference data every screen needs. Patients, courses, visits and
+ * transactions are not part of it: refreshOperational loads those after the
+ * shell is visible, and a refresh leaves the ones already on screen in place
+ * until it does.
+ */
 export interface ClinicSnapshot {
   branches: Branch[];
   staff: Staff[];
@@ -994,11 +1000,6 @@ export interface ClinicSnapshot {
   resources: ResourceRoom[];
   masterData: MasterDataItem[];
   commissionRules: CommissionRule[];
-  patients: Patient[];
-  patientCourses: PatientCourse[];
-  courseLedger: CourseLedgerEntry[];
-  appointments: Appointment[];
-  transactions: Transaction[];
 }
 
 /**
@@ -1044,13 +1045,5 @@ export async function loadSnapshot(
     resources,
     masterData,
     commissionRules,
-    // Operational collections are loaded after the shell is visible. This
-    // keeps login latency and the initial browser heap independent of the
-    // number of patients, visits and transactions in the clinic.
-    patients: [],
-    patientCourses: [],
-    courseLedger: [],
-    appointments: [],
-    transactions: [],
   };
 }
