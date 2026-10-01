@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import type { AppointmentStatus } from "@/types";
 import { toast } from "sonner";
+import { RecordGate } from "@/components/shared/record-gate";
 
 const stepOrder: AppointmentStatus[] = ["CONFIRMED", "ARRIVED", "IN_SERVICE", "COMPLETED"];
 const stepLabels: Record<string, string> = {
@@ -47,6 +48,16 @@ const stepLabels: Record<string, string> = {
 };
 
 export default function AppointmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const found = useClinicStore((s) => s.appointments.some((item) => item.id === id));
+  return (
+    <RecordGate found={found} title="Appointment not found" backHref="/appointments" backLabel="Back to Appointments">
+      <AppointmentDetailContent params={params} />
+    </RecordGate>
+  );
+}
+
+function AppointmentDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
   const { can } = useSession();

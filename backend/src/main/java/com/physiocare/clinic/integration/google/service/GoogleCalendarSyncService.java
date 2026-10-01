@@ -6,6 +6,7 @@ import com.physiocare.clinic.integration.google.config.GoogleSettings;
 import com.physiocare.clinic.integration.google.model.AppointmentSchedule;
 import com.physiocare.clinic.integration.google.model.CalendarConnection;
 import com.physiocare.clinic.integration.google.model.CalendarOutboxEntry;
+import com.physiocare.clinic.integration.google.model.CalendarRemoval;
 import com.physiocare.clinic.integration.google.model.GoogleCalendarDtos.SyncStatusResponse;
 import com.physiocare.clinic.integration.google.repository.AppointmentCalendarRepository;
 import com.physiocare.clinic.integration.google.repository.CalendarOutboxRepository;
@@ -87,8 +88,51 @@ public class GoogleCalendarSyncService {
     // connect picks it up if it is still upcoming.
     if (!outbox.isTracked(appointmentId) && (!live || !connections.isConnected(staffId))) return;
 
+    // Back with a therapist it had been moved away from: their pending removal
+    // would otherwise delete the event this push is about to write.
+    outbox.deleteRemoval(appointmentId, staffId);
     outbox.queue(appointmentId, staffId, live ? "UPSERT" : "DELETE");
     pushAfterCommit();
+  }
+
+  /**
+   * The appointment was given to another physiotherapist. Its event leaves the
+   * old therapist's calendar through the removal queue (retried like any push)
+   * and is written to the new one's by the usual upsert.
+   */
+  @Transactional
+  public void providerChanged(long appointmentId, long fromStaffId) {
+    boolean onOldCalendar = outbox.trackedStaff(appointmentId).filter(id -> id == fromStaffId).isPresent();
+    if (onOldCalendar && connections.isConnected(fromStaffId)) outbox.queueRemoval(appointmentId, fromStaffId);
+    appointmentChanged(appointmentId);
+    // appointmentChanged leaves no row when the new therapist has no calendar;
+    // the removal still has to run.
+    pushAfterCommit();
+  }
+
+  /** What an event shows besides the appointment itself, and the appointment column that links to it. */
+  public enum EventDetail {
+    PATIENT("patient_id"),
+    SERVICE("service_id"),
+    ROOM("room_id"),
+    BRANCH("branch_id");
+
+    private final String appointmentColumn;
+
+    EventDetail(String appointmentColumn) {
+      this.appointmentColumn = appointmentColumn;
+    }
+  }
+
+  /**
+   * An event carries the patient's nickname and the service, room and branch
+   * names, none of which an appointment change touches. When one of those is
+   * edited, the upcoming events that show it are pushed again. Called by
+   * the editing service after it has written the change.
+   */
+  @Transactional
+  public void detailChanged(EventDetail detail, long id) {
+    if (outbox.requeueUpcomingBy(detail.appointmentColumn, id) > 0) pushAfterCommit();
   }
 
   /** Everything still to come for a newly connected therapist. */
@@ -162,6 +206,7 @@ public class GoogleCalendarSyncService {
 
   void processDue() {
     try {
+      for (CalendarRemoval removal : outbox.findDueRemovals(MAX_BATCH)) remove(removal);
       for (CalendarOutboxEntry row : outbox.findDue(MAX_BATCH)) push(row);
     } catch (RuntimeException e) {
       log.error("Google Calendar sync sweep failed", e);
@@ -202,11 +247,44 @@ public class GoogleCalendarSyncService {
       connections.clearError(row.staffId());
     } catch (GoogleApiException e) {
       if (e.unauthorised()) connections.forgetAccessToken(row.staffId());
-      fail(row, e.getMessage(), e.permanent());
+      // A grant without the calendar permission (connected before that was
+      // checked) needs the person to reconnect; say so instead of Google's wording.
+      fail(row, e.missingScope() ? GoogleCalendarConnectionService.CALENDAR_NOT_ALLOWED : e.getMessage(),
+          e.permanent());
     } catch (RuntimeException e) {
       log.warn("Google Calendar push failed for appointment {}", appointmentId, e);
       fail(row, e.getMessage() == null ? e.toString() : e.getMessage(), false);
     }
+  }
+
+  /** Takes a moved appointment's event out of the calendar of the therapist it left. */
+  private void remove(CalendarRemoval removal) {
+    Optional<CalendarConnection> connection = connections.connection(removal.staffId());
+    if (connection.isEmpty()) {
+      // Disconnected since: the disconnect already cleared their calendar.
+      outbox.deleteRemoval(removal.appointmentId(), removal.staffId());
+      return;
+    }
+    try {
+      google.deleteEvent(
+          connections.accessToken(connection.get()),
+          connection.get().calendarId(),
+          CalendarEventFactory.eventId(removal.appointmentId()));
+      outbox.deleteRemoval(removal.appointmentId(), removal.staffId());
+    } catch (GoogleApiException e) {
+      if (e.unauthorised()) connections.forgetAccessToken(removal.staffId());
+      failRemoval(removal, e.missingScope() ? GoogleCalendarConnectionService.CALENDAR_NOT_ALLOWED : e.getMessage(),
+          e.permanent());
+    } catch (RuntimeException e) {
+      log.warn("Removing Google event for moved appointment {} failed", removal.appointmentId(), e);
+      failRemoval(removal, e.getMessage() == null ? e.toString() : e.getMessage(), false);
+    }
+  }
+
+  private void failRemoval(CalendarRemoval removal, String message, boolean permanent) {
+    long minutes = permanent ? PERMANENT_FAILURE_MINUTES : Math.min(64, 1L << Math.min(removal.attempts(), 6));
+    outbox.markRemovalFailed(removal.appointmentId(), removal.staffId(), message, minutes);
+    connections.recordError(removal.staffId(), message);
   }
 
   /**

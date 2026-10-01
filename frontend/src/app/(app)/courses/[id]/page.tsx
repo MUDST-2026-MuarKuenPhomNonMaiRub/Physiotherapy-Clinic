@@ -9,11 +9,12 @@ import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { usePatientSearch } from "@/lib/hooks/use-patient-search";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
-import { remainingSessions } from "@/lib/domain";
+import { isCourseSpendable, remainingSessions } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/shared/number-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -26,6 +27,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { toast } from "sonner";
 import { addSharedCourseMember, getCourseCommissionDetail, listSharedCourseMembers, refundRemainingVisits, removeSharedCourseMember } from "@/lib/api/clinic-api";
 import type { LedgerEntryType, SharedCourseMember } from "@/types";
+import { RecordGate } from "@/components/shared/record-gate";
 
 const ledgerTypeLabel: Record<LedgerEntryType, string> = {
   PURCHASE: "Purchase",
@@ -47,6 +49,16 @@ type CourseCommissionDetail = {
 };
 
 export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const found = useClinicStore((s) => s.patientCourses.some((item) => item.id === id));
+  return (
+    <RecordGate found={found} title="Course not found" backHref="/courses" backLabel="Back to Patient Courses">
+      <CourseDetailContent params={params} />
+    </RecordGate>
+  );
+}
+
+function CourseDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { can, user, activeBranchId } = useSession();
   const patients = useClinicStore((s) => s.patients);
@@ -163,12 +175,12 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 </Link>
               </Button>
             )}
-            {can("course.transfer") && pc.status === "ACTIVE" && rem > 0 && (
+            {can("course.transfer") && isCourseSpendable(pc) && rem > 0 && (
               <Button variant="outline" onClick={openTransfer}>
                 <ArrowRightLeft className="h-4 w-4" /> Transfer Course
               </Button>
             )}
-            {pc.status === "ACTIVE" && rem > 0 && can("course.share") && <Button variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Share</Button>}
+            {isCourseSpendable(pc) && rem > 0 && can("course.share") && <Button variant="outline" onClick={() => { setMemberOpen(true); setMemberQuery(""); setMemberPatientId(""); setMemberVisits(1); }}><UsersRound className="h-4 w-4" /> Share</Button>}
             {can("commission.adjust") && rem > 0 && <Button variant="outline" onClick={() => { setRefundOpen(true); setRefundVisits(1); setRefundReason(""); }}><HandCoins className="h-4 w-4" /> Refund Unused</Button>}
           </div>
         }
@@ -363,13 +375,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
           {step === "sessions" && (
             <div className="space-y-1.5">
               <Label>Sessions to Transfer (max {rem})</Label>
-              <Input
-                type="number"
-                min={1}
-                max={rem}
-                value={sessions}
-                onChange={(e) => setSessions(Math.max(1, Math.min(rem, Number(e.target.value) || 1)))}
-              />
+              <NumberInput min={1} max={rem} value={sessions} onValueChange={setSessions} />
             </div>
           )}
 
@@ -423,7 +429,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
       <Dialog open={memberOpen} onOpenChange={setMemberOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Add Shared Course Member</DialogTitle></DialogHeader>
-          <div className="space-y-3"><p className="text-sm text-muted-foreground">Sessions moved to this member keep the same Course ID and commission pool.</p><div className="space-y-1.5"><Label>Search patient</Label><Input value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder="HN, name or phone..." />{memberMatches.length > 0 && <div className="rounded-lg border border-border">{memberMatches.map((p) => <button key={p.id} className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted ${memberPatientId === p.id ? "bg-primary/5" : ""}`} onClick={() => setMemberPatientId(p.id)}>{getPatientFullNameTh(p)} <span className="text-xs text-muted-foreground">{p.hn}</span></button>)}</div>}</div><div className="space-y-1.5"><Label>Sessions to allocate</Label><Input type="number" min={1} max={rem} value={memberVisits} onChange={(e) => setMemberVisits(Math.max(1, Math.min(rem, Number(e.target.value) || 1)))} /></div>{memberPatient && <p className="text-sm text-muted-foreground">Selected: {getPatientFullNameTh(memberPatient)}</p>}</div>
+          <div className="space-y-3"><p className="text-sm text-muted-foreground">Sessions moved to this member keep the same Course ID and commission pool.</p><div className="space-y-1.5"><Label>Search patient</Label><Input value={memberQuery} onChange={(e) => setMemberQuery(e.target.value)} placeholder="HN, name or phone..." />{memberMatches.length > 0 && <div className="rounded-lg border border-border">{memberMatches.map((p) => <button key={p.id} className={`block w-full px-3 py-2 text-left text-sm hover:bg-muted ${memberPatientId === p.id ? "bg-primary/5" : ""}`} onClick={() => setMemberPatientId(p.id)}>{getPatientFullNameTh(p)} <span className="text-xs text-muted-foreground">{p.hn}</span></button>)}</div>}</div><div className="space-y-1.5"><Label>Sessions to allocate</Label><NumberInput min={1} max={rem} value={memberVisits} onValueChange={setMemberVisits} /></div>{memberPatient && <p className="text-sm text-muted-foreground">Selected: {getPatientFullNameTh(memberPatient)}</p>}</div>
           <DialogFooter><Button variant="outline" onClick={() => setMemberOpen(false)}>Cancel</Button><Button disabled={!memberPatientId} onClick={() => void confirmMember()}>Add Member</Button></DialogFooter>
         </DialogContent>
       </Dialog>
@@ -432,7 +438,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         <DialogContent>
           <DialogHeader><DialogTitle>Refund Unused Sessions</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">Used visits and commission history stay unchanged. Only the unused remainder is reduced.</p>
-          <div className="space-y-3"><div className="space-y-1.5"><Label>Sessions to refund (max {rem})</Label><Input type="number" min={1} max={rem} value={refundVisits} onChange={(e) => setRefundVisits(Math.max(1, Math.min(rem, Number(e.target.value) || 1)))} /></div><div className="space-y-1.5"><Label>Reason</Label><Input value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Patient requested refund" /></div></div>
+          <div className="space-y-3"><div className="space-y-1.5"><Label>Sessions to refund (max {rem})</Label><NumberInput min={1} max={rem} value={refundVisits} onValueChange={setRefundVisits} /></div><div className="space-y-1.5"><Label>Reason</Label><Input value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="Patient requested refund" /></div></div>
           <DialogFooter><Button variant="outline" onClick={() => setRefundOpen(false)}>Cancel</Button><Button onClick={() => void confirmRefund()}>Confirm Refund</Button></DialogFooter>
         </DialogContent>
       </Dialog>

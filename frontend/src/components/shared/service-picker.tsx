@@ -33,7 +33,7 @@ function serverFavorites() { return "[]"; }
 
 /** Stars save shortcuts without selecting a service or closing the picker. */
 export function ServicePicker({
-  services, value, onValueChange, placeholder = "Select service", className, inline = false,
+  services, value, onValueChange, placeholder = "Select service", className, inline = false, showDuration = true,
 }: {
   services: Service[];
   value: string;
@@ -41,6 +41,8 @@ export function ServicePicker({
   placeholder?: string;
   className?: string;
   inline?: boolean;
+  /** Off where the time is set separately, so the list does not suggest it decides the length. */
+  showDuration?: boolean;
 }) {
   const { user } = useSession();
   const { t } = useLanguage();
@@ -116,7 +118,7 @@ export function ServicePicker({
                 <button type="button" onClick={() => choose(service.id)} aria-pressed={isSelected} className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2.5 py-2 text-left focus-visible:outline-ring">
                   <span className="min-w-0 flex-1">
                     <span className="block line-clamp-2 break-words text-sm font-medium">{service.name}</span>
-                    <span className="block text-xs text-muted-foreground">{service.code || "—"} · {service.duration} min</span>
+                    <span className="block text-xs text-muted-foreground">{service.code || "—"}{showDuration ? ` · ${service.duration} min` : ""}</span>
                   </span>
                   {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
                 </button>

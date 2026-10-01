@@ -7,8 +7,19 @@ import { useSession } from "@/lib/auth/use-session";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { Forbidden } from "@/components/shared/forbidden";
 import { ReceiptView } from "@/components/receipts/receipt-view";
+import { RecordGate } from "@/components/shared/record-gate";
 
 export default function TransactionReceiptPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const found = useClinicStore((s) => s.transactions.some((item) => item.id === id));
+  return (
+    <RecordGate found={found} title="Transaction not found" backHref="/transactions" backLabel="Back to Transactions">
+      <TransactionReceiptContent params={params} />
+    </RecordGate>
+  );
+}
+
+function TransactionReceiptContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { can } = useSession();
   const transactions = useClinicStore((s) => s.transactions);

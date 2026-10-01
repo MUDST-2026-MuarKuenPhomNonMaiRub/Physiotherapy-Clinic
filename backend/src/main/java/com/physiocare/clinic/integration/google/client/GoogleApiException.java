@@ -50,6 +50,15 @@ public class GoogleApiException extends RuntimeException {
     return status == 401 || (status == 403 && !rateLimited()) || grantRevoked();
   }
 
+  /**
+   * The grant is valid but lacks the calendar permission — the person left its
+   * box unticked on Google's consent page. Only connecting again (and ticking
+   * it) fixes this.
+   */
+  public boolean missingScope() {
+    return status == 403 && "insufficientPermissions".equals(reason);
+  }
+
   /** The person withdrew access or the grant expired; only connecting again fixes it. */
   public boolean grantRevoked() {
     return "invalid_grant".equals(reason);

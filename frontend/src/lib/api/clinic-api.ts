@@ -2,7 +2,7 @@
  * Every clinic endpoint the app talks to, returning domain types rather than
  * wire shapes. Screens never see a raw API row.
  */
-import { API_URL, apiRequest } from "./client";
+import { apiRequest } from "./client";
 import {
   toAppointment,
   toBranch,
@@ -130,25 +130,23 @@ async function forBranches<T>(
 }
 
 export interface LoginResult {
-  accessToken: string;
   user: AppUser;
 }
 
 export async function login(email: string, password: string): Promise<LoginResult> {
-  const session = await apiRequest<{ accessToken: string; tokenType: string }>(
-    "/api/v1/auth/login",
-    { method: "POST", body: { email, password }, anonymous: true }
-  );
+  // The API answers with an HttpOnly session cookie; there is no token to keep.
+  await apiRequest<{ expiresIn: number }>("/api/v1/auth/login", {
+    method: "POST",
+    body: { email, password },
+    anonymous: true,
+  });
 
-  // The profile is fetched with the token login just issued, before the store
-  // has had a chance to record it.
-  const profile = await fetchMe(session.accessToken);
+  const profile = await apiRequest<MeResponse>("/api/v1/auth/me", { anonymous: true });
   // The backend now orders roles with the highest-privilege one first, but
   // picking ADMIN explicitly when present costs nothing and keeps this
   // correct even if that ordering ever regresses.
   const role = primaryRole(profile.roles);
   return {
-    accessToken: session.accessToken,
     user: {
       id: String(profile.id),
       username: profile.email,
@@ -186,16 +184,12 @@ interface MeResponse {
   branchIds: number[];
 }
 
-async function fetchMe(accessToken: string): Promise<MeResponse> {
-  const response = await fetch(`${API_URL}/api/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (!response.ok) throw new Error("Unable to load your profile");
-  return (await response.json()) as MeResponse;
-}
-
-/** Re-reads the signed-in account, used after a refresh restores a saved token. */
+/** Re-reads the signed-in account, used after a refresh to check the session cookie. */
 export const me = () => apiRequest<MeResponse>("/api/v1/auth/me");
+
+/** Page script cannot delete an HttpOnly cookie, so the API expires it. */
+export const logout = () =>
+  apiRequest<void>("/api/v1/auth/logout", { method: "POST", anonymous: true });
 
 export interface ConfiguredRole { id: number; code: string; name: string; permissions: string[] }
 export interface ConfiguredPermission { id: number; code: string; name: string }
@@ -780,6 +774,26 @@ export const transitionAppointment = (
     },
   }).then(toAppointment);
 
+/**
+ * The same booking on a new slot — the calendar's drag to move or resize, and
+ * to hand it to another physiotherapist when `physioId` is given.
+ */
+export const changeAppointmentTime = (
+  id: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+  physioId?: string
+) =>
+  apiRequest<Row>(`/api/v1/appointments/${id}/time`, {
+    method: "PATCH",
+    body: {
+      startsAt: toInstant(date, startTime),
+      endsAt: toInstant(date, endTime),
+      providerStaffId: physioId ? Number(physioId) : null,
+    },
+  }).then(toAppointment);
+
 export const rescheduleAppointment = (
   id: string,
   date: string,
@@ -803,16 +817,35 @@ export interface CourseSnapshot {
   courseLedger: CourseLedgerEntry[];
 }
 
-// The course endpoint returns both balances and ledger rows in one envelope;
-// keep its larger bounded read for now while the operational lists above use
-// the paginated contracts.
-export const listPatientCourses = (branchId?: string | null, limit = 1000): Promise<CourseSnapshot> =>
-  apiRequest<{ patientCourses: Row[]; ledger: Row[] }>(
-    `/api/v1/patient-courses${query({ branchId, limit })}`
-  ).then((response) => ({
-    patientCourses: response.patientCourses.map(toPatientCourse),
-    courseLedger: response.ledger.map(toLedgerEntry),
-  }));
+/** Ascending by numeric id; a stable sort keeps a course's owner row ahead of its members. */
+const byNumericId = <T extends { id: string }>(rows: T[]) =>
+  [...rows].sort((a, b) => Number(a.id) - Number(b.id));
+
+/**
+ * Every course balance and ledger entry, read page by page like the other
+ * operational lists. A single bounded read used to stop at 1,000 rows, oldest
+ * first — so once a clinic passed that, its newest courses and most recent
+ * visits silently dropped out of checkout and course history.
+ *
+ * The pages are read newest first, so a row written mid-read can only repeat
+ * at a page boundary, never be skipped; the repeat is dropped here. The result
+ * is put back in ascending order, which is what the screens were built on.
+ */
+export const listPatientCourses = async (branchId?: string | null): Promise<CourseSnapshot> => {
+  const [courseRows, ledgerRows] = await Promise.all([
+    readAllPages((page, size) =>
+      apiRequest<PageResponse<Row>>(`/api/v1/patient-courses/page${query({ branchId, page, size })}`)
+    ),
+    readAllPages((page, size) =>
+      apiRequest<PageResponse<Row>>(`/api/v1/patient-courses/ledger/page${query({ branchId, page, size })}`)
+    ),
+  ]);
+  const courses = new Map<string, PatientCourse>();
+  for (const pc of courseRows.map(toPatientCourse)) courses.set(`${pc.id}-${pc.patientId}`, pc);
+  const ledger = new Map<string, CourseLedgerEntry>();
+  for (const entry of ledgerRows.map(toLedgerEntry)) ledger.set(entry.id, entry);
+  return { patientCourses: byNumericId([...courses.values()]), courseLedger: byNumericId([...ledger.values()]) };
+};
 
 export const listPatientCoursesPage = async (
   page = 0,
@@ -837,7 +870,7 @@ export const listPatientCoursesFor = async (scope: BranchScope): Promise<CourseS
     for (const pc of part.patientCourses) courses.set(`${pc.id}-${pc.patientId}`, pc);
     for (const entry of part.courseLedger) ledger.set(entry.id, entry);
   }
-  return { patientCourses: [...courses.values()], courseLedger: [...ledger.values()] };
+  return { patientCourses: byNumericId([...courses.values()]), courseLedger: byNumericId([...ledger.values()]) };
 };
 
 export const transferCourseSessions = (
@@ -990,6 +1023,12 @@ export const retryAppointmentCalendarSync = (appointmentId: string) =>
 
 // ------------------------------------------------------------ full hydration
 
+/**
+ * The reference data every screen needs. Patients, courses, visits and
+ * transactions are not part of it: refreshOperational loads those after the
+ * shell is visible, and a refresh leaves the ones already on screen in place
+ * until it does.
+ */
 export interface ClinicSnapshot {
   branches: Branch[];
   staff: Staff[];
@@ -1000,19 +1039,19 @@ export interface ClinicSnapshot {
   resources: ResourceRoom[];
   masterData: MasterDataItem[];
   commissionRules: CommissionRule[];
-  patients: Patient[];
-  patientCourses: PatientCourse[];
-  courseLedger: CourseLedgerEntry[];
-  appointments: Appointment[];
-  transactions: Transaction[];
 }
 
 /**
- * One round of loading for the whole app. The user list is admin-only, so a
- * physiotherapist simply gets an empty one rather than a failed sign-in, and
- * the branch-scoped lists are read for the branches they are assigned to.
+ * One round of loading for the whole app. The user list is admin-only and the
+ * commission rules need settings access, so a physiotherapist simply gets
+ * empty ones rather than a failed sign-in, and the branch-scoped lists are
+ * read for the branches they are assigned to.
  */
-export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promise<ClinicSnapshot> {
+export async function loadSnapshot(
+  isAdmin: boolean,
+  scope: BranchScope,
+  canManageSettings = isAdmin
+): Promise<ClinicSnapshot> {
   const [
     branches,
     staff,
@@ -1032,7 +1071,7 @@ export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promis
     listPaymentMethods(),
     listResourcesFor(scope),
     listMasterData(),
-    listCommissionRules(),
+    canManageSettings ? listCommissionRules() : Promise.resolve([]),
   ]);
 
   return {
@@ -1045,13 +1084,5 @@ export async function loadSnapshot(isAdmin: boolean, scope: BranchScope): Promis
     resources,
     masterData,
     commissionRules,
-    // Operational collections are loaded after the shell is visible. This
-    // keeps login latency and the initial browser heap independent of the
-    // number of patients, visits and transactions in the clinic.
-    patients: [],
-    patientCourses: [],
-    courseLedger: [],
-    appointments: [],
-    transactions: [],
   };
 }

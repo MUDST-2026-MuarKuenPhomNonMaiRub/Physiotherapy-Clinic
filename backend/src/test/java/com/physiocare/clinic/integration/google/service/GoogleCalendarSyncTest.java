@@ -77,6 +77,40 @@ class GoogleCalendarSyncTest extends AbstractCommissionIntegrationTest {
   }
 
   @Test
+  void aGrantWithoutTheCalendarPermissionIsRefusedAndGivenBack() {
+    // On Google's consent page each permission is a checkbox; leaving the
+    // calendar one unticked still returns a grant, for the email only.
+    long staffId = seedStaff("Dr Unticked");
+    long userId = seedActorUserId();
+    when(google.exchangeCode("email-only")).thenReturn(
+        new GoogleTokens("access-2", "refresh-2", 3600, "openid https://www.googleapis.com/auth/userinfo.email"));
+    Matcher state = Pattern.compile("state=([A-Za-z0-9_-]+)")
+        .matcher(connections.authorizationUrl(staffId, userId));
+    assertThat(state.find()).isTrue();
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> connections.completeConnection(state.group(1), "email-only"))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("tick the box");
+    verify(google).revoke("refresh-2");
+    assertThat(connections.status(staffId).connected()).isFalse();
+  }
+
+  @Test
+  void aGrantThatListsTheCalendarPermissionConnects() {
+    long staffId = seedStaff("Dr Ticked");
+    long userId = seedActorUserId();
+    when(google.exchangeCode("all-ticked")).thenReturn(new GoogleTokens("access-3", "refresh-3", 3600,
+        "openid https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email"));
+    Matcher state = Pattern.compile("state=([A-Za-z0-9_-]+)")
+        .matcher(connections.authorizationUrl(staffId, userId));
+    assertThat(state.find()).isTrue();
+
+    assertThat(connections.completeConnection(state.group(1), "all-ticked")).isEqualTo(staffId);
+    assertThat(connections.status(staffId).connected()).isTrue();
+  }
+
+  @Test
   void aBookingReachesGoogleWithoutThePatientsFullNameOrPhone() {
     long staffId = seedStaff("Dr Push");
     long patientId = seedPatient("Somchai");
@@ -221,5 +255,89 @@ class GoogleCalendarSyncTest extends AbstractCommissionIntegrationTest {
     List<Long> queued = db.queryForList(
         "SELECT appointment_id FROM appointment_calendar_events WHERE staff_id=?", Long.class, staffId);
     assertThat(queued).containsExactly(upcoming).doesNotContain(cancelled, past);
+  }
+
+  /** A second therapist on their own Google account, told apart from connect()'s by the token. */
+  private void connectAs(long staffId, String accessToken) {
+    long userId = seedActorUserId();
+    String code = "code-" + staffId;
+    when(google.exchangeCode(code)).thenReturn(new GoogleTokens(accessToken, "refresh-" + staffId, 3600));
+    Matcher state = Pattern.compile("state=([A-Za-z0-9_-]+)").matcher(connections.authorizationUrl(staffId, userId));
+    assertThat(state.find()).isTrue();
+    connections.completeConnection(state.group(1), code);
+  }
+
+  private void handOver(long appointmentId, long from, long to) {
+    db.update("UPDATE appointments SET provider_staff_id=? WHERE id=?", to, appointmentId);
+    sync.providerChanged(appointmentId, from);
+  }
+
+  private long removalsFor(long appointmentId, long staffId) {
+    return db.queryForObject(
+        "SELECT count(*) FROM calendar_event_removals WHERE appointment_id=? AND staff_id=?",
+        Long.class, appointmentId, staffId);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void aHandoverMovesTheEventFromOneTherapistsCalendarToTheOthers() {
+    long from = seedStaff("Dr Before");
+    long to = seedStaff("Dr After");
+    connect(from);
+    connectAs(to, "access-to");
+    long id = seedAppointment(from, seedPatient("Moved"), "CONFIRMED");
+    sync.appointmentChanged(id);
+    sync.processDue();
+
+    handOver(id, from, to);
+    sync.processDue();
+
+    verify(google).deleteEvent("access-1", "primary", "labalance" + id);
+    verify(google).insertEvent(eq("access-to"), eq("primary"), any(Map.class));
+    assertThat(removalsFor(id, from)).isZero();
+    Map<String, Object> row = db.queryForMap(
+        "SELECT staff_id,sync_status FROM appointment_calendar_events WHERE appointment_id=?", id);
+    assertThat(((Number) row.get("staff_id")).longValue()).isEqualTo(to);
+    assertThat(row.get("sync_status")).isEqualTo("SYNCED");
+  }
+
+  @Test
+  void aRemovalGoogleRefusesForNowIsKeptForTheNextSweep() {
+    long from = seedStaff("Dr Outage");
+    long to = seedStaff("Dr Offline Too");
+    connect(from);
+    long id = seedAppointment(from, seedPatient("Retry"), "CONFIRMED");
+    sync.appointmentChanged(id);
+    sync.processDue();
+    doThrow(new GoogleApiException(503, "Google is down")).when(google)
+        .deleteEvent("access-1", "primary", "labalance" + id);
+
+    handOver(id, from, to);
+    sync.processDue();
+
+    Map<String, Object> removal = db.queryForMap(
+        "SELECT attempts,last_error FROM calendar_event_removals WHERE appointment_id=? AND staff_id=?", id, from);
+    assertThat(((Number) removal.get("attempts")).intValue()).isEqualTo(1);
+    assertThat((String) removal.get("last_error")).contains("Google is down");
+  }
+
+  @Test
+  void movingItBackBeforeTheRemovalRunsKeepsTheEvent() {
+    long first = seedStaff("Dr First");
+    long second = seedStaff("Dr Second");
+    connect(first);
+    connectAs(second, "access-second");
+    long id = seedAppointment(first, seedPatient("Back"), "CONFIRMED");
+    sync.appointmentChanged(id);
+    sync.processDue();
+
+    handOver(id, first, second);
+    handOver(id, second, first);
+
+    // The first therapist's pending removal was dropped, so the event written
+    // back to their calendar is not deleted after it.
+    assertThat(removalsFor(id, first)).isZero();
+    sync.processDue();
+    verify(google, never()).deleteEvent("access-1", "primary", "labalance" + id);
   }
 }

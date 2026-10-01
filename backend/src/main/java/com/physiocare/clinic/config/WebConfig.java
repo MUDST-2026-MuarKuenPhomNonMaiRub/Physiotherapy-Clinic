@@ -16,6 +16,8 @@ public class WebConfig implements WebMvcConfigurer {
         .addMapping("/api/**")
         .allowedOrigins(Arrays.stream(allowedOrigins.split(",")).map(String::trim).toArray(String[]::new))
         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-        .allowedHeaders("*");
+        .allowedHeaders("*")
+        // The frontend's dev server is another origin; it needs the session cookie sent.
+        .allowCredentials(true);
   }
 }

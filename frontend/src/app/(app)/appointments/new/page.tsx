@@ -71,16 +71,17 @@ function NewAppointmentContent() {
   const { items: patientMatches, loading: patientSearchLoading } = usePatientSearch(patientQuery, branchId);
   const selectedPatient = patients.find((p) => p.id === patientId);
 
+  // The block's time is set first and stays as set: choosing what goes in it
+  // no longer moves the end time, which made the times jump between clicks.
   function selectService(nextServiceId: string) {
     setServiceId(nextServiceId);
-    const next = services.find((item) => item.id === nextServiceId);
-    if (next) setEndTime(addMinutes(startTime, next.duration));
   }
 
+  /** Moving the start keeps the block's length; an empty block falls back to the default 30 minutes. */
   function updateStartTime(nextStart: string) {
     const previousDuration = Math.max(0, minutesBetween(startTime, endTime));
     setStartTime(nextStart);
-    setEndTime(addMinutes(nextStart, previousDuration || service?.duration || 0));
+    setEndTime(addMinutes(nextStart, previousDuration || 30));
   }
 
   function adjustEndTime(delta: number) {
@@ -267,10 +268,10 @@ function NewAppointmentContent() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">3. Choose what goes in this block</CardTitle>
-            <p className="text-sm text-muted-foreground">Search or browse a category. Selecting a service sets the duration; you can adjust it above.</p>
+            <p className="text-sm text-muted-foreground">Search or browse a category. The time stays as set in the appointment block above.</p>
           </CardHeader>
           <CardContent>
-            <ServicePicker inline services={services.filter((s) => s.status === "ACTIVE")} value={serviceId} onValueChange={selectService} />
+            <ServicePicker inline showDuration={false} services={services.filter((s) => s.status === "ACTIVE")} value={serviceId} onValueChange={selectService} />
             {fieldErrors.serviceId && <p role="alert" className="mt-2 text-xs text-destructive">{fieldErrors.serviceId}</p>}
           </CardContent>
         </Card>

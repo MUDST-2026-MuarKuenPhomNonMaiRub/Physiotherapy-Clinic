@@ -87,6 +87,36 @@ test.describe("critical browser access", () => {
     await expect(page.getByText("E2E Test Role")).toBeVisible();
   });
 
+  test("the session is an HttpOnly cookie that page script cannot reach", async ({ page, context }) => {
+    await signIn(page);
+
+    const session = (await context.cookies()).find((cookie) => cookie.name === "clinic_session");
+    expect(session?.httpOnly).toBe(true);
+    expect(session?.sameSite).toBe("Strict");
+    expect(await page.evaluate(() => document.cookie)).not.toContain("clinic_session");
+    // No JWT (three base64url parts, header starting "eyJ") anywhere in page storage.
+    const storage = await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }));
+    expect(storage).not.toMatch(/eyJ[\w-]+\.[\w-]+\.[\w-]+/);
+
+    // A refresh keeps the user signed in: the browser still holds the cookie.
+    await page.reload();
+    await expect(page).toHaveURL(/\/(calendar|dashboard)$/);
+  });
+
+  test("signing out expires the session cookie", async ({ page, context }) => {
+    await signIn(page);
+    const logout = page.waitForResponse((response) => response.url().endsWith("/api/v1/auth/logout"));
+    await page.getByRole("button", { name: "Log out" }).first().click();
+    await logout;
+    await expect(page).toHaveURL(/\/login$/);
+    const session = (await context.cookies()).find((cookie) => cookie.name === "clinic_session");
+    expect(session).toBeUndefined();
+
+    // Going back into the app now needs a new sign-in.
+    await page.goto("/patients");
+    await expect(page).toHaveURL(/\/login$/);
+  });
+
   test("direct navigation to an administration route requires authentication", async ({ page }) => {
     await page.goto("/settings/monthly-closing");
     await expect(page).toHaveURL(/\/login$/);

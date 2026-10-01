@@ -195,6 +195,15 @@ export function remainingSessions(course: PatientCourse): number {
   );
 }
 
+/**
+ * Whether sessions can still be spent, transferred or shared — the same rule
+ * the server applies. A course past its expiry date can still read ACTIVE,
+ * because the server only marks it EXPIRED when it next touches it.
+ */
+export function isCourseSpendable(course: PatientCourse): boolean {
+  return course.status === "ACTIVE" && (!course.expiryDate || course.expiryDate >= today());
+}
+
 // ------------------------------------------------------------------ commission
 
 export interface CommissionRecord {

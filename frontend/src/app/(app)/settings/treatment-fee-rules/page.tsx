@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/shared/number-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -191,7 +192,7 @@ export default function TreatmentFeeRulesPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>{form.feeType === "FIXED" ? "Amount (THB)" : "Percentage"}</Label>
-                <Input type="number" value={form.feeValue} onChange={(e) => setForm((f) => ({ ...f, feeValue: Number(e.target.value) }))} />
+                <NumberInput value={form.feeValue} onValueChange={(feeValue) => setForm((f) => ({ ...f, feeValue }))} />
               </div>
             </div>
             <div className="space-y-1.5">

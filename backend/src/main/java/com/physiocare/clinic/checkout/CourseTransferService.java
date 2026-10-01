@@ -1,5 +1,6 @@
 package com.physiocare.clinic.checkout;
 
+import com.physiocare.clinic.commission.CourseUsageService;
 import com.physiocare.clinic.common.BranchAccessService;
 import com.physiocare.clinic.common.CurrentUser;
 import com.physiocare.clinic.common.AuditService;
@@ -72,6 +73,7 @@ public class CourseTransferService {
   public Map<String, Object> transfer(
       @Valid @RequestBody TransferRequest r, Authentication authentication) {
     Map<String, Object> source = repository.lockPatientCourse(r.patientCourseId());
+    CourseUsageService.requireSpendable(source, java.time.LocalDate.now(), "transferred");
     long fromPatientId = ((Number) source.get("patient_id")).longValue();
     if (fromPatientId == r.toPatientId())
       throw new IllegalArgumentException("A course cannot be transferred to its own owner");

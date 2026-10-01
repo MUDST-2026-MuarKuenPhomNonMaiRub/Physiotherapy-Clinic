@@ -97,4 +97,15 @@ public class CheckoutController {
     branches.requireFilter(authentication, branchId);
     return reader.coursePage(branchId, search, courseId, status, page, size);
   }
+
+  @GetMapping("/patient-courses/ledger/page")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.view', 'course.use', 'checkout.create')")
+  public PageResponse<Map<String, Object>> ledgerPage(
+      @RequestParam(required = false) Long branchId,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "100") int size,
+      Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
+    return reader.ledgerPage(branchId, page, size);
+  }
 }

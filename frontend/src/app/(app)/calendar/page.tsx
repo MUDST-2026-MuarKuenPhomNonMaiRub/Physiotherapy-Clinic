@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
@@ -44,6 +45,7 @@ export default function CalendarPage() {
   const patients = useClinicStore((s) => s.patients);
   const staff = useClinicStore((s) => s.staff);
   const services = useClinicStore((s) => s.services);
+  const changeAppointmentTime = useClinicStore((s) => s.changeAppointmentTime);
   const resources = useClinicStore((s) => s.resources);
 
   const [date, setDate] = useState(today());
@@ -219,6 +221,24 @@ export default function CalendarPage() {
         date={date}
         today={today()}
         onSelect={(id) => router.push(`/appointments/${id}`)}
+        onChangeTime={
+          can("appointment.edit")
+            ? async (id, startTime, endTime, physioId) => {
+                try {
+                  await changeAppointmentTime(id, date, startTime, endTime, physioId);
+                  const physio = physioId ? staff.find((s) => s.id === physioId)?.name : undefined;
+                  toast.success(
+                    physio
+                      ? `Appointment moved to ${physio}, ${startTime}–${endTime}`
+                      : `Appointment moved to ${startTime}–${endTime}`
+                  );
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not change the appointment time");
+                  throw error;
+                }
+              }
+            : undefined
+        }
       />
     </div>
   );

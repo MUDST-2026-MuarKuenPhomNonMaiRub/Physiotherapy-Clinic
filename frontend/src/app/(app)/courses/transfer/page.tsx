@@ -8,7 +8,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { usePatientSearch } from "@/lib/hooks/use-patient-search";
-import { remainingSessions } from "@/lib/domain";
+import { isCourseSpendable, remainingSessions } from "@/lib/domain";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/shared/number-input";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -102,7 +103,7 @@ export default function CoursesTransferPage() {
       (pc) =>
         pc.patientId === patientId &&
         pc.ownerPatientId === patientId &&
-        pc.status === "ACTIVE" &&
+        isCourseSpendable(pc) &&
         remainingSessions(pc) > 0
     );
   }
@@ -318,13 +319,12 @@ export default function CoursesTransferPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="sessions">Sessions to transfer</Label>
-                <Input
+                <NumberInput
                   id="sessions"
-                  type="number"
                   min={1}
                   max={sourceRemaining}
                   value={sessions}
-                  onChange={(e) => setSessions(Math.max(1, Math.min(sourceRemaining, Number(e.target.value) || 1)))}
+                  onValueChange={setSessions}
                   className="w-28"
                 />
                 <p className="text-xs text-muted-foreground">Maximum {sourceRemaining}.</p>

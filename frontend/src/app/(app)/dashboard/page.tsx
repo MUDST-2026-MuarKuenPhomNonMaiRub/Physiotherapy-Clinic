@@ -2,18 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Users, UserPlus, UserRound, Wallet } from "lucide-react";
+import { ChartPie, Coins, HandCoins, Hourglass, Landmark, Stethoscope, Users, UserPlus, UserRound, Wallet } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
-import { formatCurrency } from "@/lib/format";
-import { localDate, today } from "@/lib/domain";
+import { formatCurrency, formatPeriod } from "@/lib/format";
+import { useLanguage } from "@/components/i18n/language-provider";
+import { addDays, localDate, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatCard } from "@/components/shared/stat-card";
+import { StatCard, type SparklinePoint } from "@/components/shared/stat-card";
 import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getCourseCommissionReport } from "@/lib/api/clinic-api";
-import type { CourseCommissionReportRow } from "@/types";
+import type { CourseCommissionReportRow, Patient, Transaction } from "@/types";
 
 type Period = "day" | "month" | "year";
 const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -28,9 +29,104 @@ function periodBounds(period: Period, value: string) {
   return { from: `${value}-01-01`, to: `${value}-12-31` };
 }
 
+/** How many periods the card sparklines look back over, the selected one included. */
+const sparklineLength: Record<Period, number> = { day: 14, month: 12, year: 5 };
+const sparklineCaption: Record<Period, string> = {
+  day: "Last 14 days",
+  month: "Last 12 months",
+  year: "Last 5 years",
+};
+const previousPeriodLabel: Record<Period, string> = {
+  day: "vs previous day",
+  month: "vs previous month",
+  year: "vs previous year",
+};
+/** Used while the selected month or year is still running; a day never is. */
+const previousToDateLabel: Record<Period, string> = {
+  day: "vs previous day",
+  month: "vs same days last month",
+  year: "vs same days last year",
+};
+
+/** Whole days from one YYYY-MM-DD key to another, counted in local time like addDays. */
+function daysBetween(from: string, to: string): number {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
+}
+
+/** The period `steps` before `value`, in the same YYYY-MM-DD / YYYY-MM / YYYY shape. */
+function shiftPeriod(period: Period, value: string, steps: number): string {
+  if (period === "day") return addDays(value, -steps);
+  if (period === "month") {
+    const [year, month] = value.split("-").map(Number);
+    const d = new Date(year, month - 1 - steps, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  return String(Number(value) - steps);
+}
+
+interface PeriodFigures {
+  sales: number;
+  customers: number;
+  newCustomers: number;
+}
+
+/**
+ * The headline figures for one period, counted the way the cards always have:
+ * customers are patients with a completed sale in the period, and a new one is
+ * a patient among them registered on or after the period's first day.
+ */
+function periodFigures(
+  transactions: Transaction[],
+  patientsById: Map<string, Patient>,
+  bounds: { from: string; to: string }
+): PeriodFigures {
+  let sales = 0;
+  const customerIds = new Set<string>();
+  for (const t of transactions) {
+    const day = localDate(t.date);
+    if (day < bounds.from || day > bounds.to) continue;
+    sales += t.total;
+    customerIds.add(t.patientId);
+  }
+  let customers = 0;
+  let newCustomers = 0;
+  for (const id of customerIds) {
+    const patient = patientsById.get(id);
+    if (!patient) continue;
+    customers += 1;
+    if (patient.createdAt >= bounds.from) newCustomers += 1;
+  }
+  return { sales, customers, newCustomers };
+}
+
+/** No trend is shown without a previous figure to compare against. */
+function trendOf(current: number, previous: number, label: string) {
+  if (previous === 0) return undefined;
+  const change = ((current - previous) / previous) * 100;
+  const size = Math.abs(change);
+  const shown = size < 10 ? size.toFixed(1) : String(Math.round(size));
+  if (shown === "0.0") return { value: "0%", direction: "flat", label } as const;
+  return { value: `${shown}%`, direction: change > 0 ? "up" : "down", label } as const;
+}
+
+const periodShape: Record<Period, RegExp> = {
+  day: /^\d{4}-\d{2}-\d{2}$/,
+  month: /^\d{4}-\d{2}$/,
+  year: /^\d{4}$/,
+};
+
+/**
+ * Last year is always offered: it is the comparison the page opens on, and a
+ * clinic with no sales that year should see it as a zero line rather than an
+ * empty picker.
+ */
 function yearOptions(transactions: { date: string }[]) {
   const years = new Set(transactions.map((t) => localDate(t.date).slice(0, 4)));
-  years.add(today().slice(0, 4));
+  const current = Number(today().slice(0, 4));
+  years.add(String(current));
+  years.add(String(current - 1));
   return Array.from(years).sort().reverse();
 }
 
@@ -42,6 +138,15 @@ export default function DashboardPage() {
   const currentYear = today().slice(0, 4);
   const [period, setPeriod] = useState<Period>("month");
   const [periodValue, setPeriodValue] = useState(today().slice(0, 7));
+  // What the box shows while it is being typed in. The figures follow
+  // periodValue, the last complete entry, so a half-typed or cleared year
+  // does not turn every card to zero.
+  const [periodInput, setPeriodInput] = useState(periodValue);
+
+  function changePeriodInput(value: string) {
+    setPeriodInput(value);
+    if (periodShape[period].test(value)) setPeriodValue(value);
+  }
 
   /**
    * The value box changes shape with the period (YYYY-MM-DD / YYYY-MM / YYYY),
@@ -59,8 +164,10 @@ export default function DashboardPage() {
             : today();
     // Narrowing to a day inside the current month lands on today, not the 1st.
     const day = base.slice(0, 7) === today().slice(0, 7) ? today() : base;
+    const value = next === "day" ? day : next === "month" ? base.slice(0, 7) : base.slice(0, 4);
     setPeriod(next);
-    setPeriodValue(next === "day" ? day : next === "month" ? base.slice(0, 7) : base.slice(0, 4));
+    setPeriodValue(value);
+    setPeriodInput(value);
   }
   const [branchFilter, setBranchFilter] = useState("ALL");
   const years = yearOptions(transactions);
@@ -70,9 +177,19 @@ export default function DashboardPage() {
   const selectedBounds = periodBounds(period, periodValue);
 
   useEffect(() => {
+    // A reply for a period the user has already moved away from is dropped,
+    // so a slow earlier request cannot overwrite the newer figures.
+    let active = true;
     void getCourseCommissionReport(selectedBounds.from, selectedBounds.to)
-      .then(setCommissionRows)
-      .catch(() => setCommissionRows([]));
+      .then((rows) => {
+        if (active) setCommissionRows(rows);
+      })
+      .catch(() => {
+        if (active) setCommissionRows([]);
+      });
+    return () => {
+      active = false;
+    };
   }, [selectedBounds.from, selectedBounds.to]);
   const commissionTotals = commissionRows.reduce((a, r) => ({
     generated: a.generated + r.commissionGenerated,
@@ -89,6 +206,40 @@ export default function DashboardPage() {
   );
   const periodTransactions = accessibleTransactions.filter((t) => localDate(t.date) >= selectedBounds.from && localDate(t.date) <= selectedBounds.to);
   const totalSales = periodTransactions.reduce((sum, t) => sum + t.total, 0);
+
+  const { history, previous, trendLabel } = useMemo(() => {
+    const patientsById = new Map(patients.map((p) => [p.id, p]));
+    // The selected period and the ones before it, oldest first, for the sparklines.
+    const length = sparklineLength[period];
+    const history = Array.from({ length }, (_, i) => {
+      const value = shiftPeriod(period, periodValue, length - 1 - i);
+      return { period: value, ...periodFigures(accessibleTransactions, patientsById, periodBounds(period, value)) };
+    });
+
+    // A month or year still under way is compared with the same stretch of the
+    // one before (1–5 Oct against 1–5 Sep), not with all of it — otherwise
+    // every period would open on a steep fall that is only the calendar.
+    const todayKey = today();
+    const toDate = selectedBounds.from <= todayKey && todayKey < selectedBounds.to;
+    const before = periodBounds(period, shiftPeriod(period, periodValue, 1));
+    if (toDate) {
+      const capped = addDays(before.from, daysBetween(selectedBounds.from, todayKey));
+      if (capped < before.to) before.to = capped;
+    }
+    return {
+      history,
+      previous: periodFigures(accessibleTransactions, patientsById, before),
+      trendLabel: toDate ? previousToDateLabel[period] : previousPeriodLabel[period],
+    };
+  }, [accessibleTransactions, patients, period, periodValue, selectedBounds.from, selectedBounds.to]);
+
+  // The period names follow the language toggle.
+  const { locale } = useLanguage();
+  const sparklineOf = (
+    figure: (h: (typeof history)[number]) => number,
+    display: (h: (typeof history)[number]) => string
+  ): SparklinePoint[] =>
+    history.map((h) => ({ label: formatPeriod(period, h.period, locale), value: figure(h), display: display(h) }));
 
   const annualComparison = useMemo(() => {
     return monthNames.map((month, index) => {
@@ -130,26 +281,50 @@ export default function DashboardPage() {
             <SelectItem value="year">Yearly</SelectItem>
           </SelectContent>
         </Select>
-        <Input type={period === "year" ? "number" : period === "month" ? "month" : "date"} value={periodValue} onChange={(e) => setPeriodValue(e.target.value)} className="w-40" />
+        <Input type={period === "year" ? "number" : period === "month" ? "month" : "date"} value={periodInput} onChange={(e) => changePeriodInput(e.target.value)} onBlur={() => setPeriodInput(periodValue)} className="w-40" />
         <BranchFilterSelect value={branchFilter} onValueChange={setBranchFilter} className="w-48" />
       </div>
 
       <div className="motion-rise-in motion-delay-1 mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatCard label={`${period === "day" ? "Daily" : period === "month" ? "Monthly" : "Yearly"} Sales`} value={formatCurrency(totalSales)} icon={Wallet} tone="primary" />
-        <StatCard label="Customers" value={String(periodPatients.length)} icon={Users} tone="info" />
-        <StatCard label="New Customers" value={String(newCustomers)} icon={UserPlus} tone="success" />
+        <StatCard
+          label={`${period === "day" ? "Daily" : period === "month" ? "Monthly" : "Yearly"} Sales`}
+          value={formatCurrency(totalSales)}
+          icon={Wallet}
+          tone="primary"
+          trend={trendOf(totalSales, previous.sales, trendLabel)}
+          sparkline={sparklineOf((h) => h.sales, (h) => formatCurrency(h.sales))}
+          sparklineCaption={sparklineCaption[period]}
+        />
+        <StatCard
+          label="Customers"
+          value={String(periodPatients.length)}
+          icon={Users}
+          tone="info"
+          trend={trendOf(periodPatients.length, previous.customers, trendLabel)}
+          sparkline={sparklineOf((h) => h.customers, (h) => String(h.customers))}
+          sparklineCaption={sparklineCaption[period]}
+        />
+        <StatCard
+          label="New Customers"
+          value={String(newCustomers)}
+          icon={UserPlus}
+          tone="success"
+          trend={trendOf(newCustomers, previous.newCustomers, trendLabel)}
+          sparkline={sparklineOf((h) => h.newCustomers, (h) => String(h.newCustomers))}
+          sparklineCaption={sparklineCaption[period]}
+        />
       </div>
 
       <div className="motion-rise-in motion-delay-2 mb-5 rounded-xl border border-border bg-card p-5">
         <h2 className="mb-1 text-sm font-semibold text-foreground">Course Commission</h2>
         <p className="mb-4 text-xs text-muted-foreground">Commission generated and released from Course visits in the selected period</p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Generated" value={formatCurrency(commissionTotals.generated)} icon={Wallet} tone="primary" />
-          <StatCard label="Gross Allocated" value={formatCurrency(commissionTotals.gross)} icon={Wallet} tone="info" />
-          <StatCard label="Owner Net" value={formatCurrency(commissionTotals.ownerNet)} icon={Wallet} tone="success" />
-          <StatCard label="Treatment Fee" value={formatCurrency(commissionTotals.fee)} icon={Wallet} tone="warning" />
-          <StatCard label="Outstanding" value={formatCurrency(commissionTotals.outstanding)} icon={Wallet} tone="warning" />
-          <StatCard label="Variable Pay" value={formatCurrency(commissionTotals.variable)} icon={Wallet} tone="success" />
+          <StatCard label="Generated" value={formatCurrency(commissionTotals.generated)} icon={Coins} tone="primary" />
+          <StatCard label="Gross Allocated" value={formatCurrency(commissionTotals.gross)} icon={ChartPie} tone="info" />
+          <StatCard label="Owner Net" value={formatCurrency(commissionTotals.ownerNet)} icon={Landmark} tone="success" />
+          <StatCard label="Treatment Fee" value={formatCurrency(commissionTotals.fee)} icon={Stethoscope} tone="warning" />
+          <StatCard label="Outstanding" value={formatCurrency(commissionTotals.outstanding)} icon={Hourglass} tone="warning" />
+          <StatCard label="Variable Pay" value={formatCurrency(commissionTotals.variable)} icon={HandCoins} tone="success" />
         </div>
       </div>
 

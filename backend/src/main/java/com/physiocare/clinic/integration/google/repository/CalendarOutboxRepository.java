@@ -1,6 +1,7 @@
 package com.physiocare.clinic.integration.google.repository;
 
 import com.physiocare.clinic.integration.google.model.CalendarOutboxEntry;
+import com.physiocare.clinic.integration.google.model.CalendarRemoval;
 import com.physiocare.clinic.integration.google.model.GoogleCalendarDtos.SyncStatusResponse;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -48,6 +49,24 @@ public class CalendarOutboxRepository {
             + " ON CONFLICT (appointment_id) DO UPDATE SET pending_action='UPSERT',"
             + " sync_status='PENDING', attempts=0, next_attempt_at=now(), updated_at=now()",
         staffId);
+  }
+
+  /**
+   * Re-pushes the events still on a calendar (or still to be placed) whose
+   * appointment points at the given row — e.g. every upcoming visit of a
+   * patient whose nickname changed. {@code column} is one of a fixed set of
+   * appointment columns chosen by {@link
+   * com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService},
+   * never caller input.
+   */
+  public int requeueUpcomingBy(String column, long id) {
+    return db.update(
+        "UPDATE appointment_calendar_events e SET sync_status='PENDING', attempts=0,"
+            + " next_attempt_at=now(), updated_at=now() FROM appointments a"
+            + " WHERE a.id=e.appointment_id AND a." + column + "=?"
+            + " AND e.pending_action='UPSERT' AND e.sync_status<>'DELETED'"
+            + " AND a.ends_at >= now() - interval '1 day'",
+        id);
   }
 
   public void requeue(long appointmentId) {
@@ -107,6 +126,52 @@ public class CalendarOutboxRepository {
 
   public void deleteForStaff(long staffId) {
     db.update("DELETE FROM appointment_calendar_events WHERE staff_id=?", staffId);
+    db.update("DELETE FROM calendar_event_removals WHERE staff_id=?", staffId);
+  }
+
+  /** The therapist whose calendar the appointment's event is on (or headed for), if any. */
+  public Optional<Long> trackedStaff(long appointmentId) {
+    return db.queryForList(
+            "SELECT staff_id FROM appointment_calendar_events WHERE appointment_id=?"
+                + " AND sync_status<>'DELETED'",
+            Long.class, appointmentId)
+        .stream()
+        .findFirst();
+  }
+
+  // ------------------------------------------------- removals from an old calendar
+
+  /** Queues removing the appointment's event from a therapist it no longer belongs to. */
+  public void queueRemoval(long appointmentId, long staffId) {
+    db.update(
+        "INSERT INTO calendar_event_removals(appointment_id,staff_id) VALUES(?,?)"
+            + " ON CONFLICT (appointment_id,staff_id) DO UPDATE SET attempts=0,"
+            + " next_attempt_at=now(), last_error=NULL",
+        appointmentId, staffId);
+  }
+
+  /**
+   * Clears a removal: done, or no longer wanted because the appointment came
+   * back to this therapist and the event about to be written there must stay.
+   */
+  public void deleteRemoval(long appointmentId, long staffId) {
+    db.update(
+        "DELETE FROM calendar_event_removals WHERE appointment_id=? AND staff_id=?", appointmentId, staffId);
+  }
+
+  public List<CalendarRemoval> findDueRemovals(int limit) {
+    return db.query(
+        "SELECT appointment_id,staff_id,attempts FROM calendar_event_removals"
+            + " WHERE next_attempt_at<=now() ORDER BY next_attempt_at LIMIT ?",
+        (rs, i) -> new CalendarRemoval(rs.getLong("appointment_id"), rs.getLong("staff_id"), rs.getInt("attempts")),
+        limit);
+  }
+
+  public void markRemovalFailed(long appointmentId, long staffId, String message, long retryInMinutes) {
+    db.update(
+        "UPDATE calendar_event_removals SET attempts=attempts+1, last_error=?,"
+            + " next_attempt_at=now() + (? * interval '1 minute') WHERE appointment_id=? AND staff_id=?",
+        message, retryInMinutes, appointmentId, staffId);
   }
 
   public Optional<SyncStatusResponse> findStatus(long appointmentId) {

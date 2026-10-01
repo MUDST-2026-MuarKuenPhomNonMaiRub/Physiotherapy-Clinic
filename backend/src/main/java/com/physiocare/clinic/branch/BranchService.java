@@ -1,6 +1,7 @@
 package com.physiocare.clinic.branch;
 
 import com.physiocare.clinic.common.InputRules;
+import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -24,9 +25,11 @@ public class BranchService {
               rs.getBoolean("active"));
 
   private final JdbcTemplate db;
+  private final GoogleCalendarSyncService calendarSync;
 
-  public BranchService(JdbcTemplate db) {
+  public BranchService(JdbcTemplate db, GoogleCalendarSyncService calendarSync) {
     this.db = db;
+    this.calendarSync = calendarSync;
   }
 
   @GetMapping
@@ -79,6 +82,8 @@ public class BranchService {
       throw new IllegalArgumentException("A branch with this code already exists");
     }
     if (rows == 0) throw new IllegalArgumentException("Branch not found");
+    // Upcoming calendar events show the branch name and address.
+    calendarSync.detailChanged(GoogleCalendarSyncService.EventDetail.BRANCH, id);
     return get(id);
   }
 

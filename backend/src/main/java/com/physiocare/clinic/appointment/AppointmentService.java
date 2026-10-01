@@ -8,7 +8,10 @@ import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncServic
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -16,6 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AppointmentService {
+  /** How a moved appointment's old slot is written into its note: "12 Oct 2026 10:00". */
+  private static final DateTimeFormatter NOTE_TIME =
+      DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm", Locale.ENGLISH);
+
   private final AppointmentRepository appointments;
   private final AppointmentValidator validator;
   private final AppointmentConflictService conflicts;
@@ -60,6 +67,10 @@ public class AppointmentService {
     branches.requireActiveBranch(r.branchId());
     validator.validateSlot(r.startsAt(), r.endsAt());
     validator.validateNotes(r.patientNote(), r.internalNote());
+    branches.requirePatientExists(r.patientId());
+    if (!appointments.isActiveService(r.serviceId()))
+      throw new IllegalArgumentException("This service is not available for booking");
+    requireBookableAt(r);
     conflicts.requireFreeSlot(r, null);
     long id = appointments.insert(r, nextAppointmentNo(), currentUser.id(auth));
     appointments.addInitialEvent(id, currentUser.id(auth));
@@ -80,15 +91,85 @@ public class AppointmentService {
         ((Number) original.get("service_id")).longValue(),
         original.get("room_id") == null ? null : ((Number) original.get("room_id")).longValue(),
         r.startsAt(), r.endsAt(), null, null);
+    requireBookableAt(moved);
     conflicts.requireFreeSlot(moved, id);
     transitionTo(id, "RESCHEDULED", r.reason(), auth);
+    // The old slot is written in the clinic's own time (the JVM is pinned to it,
+    // see TimeZoneConfig): the instant arrives in UTC, and "03:00Z" on a note
+    // reads as the wrong hour to everyone at the counter.
     OffsetDateTime originalStart = toOffsetDateTime(original.get("starts_at"), r.startsAt().getOffset());
-    String note = (r.reason() == null || r.reason().isBlank())
-        ? "Rescheduled from " + originalStart : "Rescheduled from " + originalStart + " — " + r.reason();
-    long newId = appointments.insertRescheduled(moved, nextAppointmentNo(), currentUser.id(auth), note);
-    appointments.addEvent(newId, null, "CONFIRMED", note, currentUser.id(auth));
+    String moveNote = "Rescheduled from "
+        + NOTE_TIME.format(originalStart.atZoneSameInstant(ZoneId.systemDefault()))
+        + (r.reason() == null || r.reason().isBlank() ? "" : " — " + r.reason());
+    // The booking's own notes travel with it; the move is added underneath.
+    String patientNote = (String) original.get("patient_note");
+    String note = patientNote == null || patientNote.isBlank() ? moveNote : patientNote + "\n" + moveNote;
+    long newId = appointments.insertRescheduled(
+        moved, nextAppointmentNo(), currentUser.id(auth), note, (String) original.get("internal_note"));
+    appointments.addEvent(newId, null, "CONFIRMED", moveNote, currentUser.id(auth));
     calendarSync.appointmentChanged(newId);
     return get(newId, auth);
+  }
+
+  /**
+   * Moves or resizes a booking in place — the calendar's drag, as in Google
+   * Calendar. Unlike a reschedule, which the patient asks for and which leaves
+   * the old booking on record, this is the same visit on a corrected slot: same
+   * number, same notes, one history line. Once the patient has arrived only the
+   * end can move (a session running long or finishing early), and only a visit
+   * still to come can be handed to another physiotherapist.
+   */
+  @Transactional
+  public Map<String, Object> changeTime(
+      long id, AppointmentController.TimeChangeRequest r, Authentication auth) {
+    // Locked before it is read, so the status checked below is the one updated.
+    appointments.lockForUpdate(id);
+    Map<String, Object> current = get(id, auth);
+    String status = (String) current.get("status");
+    if (!List.of("CONFIRMED", "ARRIVED", "IN_SERVICE").contains(status))
+      throw new IllegalArgumentException("Only a booked or ongoing appointment can be moved or resized");
+    OffsetDateTime oldStart = toOffsetDateTime(current.get("starts_at"), r.startsAt().getOffset());
+    OffsetDateTime oldEnd = toOffsetDateTime(current.get("ends_at"), r.endsAt().getOffset());
+    if (!"CONFIRMED".equals(status) && !oldStart.isEqual(r.startsAt()))
+      throw new IllegalArgumentException("The patient has arrived, so only the end time can change");
+    validator.validateSlot(r.startsAt(), r.endsAt());
+
+    long branchId = ((Number) current.get("branch_id")).longValue();
+    long fromProvider = ((Number) current.get("provider_staff_id")).longValue();
+    long toProvider = r.providerStaffId() == null ? fromProvider : r.providerStaffId();
+    boolean handedOver = toProvider != fromProvider;
+    if (handedOver) {
+      if (!"CONFIRMED".equals(status))
+        throw new IllegalArgumentException("The patient has arrived, so the physiotherapist cannot change");
+      branches.requireStaffInBranch(toProvider, branchId, "This physiotherapist");
+    }
+    AppointmentController.AppointmentRequest slot = new AppointmentController.AppointmentRequest(
+        ((Number) current.get("patient_id")).longValue(), branchId,
+        toProvider,
+        ((Number) current.get("service_id")).longValue(),
+        current.get("room_id") == null ? null : ((Number) current.get("room_id")).longValue(),
+        r.startsAt(), r.endsAt(), null, null);
+    conflicts.requireFreeSlot(slot, id);
+
+    appointments.updateSlot(id, r.startsAt(), r.endsAt(), toProvider);
+    ZoneId clinic = ZoneId.systemDefault();
+    DateTimeFormatter hm = DateTimeFormatter.ofPattern("HH:mm");
+    boolean retimed = !oldStart.isEqual(r.startsAt()) || !oldEnd.isEqual(r.endsAt());
+    List<String> changes = new java.util.ArrayList<>();
+    if (retimed)
+      changes.add("Time changed from " + NOTE_TIME.format(oldStart.atZoneSameInstant(clinic))
+          + "–" + hm.format(oldEnd.atZoneSameInstant(clinic))
+          + " to " + NOTE_TIME.format(r.startsAt().atZoneSameInstant(clinic))
+          + "–" + hm.format(r.endsAt().atZoneSameInstant(clinic)));
+    if (handedOver)
+      changes.add("Physiotherapist changed from " + appointments.staffName(fromProvider)
+          + " to " + appointments.staffName(toProvider));
+    if (!changes.isEmpty())
+      appointments.addEvent(id, status, status, String.join("; ", changes), currentUser.id(auth));
+    // A handover moves the Google event from one therapist's calendar to the other's.
+    if (handedOver) calendarSync.providerChanged(id, fromProvider);
+    else calendarSync.appointmentChanged(id);
+    return get(id, auth);
   }
 
   @Transactional
@@ -151,6 +232,18 @@ public class AppointmentService {
         ((Number) appointment.get("branch_id")).longValue(), appointmentId,
         ((Number) appointment.get("provider_staff_id")).longValue(), currentUser.displayName(auth),
         currentUser.id(auth), LocalDate.now());
+  }
+
+  /**
+   * The physiotherapist and room must belong to the branch the visit is at,
+   * as checkout already requires — the booking screen only offers those, but
+   * the API is reachable without it. Checked on a move too: the therapist may
+   * have left the branch since the visit was first booked.
+   */
+  private void requireBookableAt(AppointmentController.AppointmentRequest r) {
+    branches.requireStaffInBranch(r.providerStaffId(), r.branchId(), "This physiotherapist");
+    if (r.roomId() != null && !appointments.isActiveRoomInBranch(r.roomId(), r.branchId()))
+      throw new IllegalArgumentException("This treatment room is not available in this branch");
   }
 
   private boolean isAllowedTransition(String from, String to) {

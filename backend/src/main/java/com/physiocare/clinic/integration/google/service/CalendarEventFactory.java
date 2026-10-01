@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +38,19 @@ public class CalendarEventFactory {
     return "labalance" + appointmentId;
   }
 
+  /**
+   * Google's fixed event palette, so the day reads at a glance: green once the
+   * visit is done, orange while the patient is in, purple for an assessment
+   * still to come and the brand cyan for any other booked visit.
+   */
+  static String colorId(AppointmentEventSource a) {
+    return switch (a.status()) {
+      case "COMPLETED" -> "10"; // Basil
+      case "ARRIVED", "IN_SERVICE" -> "6"; // Tangerine
+      default -> "ASSESSMENT".equals(a.serviceType()) ? "3" /* Grape */ : "7" /* Peacock */;
+    };
+  }
+
   public Map<String, Object> build(AppointmentEventSource a) {
     String zone = a.timezone() == null ? "Asia/Bangkok" : a.timezone();
     OffsetDateTime starts = a.startsAt().atZone(ZoneId.of(zone)).toOffsetDateTime();
@@ -62,7 +76,18 @@ public class CalendarEventFactory {
     if (a.branchAddress() != null) event.put("location", a.branchAddress());
     event.put("start", Map.of("dateTime", RFC_3339.format(starts), "timeZone", zone));
     event.put("end", Map.of("dateTime", RFC_3339.format(ends), "timeZone", zone));
-    event.put("reminders", Map.of("useDefault", true));
+    // Always sent: an event the clinic removed earlier (a disconnect, then a
+    // reconnect) still exists in Google as "cancelled" under the same id. The
+    // insert is refused as a duplicate and the push falls back to an update —
+    // which only brings the event back if it says so.
+    event.put("status", "confirmed");
+    event.put("colorId", colorId(a));
+    List<Integer> reminders = settings.reminderMinutes();
+    event.put("reminders", reminders.isEmpty()
+        ? Map.of("useDefault", true)
+        : Map.of("useDefault", false, "overrides", reminders.stream()
+            .map(minutes -> Map.of("method", "popup", "minutes", minutes))
+            .toList()));
     event.put(
         "extendedProperties",
         Map.of("private", Map.of(

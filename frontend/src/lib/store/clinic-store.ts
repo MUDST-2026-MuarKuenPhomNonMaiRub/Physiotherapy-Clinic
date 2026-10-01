@@ -20,7 +20,7 @@ import type {
 } from "@/types";
 
 import * as api from "@/lib/api/clinic-api";
-import { setTokenReader, setUnauthenticatedHandler } from "@/lib/api/client";
+import { setUnauthenticatedHandler } from "@/lib/api/client";
 
 // Incremented whenever an operational mutation completes. A refresh that was
 // started before that mutation must not overwrite the newer local state.
@@ -30,10 +30,13 @@ function invalidateOperationalRefresh() {
   operationalRevision += 1;
 }
 
+/**
+ * Who is signed in, as last read from the API. The session itself is an
+ * HttpOnly cookie that page script never sees, so nothing here is a secret.
+ */
 export interface Session {
   user: AppUser | null;
   activeBranchId: string | null;
-  accessToken: string | null;
 }
 
 export interface CheckoutAdjustment {
@@ -115,7 +118,7 @@ interface ClinicState {
   transactions: Transaction[];
 
   // session
-  setAuthenticatedSession: (user: AppUser, accessToken: string) => void;
+  setAuthenticatedSession: (user: AppUser) => void;
   logout: () => void;
   setActiveBranch: (branchId: string | null) => void;
 
@@ -190,6 +193,17 @@ interface ClinicState {
   completeService: (id: string, usePatientCourseId?: string) => Promise<void>;
   cancelAppointment: (id: string, reason: string) => Promise<void>;
   markNoShow: (id: string) => Promise<void>;
+  /**
+   * Moves or resizes a booking in place (the calendar's drag), handing it to
+   * `physioId` when given; the slot is re-checked by the server.
+   */
+  changeAppointmentTime: (
+    id: string,
+    date: string,
+    startTime: string,
+    endTime: string,
+    physioId?: string
+  ) => Promise<void>;
   rescheduleAppointment: (
     id: string,
     date: string,
@@ -248,7 +262,7 @@ function requireItem<T>(item: T | undefined, label: string): T {
 export const useClinicStore = create<ClinicState>()(
   persist(
     immer((set, get) => ({
-      session: { user: null, activeBranchId: null, accessToken: null } as Session,
+      session: { user: null, activeBranchId: null } as Session,
       hasHydrated: false,
       dataLoaded: false,
       operationalLoading: false,
@@ -262,11 +276,10 @@ export const useClinicStore = create<ClinicState>()(
           s.hasHydrated = v;
         }),
 
-      setAuthenticatedSession: (user, accessToken) =>
+      setAuthenticatedSession: (user) =>
         set((s) => {
           invalidateOperationalRefresh();
           s.session.user = user;
-          s.session.accessToken = accessToken;
           s.session.activeBranchId = null;
           // A fresh sign-in starts clean: a failure recorded against the
           // previous session must not keep the next one from loading.
@@ -278,16 +291,20 @@ export const useClinicStore = create<ClinicState>()(
           Object.assign(s, emptyData);
         }),
 
-      logout: () =>
+      logout: () => {
+        // The cookie is HttpOnly, so only the API can expire it. Signing out
+        // locally does not wait on that call: the screen clears either way.
+        void api.logout().catch(() => undefined);
         set((s) => {
           invalidateOperationalRefresh();
-          s.session = { user: null, activeBranchId: null, accessToken: null };
+          s.session = { user: null, activeBranchId: null };
           s.dataLoaded = false;
           s.operationalLoading = false;
           s.operationalLoaded = false;
           s.loadError = null;
           Object.assign(s, emptyData);
-        }),
+        });
+      },
 
       setActiveBranch: (branchId) =>
         set((s) => {
@@ -296,12 +313,14 @@ export const useClinicStore = create<ClinicState>()(
 
       refresh: async () => {
         const { session } = get();
-        if (!session.accessToken || !session.user) return;
+        if (!session.user) return;
         invalidateOperationalRefresh();
+        // operationalLoaded is left as it is: a refresh re-reads the reference
+        // data and the profile, and keeps the patients, courses, visits and
+        // transactions already on screen until refreshOperational replaces them.
         set((s) => {
           s.loading = true;
           s.loadError = null;
-          s.operationalLoaded = false;
         });
         try {
           // The saved token may be older than the account behind it, so the
@@ -312,12 +331,15 @@ export const useClinicStore = create<ClinicState>()(
           // branches their account is assigned to, and the API only hands
           // them the operational lists one branch at a time.
           const assigned = (profile.branchIds ?? []).map(String);
-          const snapshot = await api.loadSnapshot(role === "ADMIN", role === "ADMIN" ? null : assigned);
+          const snapshot = await api.loadSnapshot(
+            role === "ADMIN",
+            role === "ADMIN" ? null : assigned,
+            (profile.permissions ?? []).includes("settings.manage")
+          );
 
           set((s) => {
             Object.assign(s, snapshot);
             s.dataLoaded = true;
-            s.operationalLoaded = false;
             s.loading = false;
 
             const active = snapshot.branches.filter((b) => b.status === "ACTIVE");
@@ -344,9 +366,9 @@ export const useClinicStore = create<ClinicState>()(
             }
           });
         } catch (error) {
-          // A rejected token has already signed the user out and the app is on
+          // A rejected session has already signed the user out and the app is on
           // its way to the sign-in screen, so there is no failure to report.
-          const signedOut = !get().session.accessToken;
+          const signedOut = !get().session.user;
           set((s) => {
             s.loading = false;
             s.loadError = signedOut
@@ -843,6 +865,14 @@ export const useClinicStore = create<ClinicState>()(
         });
       },
 
+      changeAppointmentTime: async (id, date, startTime, endTime, physioId) => {
+        const appointment = await api.changeAppointmentTime(id, date, startTime, endTime, physioId);
+        invalidateOperationalRefresh();
+        set((s) => {
+          upsert(s.appointments, appointment);
+        });
+      },
+
       rescheduleAppointment: async (id, date, startTime, endTime, reason) => {
         const moved = await api.rescheduleAppointment(id, date, startTime, endTime, reason);
         invalidateOperationalRefresh();
@@ -899,25 +929,29 @@ export const useClinicStore = create<ClinicState>()(
     })),
     {
       name: "clinic-erp-store",
-      version: 7,
-      // Clinic data lives on the server now; only the session is worth keeping
-      // between page loads.
-      // Keep the authenticated session across a normal browser refresh. The
-      // API still rejects expired tokens and clears the session on 401/403.
+      version: 8,
+      // Clinic data lives on the server; only who is signed in is kept between
+      // page loads. The token is not: it lives in the HttpOnly cookie, which
+      // survives a refresh by itself, and a stale profile here is re-checked
+      // against the API (a 401 signs out) before anything loads.
       partialize: (s) => ({
-        session: { user: s.session.user, activeBranchId: s.session.activeBranchId, accessToken: s.session.accessToken },
+        session: { user: s.session.user, activeBranchId: s.session.activeBranchId },
       }),
       migrate: (persisted, version) => {
         // Versions below 5 persisted a whole mock database. Dropping it is the
         // migration: everything is re-read from the API on the next load.
         if (version < 5) {
           return {
-            session: { user: null, activeBranchId: null, accessToken: null },
+            session: { user: null, activeBranchId: null },
           };
         }
         const session = (persisted as { session?: Partial<Session> } | undefined)?.session;
         return {
-          session: { user: session?.user ?? null, activeBranchId: session?.activeBranchId ?? null, accessToken: session?.accessToken ?? null },
+          // Up to version 7 the token itself was kept here; it is dropped, so
+          // an older browser signs in again and gets the cookie instead.
+          session: version < 8
+            ? { user: null, activeBranchId: null }
+            : { user: session?.user ?? null, activeBranchId: session?.activeBranchId ?? null },
         };
       },
       merge: (persisted, current) => {
@@ -939,9 +973,6 @@ export const useClinicStore = create<ClinicState>()(
   )
 );
 
-// The API reads the token straight out of the live store, so every request uses
-// the current session without any screen having to pass it along.
-setTokenReader(() => useClinicStore.getState().session.accessToken);
 setUnauthenticatedHandler(() => useClinicStore.getState().logout());
 
 export type { Role };

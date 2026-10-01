@@ -24,7 +24,8 @@ public final class AuthDtos {
       @NotBlank String lastName,
       @NotBlank String role) {}
 
-  public record LoginResponse(String accessToken, String tokenType, long expiresIn) {}
+  /** The session itself is set as an HttpOnly cookie; the body only says how long it lasts. */
+  public record LoginResponse(long expiresIn) {}
 
   public record MeResponse(
       Long id,

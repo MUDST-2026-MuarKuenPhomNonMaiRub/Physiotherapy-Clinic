@@ -10,7 +10,7 @@ export const thaiTranslations: Record<string, string> = {
   "1. Patient": "1. ผู้ป่วย",
   "2. Appointment block": "2. บล็อคนัดหมาย",
   "3. Choose what goes in this block": "3. เลือกบริการในบล็อค",
-  "Search or browse a category. Selecting a service sets the duration; you can adjust it above.": "ค้นหาหรือเลือกตามประเภท ระบบกำหนดระยะเวลาตามบริการ โดยปรับเวลาได้ด้านบน",
+  "Search or browse a category. The time stays as set in the appointment block above.": "ค้นหาหรือเลือกตามประเภท เวลาจะเป็นไปตามที่ตั้งไว้ในช่วงนัดด้านบน",
   "Block preview": "ตัวอย่างบล็อคนัดหมาย",
   "Review before creating the appointment": "ตรวจสอบรายละเอียดก่อนบันทึกนัดหมาย",
   "Frequently selected on this device": "เลือกใช้บ่อยบนเครื่องนี้",
@@ -644,6 +644,16 @@ export const thaiTranslations: Record<string, string> = {
   "Treatment + Sales": "การรักษา + การขาย",
   "Monthly Course Sales": "ยอดขายคอร์สรายเดือน",
   "Monthly Sales": "ยอดขายรายเดือน",
+  "Daily Sales": "ยอดขายรายวัน",
+  "Yearly Sales": "ยอดขายรายปี",
+  "vs previous day": "เทียบกับวันก่อน",
+  "vs previous month": "เทียบกับเดือนก่อน",
+  "vs previous year": "เทียบกับปีก่อน",
+  "vs same days last month": "เทียบช่วงเดียวกันของเดือนก่อน",
+  "vs same days last year": "เทียบช่วงเดียวกันของปีก่อน",
+  "Last 14 days": "14 วันล่าสุด",
+  "Last 12 months": "12 เดือนล่าสุด",
+  "Last 5 years": "5 ปีล่าสุด",
   "Total Variable Pay": "ค่าตอบแทนผันแปรรวม",
   "Total Commission (active)": "ค่าคอมมิชชันรวม (ที่ใช้งาน)",
   "Owner Net = Gross Allocation − Treatment Fee": "ยอดสุทธิของเจ้าของ = ยอดจัดสรรขั้นต้น − ค่ารักษา",
@@ -1070,6 +1080,9 @@ export const thaiTranslations: Record<string, string> = {
   "Appointment not found": "ไม่พบนัดหมาย",
   "Transaction not found": "ไม่พบรายการชำระเงิน",
   "Course not found": "ไม่พบคอร์ส",
+  "Drag to move or to another physiotherapist, drag the bottom edge to change the end time": "ลากเพื่อย้ายเวลาหรือย้ายไปนักกายภาพคนอื่น ลากขอบล่างเพื่อปรับเวลาสิ้นสุด",
+  "Drag the bottom edge to change the end time": "ลากขอบล่างเพื่อปรับเวลาสิ้นสุด",
+  "It may have been removed, or it belongs to a branch you cannot see.": "อาจถูกลบไปแล้ว หรืออยู่ในสาขาที่คุณไม่มีสิทธิ์เข้าถึง",
   "Service not found": "ไม่พบบริการ",
   "Branch not found": "ไม่พบสาขา",
   "Room not found": "ไม่พบห้อง",
@@ -1096,6 +1109,14 @@ export interface TranslationPattern {
 
 /** Dynamic UI phrases that contain record counts, dates, names, or amounts. */
 export const thaiPatterns: TranslationPattern[] = [
+  {
+    pattern: /^Appointment moved to (.+), (\d{2}:\d{2}–\d{2}:\d{2})$/,
+    replace: (_all, physio, slot) => `ย้ายนัดไปให้ ${physio} เวลา ${slot} แล้ว`,
+  },
+  {
+    pattern: /^Appointment moved to (\d{2}:\d{2}–\d{2}:\d{2})$/,
+    replace: (_all, slot) => `เปลี่ยนเวลานัดเป็น ${slot} แล้ว`,
+  },
   {
     pattern: /^Showing (\d+)–(\d+) of (\d+)$/,
     replace: (_all, from, to, total) => `แสดง ${from}–${to} จาก ${total}`,

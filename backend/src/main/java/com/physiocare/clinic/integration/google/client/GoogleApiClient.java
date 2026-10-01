@@ -55,7 +55,8 @@ public class GoogleApiClient {
     return new GoogleTokens(
         String.valueOf(body.get("access_token")),
         body.get("refresh_token") == null ? null : String.valueOf(body.get("refresh_token")),
-        body.get("expires_in") == null ? 3600 : ((Number) body.get("expires_in")).longValue());
+        body.get("expires_in") == null ? 3600 : ((Number) body.get("expires_in")).longValue(),
+        body.get("scope") == null ? null : String.valueOf(body.get("scope")));
   }
 
   /** A fresh short-lived access token from the stored refresh token. */

@@ -36,7 +36,7 @@ public class AppointmentCalendarRepository {
   public Optional<AppointmentEventSource> findEventSource(long appointmentId) {
     return db.query(
             "SELECT a.id,a.status,a.starts_at,a.ends_at,a.appointment_no,"
-                + " p.hn,p.nickname,s.name_th AS service_name,r.name AS room_name,b.name AS branch_name,"
+                + " p.hn,p.nickname,s.name_th AS service_name,s.service_type,r.name AS room_name,b.name AS branch_name,"
                 + " b.address AS branch_address, b.timezone"
                 + " FROM appointments a JOIN patients p ON p.id=a.patient_id"
                 + " JOIN services s ON s.id=a.service_id JOIN branches b ON b.id=a.branch_id"
@@ -50,6 +50,7 @@ public class AppointmentCalendarRepository {
                 rs.getString("hn"),
                 rs.getString("nickname"),
                 rs.getString("service_name"),
+                rs.getString("service_type"),
                 rs.getString("room_name"),
                 rs.getString("branch_name"),
                 rs.getString("branch_address"),
