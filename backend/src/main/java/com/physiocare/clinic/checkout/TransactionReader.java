@@ -275,6 +275,28 @@ public class TransactionReader {
     return PageResponse.of(rows, page, size, total);
   }
 
+  /**
+   * Server-side page of the course ledger, newest first. The app reads every
+   * page to build its history; ordering by newest means an entry written while
+   * the pages are being read pushes older rows down (seen twice, de-duplicated
+   * by id) instead of shifting one past the reader unseen.
+   */
+  public PageResponse<Map<String, Object>> ledgerPage(Long branchId, int requestedPage, int requestedSize) {
+    int size = PageResponse.size(requestedSize);
+    int page = Math.max(requestedPage, 0);
+    String where = " FROM course_ledger_entries e LEFT JOIN visits v ON v.id=e.related_visit_id"
+        + " JOIN patient_courses pc ON pc.id=e.patient_course_id"
+        + " WHERE (?::bigint IS NULL OR pc.branch_id=?)";
+    long total = db.queryForObject("SELECT count(*)" + where, Long.class, branchId, branchId);
+    List<Map<String, Object>> rows = db.queryForList(
+        "SELECT e.id,e.patient_course_id,e.entry_type,e.quantity,e.balance_after,e.branch_id,"
+            + "e.related_transaction_id,e.related_visit_id,v.appointment_id AS related_appointment_id,"
+            + "e.transfer_group_id,e.counterparty_patient_id,e.performed_by_name,e.created_at" + where
+            + " ORDER BY e.id DESC LIMIT ? OFFSET ?",
+        branchId, branchId, size, PageResponse.offset(page, size));
+    return PageResponse.of(rows, page, size, total);
+  }
+
   private static Long asLong(Object value) {
     return value == null ? null : ((Number) value).longValue();
   }

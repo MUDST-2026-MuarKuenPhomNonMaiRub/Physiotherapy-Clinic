@@ -797,16 +797,35 @@ export interface CourseSnapshot {
   courseLedger: CourseLedgerEntry[];
 }
 
-// The course endpoint returns both balances and ledger rows in one envelope;
-// keep its larger bounded read for now while the operational lists above use
-// the paginated contracts.
-export const listPatientCourses = (branchId?: string | null, limit = 1000): Promise<CourseSnapshot> =>
-  apiRequest<{ patientCourses: Row[]; ledger: Row[] }>(
-    `/api/v1/patient-courses${query({ branchId, limit })}`
-  ).then((response) => ({
-    patientCourses: response.patientCourses.map(toPatientCourse),
-    courseLedger: response.ledger.map(toLedgerEntry),
-  }));
+/** Ascending by numeric id; a stable sort keeps a course's owner row ahead of its members. */
+const byNumericId = <T extends { id: string }>(rows: T[]) =>
+  [...rows].sort((a, b) => Number(a.id) - Number(b.id));
+
+/**
+ * Every course balance and ledger entry, read page by page like the other
+ * operational lists. A single bounded read used to stop at 1,000 rows, oldest
+ * first — so once a clinic passed that, its newest courses and most recent
+ * visits silently dropped out of checkout and course history.
+ *
+ * The pages are read newest first, so a row written mid-read can only repeat
+ * at a page boundary, never be skipped; the repeat is dropped here. The result
+ * is put back in ascending order, which is what the screens were built on.
+ */
+export const listPatientCourses = async (branchId?: string | null): Promise<CourseSnapshot> => {
+  const [courseRows, ledgerRows] = await Promise.all([
+    readAllPages((page, size) =>
+      apiRequest<PageResponse<Row>>(`/api/v1/patient-courses/page${query({ branchId, page, size })}`)
+    ),
+    readAllPages((page, size) =>
+      apiRequest<PageResponse<Row>>(`/api/v1/patient-courses/ledger/page${query({ branchId, page, size })}`)
+    ),
+  ]);
+  const courses = new Map<string, PatientCourse>();
+  for (const pc of courseRows.map(toPatientCourse)) courses.set(`${pc.id}-${pc.patientId}`, pc);
+  const ledger = new Map<string, CourseLedgerEntry>();
+  for (const entry of ledgerRows.map(toLedgerEntry)) ledger.set(entry.id, entry);
+  return { patientCourses: byNumericId([...courses.values()]), courseLedger: byNumericId([...ledger.values()]) };
+};
 
 export const listPatientCoursesPage = async (
   page = 0,
@@ -831,7 +850,7 @@ export const listPatientCoursesFor = async (scope: BranchScope): Promise<CourseS
     for (const pc of part.patientCourses) courses.set(`${pc.id}-${pc.patientId}`, pc);
     for (const entry of part.courseLedger) ledger.set(entry.id, entry);
   }
-  return { patientCourses: [...courses.values()], courseLedger: [...ledger.values()] };
+  return { patientCourses: byNumericId([...courses.values()]), courseLedger: byNumericId([...ledger.values()]) };
 };
 
 export const transferCourseSessions = (
