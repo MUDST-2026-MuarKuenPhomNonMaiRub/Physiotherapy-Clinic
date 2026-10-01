@@ -10,7 +10,7 @@ export const thaiTranslations: Record<string, string> = {
   "1. Patient": "1. ผู้ป่วย",
   "2. Appointment block": "2. บล็อคนัดหมาย",
   "3. Choose what goes in this block": "3. เลือกบริการในบล็อค",
-  "Search or browse a category. Selecting a service sets the duration; you can adjust it above.": "ค้นหาหรือเลือกตามประเภท ระบบกำหนดระยะเวลาตามบริการ โดยปรับเวลาได้ด้านบน",
+  "Search or browse a category. The time stays as set in the appointment block above.": "ค้นหาหรือเลือกตามประเภท เวลาจะเป็นไปตามที่ตั้งไว้ในช่วงนัดด้านบน",
   "Block preview": "ตัวอย่างบล็อคนัดหมาย",
   "Review before creating the appointment": "ตรวจสอบรายละเอียดก่อนบันทึกนัดหมาย",
   "Frequently selected on this device": "เลือกใช้บ่อยบนเครื่องนี้",
