@@ -22,6 +22,20 @@ export function formatDate(dateStr: string): string {
   return d.toLocaleDateString(formattingLocale(), { day: "2-digit", month: "short", year: "numeric" });
 }
 
+/**
+ * A reporting period by name: "01 Oct 2026", "Oct 2026" or "2026" (Thai dates
+ * in Thai). The language is passed in rather than read from storage, so a
+ * component that memoises the result re-formats it when the language changes.
+ */
+export function formatPeriod(period: "day" | "month" | "year", value: string, language: "en" | "th"): string {
+  const locale = language === "th" ? "th-TH" : "en-GB";
+  const key = period === "day" ? value : period === "month" ? `${value}-01` : `${value}-01-01`;
+  const d = new Date(`${key}T00:00:00`);
+  if (period === "day") return d.toLocaleDateString(locale, { day: "2-digit", month: "short", year: "numeric" });
+  if (period === "month") return d.toLocaleDateString(locale, { month: "short", year: "numeric" });
+  return d.toLocaleDateString(locale, { year: "numeric" });
+}
+
 export function formatThaiNationalId(value: string): string {
   const digits = value.replace(/\D/g, "");
   return digits.length === 13
