@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/shared/number-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -200,7 +201,7 @@ export default function CommissionSettingsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label>{form.commissionType === "PERCENTAGE" ? "Percentage" : "Amount (THB)"}</Label>
-                <Input type="number" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: Number(e.target.value) }))} />
+                <NumberInput value={form.value} onValueChange={(value) => setForm((f) => ({ ...f, value }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Effective Date</Label>

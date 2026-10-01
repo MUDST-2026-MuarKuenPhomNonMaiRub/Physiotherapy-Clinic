@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/shared/number-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
@@ -347,13 +348,13 @@ export default function ServicesSettingsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Price (THB)</Label>
-              <Input type="number" min={0.01} step="0.01" value={serviceForm.price} onChange={(e) => setServiceForm((f) => ({ ...f, price: Number(e.target.value) }))} />
+              <NumberInput min={0.01} step="0.01" value={serviceForm.price} onValueChange={(price) => setServiceForm((f) => ({ ...f, price }))} />
             </div>
             <div className="space-y-1.5">
               <Label>Default duration (minutes)</Label>
               <div className="flex gap-1">
                 <Button type="button" variant="outline" size="icon" onClick={() => setServiceForm((f) => ({ ...f, duration: Math.max(15, f.duration - 15) }))} aria-label="Reduce duration by 15 minutes"><Minus className="h-3.5 w-3.5" /></Button>
-                <Input type="number" min={1} step={15} value={serviceForm.duration} onChange={(e) => setServiceForm((f) => ({ ...f, duration: Number(e.target.value) }))} aria-label="Duration in minutes" />
+                <NumberInput min={1} step={15} value={serviceForm.duration} onValueChange={(duration) => setServiceForm((f) => ({ ...f, duration }))} aria-label="Duration in minutes" />
                 <Button type="button" variant="outline" size="icon" onClick={() => setServiceForm((f) => ({ ...f, duration: f.duration + 15 }))} aria-label="Add duration by 15 minutes"><Plus className="h-3.5 w-3.5" /></Button>
               </div>
               <p className="text-xs text-muted-foreground">Sets the default booking length. The end time can still be adjusted for each appointment.</p>
@@ -386,19 +387,19 @@ export default function ServicesSettingsPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Price (THB)</Label>
-                <Input type="number" min={1} value={courseForm.price} onChange={(e) => setCourseForm((f) => ({ ...f, price: Number(e.target.value) }))} />
+                <NumberInput min={1} value={courseForm.price} onValueChange={(price) => setCourseForm((f) => ({ ...f, price }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Number of Sessions</Label>
-                <Input type="number" min={1} value={courseForm.sessions} onChange={(e) => setCourseForm((f) => ({ ...f, sessions: Number(e.target.value) }))} />
+                <NumberInput min={1} value={courseForm.sessions} onValueChange={(sessions) => setCourseForm((f) => ({ ...f, sessions }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Bonus Sessions</Label>
-                <Input type="number" min={0} value={courseForm.bonusSessions} onChange={(e) => setCourseForm((f) => ({ ...f, bonusSessions: Number(e.target.value) }))} />
+                <NumberInput min={0} value={courseForm.bonusSessions} onValueChange={(bonusSessions) => setCourseForm((f) => ({ ...f, bonusSessions }))} />
               </div>
               <div className="space-y-1.5">
                 <Label>Expiry (days)</Label>
-                <Input type="number" min={1} value={courseForm.expiryDays} onChange={(e) => setCourseForm((f) => ({ ...f, expiryDays: Number(e.target.value) }))} />
+                <NumberInput min={1} value={courseForm.expiryDays} onValueChange={(expiryDays) => setCourseForm((f) => ({ ...f, expiryDays }))} />
               </div>
             </div>
             <div className="space-y-1.5">
@@ -438,14 +439,13 @@ export default function ServicesSettingsPage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>{courseForm.specialCommissionType === "PERCENTAGE" ? "Percentage" : "Amount (THB)"}</Label>
-                  <Input
-                    type="number"
+                  <NumberInput
                     min={0}
                     max={courseForm.specialCommissionType === "PERCENTAGE" ? 100 : undefined}
                     step="0.01"
                     value={courseForm.specialCommissionValue}
-                    onChange={(event) =>
-                      setCourseForm((form) => ({ ...form, specialCommissionValue: Number(event.target.value) }))
+                    onValueChange={(specialCommissionValue) =>
+                      setCourseForm((form) => ({ ...form, specialCommissionValue }))
                     }
                   />
                 </div>
