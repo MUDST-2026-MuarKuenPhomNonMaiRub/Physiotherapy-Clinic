@@ -67,13 +67,13 @@ public class AppointmentRepository {
   }
 
   public long insertRescheduled(AppointmentController.AppointmentRequest r, String appointmentNo,
-      long createdBy, String patientNote) {
+      long createdBy, String patientNote, String internalNote) {
     return db.queryForObject(
         "INSERT INTO appointments(appointment_no,patient_id,branch_id,provider_staff_id,"
-            + "service_id,room_id,starts_at,ends_at,patient_note,created_by)"
-            + " VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id",
+            + "service_id,room_id,starts_at,ends_at,patient_note,internal_note,created_by)"
+            + " VALUES(?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
         Long.class, appointmentNo, r.patientId(), r.branchId(), r.providerStaffId(), r.serviceId(),
-        r.roomId(), r.startsAt(), r.endsAt(), patientNote, createdBy);
+        r.roomId(), r.startsAt(), r.endsAt(), patientNote, internalNote, createdBy);
   }
 
   public void addEvent(long appointmentId, String from, String to, String reason, long actorId) {
@@ -121,6 +121,18 @@ public class AppointmentRepository {
   public Long nextAppointmentNumber() {
     db.queryForList("SELECT pg_advisory_xact_lock(hashtext(?))", Object.class, "appointments:appointment_no");
     return db.queryForObject("SELECT nextval('appointment_no_seq')", Long.class);
+  }
+
+  public boolean isActiveService(long serviceId) {
+    return Boolean.TRUE.equals(db.queryForObject(
+        "SELECT EXISTS(SELECT 1 FROM services WHERE id=? AND active AND deleted_at IS NULL)",
+        Boolean.class, serviceId));
+  }
+
+  public boolean isActiveRoomInBranch(long roomId, long branchId) {
+    return Boolean.TRUE.equals(db.queryForObject(
+        "SELECT EXISTS(SELECT 1 FROM rooms WHERE id=? AND branch_id=? AND active)",
+        Boolean.class, roomId, branchId));
   }
 
   public int providerClashes(long providerId, Long excludeId, OffsetDateTime startsAt, OffsetDateTime endsAt) {

@@ -8,7 +8,10 @@ import com.physiocare.clinic.integration.google.service.GoogleCalendarSyncServic
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -16,6 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AppointmentService {
+  /** How a moved appointment's old slot is written into its note: "12 Oct 2026 10:00". */
+  private static final DateTimeFormatter NOTE_TIME =
+      DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm", Locale.ENGLISH);
+
   private final AppointmentRepository appointments;
   private final AppointmentValidator validator;
   private final AppointmentConflictService conflicts;
@@ -60,6 +67,10 @@ public class AppointmentService {
     branches.requireActiveBranch(r.branchId());
     validator.validateSlot(r.startsAt(), r.endsAt());
     validator.validateNotes(r.patientNote(), r.internalNote());
+    branches.requirePatientExists(r.patientId());
+    if (!appointments.isActiveService(r.serviceId()))
+      throw new IllegalArgumentException("This service is not available for booking");
+    requireBookableAt(r);
     conflicts.requireFreeSlot(r, null);
     long id = appointments.insert(r, nextAppointmentNo(), currentUser.id(auth));
     appointments.addInitialEvent(id, currentUser.id(auth));
@@ -80,13 +91,22 @@ public class AppointmentService {
         ((Number) original.get("service_id")).longValue(),
         original.get("room_id") == null ? null : ((Number) original.get("room_id")).longValue(),
         r.startsAt(), r.endsAt(), null, null);
+    requireBookableAt(moved);
     conflicts.requireFreeSlot(moved, id);
     transitionTo(id, "RESCHEDULED", r.reason(), auth);
+    // The old slot is written in the clinic's own time (the JVM is pinned to it,
+    // see TimeZoneConfig): the instant arrives in UTC, and "03:00Z" on a note
+    // reads as the wrong hour to everyone at the counter.
     OffsetDateTime originalStart = toOffsetDateTime(original.get("starts_at"), r.startsAt().getOffset());
-    String note = (r.reason() == null || r.reason().isBlank())
-        ? "Rescheduled from " + originalStart : "Rescheduled from " + originalStart + " — " + r.reason();
-    long newId = appointments.insertRescheduled(moved, nextAppointmentNo(), currentUser.id(auth), note);
-    appointments.addEvent(newId, null, "CONFIRMED", note, currentUser.id(auth));
+    String moveNote = "Rescheduled from "
+        + NOTE_TIME.format(originalStart.atZoneSameInstant(ZoneId.systemDefault()))
+        + (r.reason() == null || r.reason().isBlank() ? "" : " — " + r.reason());
+    // The booking's own notes travel with it; the move is added underneath.
+    String patientNote = (String) original.get("patient_note");
+    String note = patientNote == null || patientNote.isBlank() ? moveNote : patientNote + "\n" + moveNote;
+    long newId = appointments.insertRescheduled(
+        moved, nextAppointmentNo(), currentUser.id(auth), note, (String) original.get("internal_note"));
+    appointments.addEvent(newId, null, "CONFIRMED", moveNote, currentUser.id(auth));
     calendarSync.appointmentChanged(newId);
     return get(newId, auth);
   }
@@ -151,6 +171,18 @@ public class AppointmentService {
         ((Number) appointment.get("branch_id")).longValue(), appointmentId,
         ((Number) appointment.get("provider_staff_id")).longValue(), currentUser.displayName(auth),
         currentUser.id(auth), LocalDate.now());
+  }
+
+  /**
+   * The physiotherapist and room must belong to the branch the visit is at,
+   * as checkout already requires — the booking screen only offers those, but
+   * the API is reachable without it. Checked on a move too: the therapist may
+   * have left the branch since the visit was first booked.
+   */
+  private void requireBookableAt(AppointmentController.AppointmentRequest r) {
+    branches.requireStaffInBranch(r.providerStaffId(), r.branchId(), "This physiotherapist");
+    if (r.roomId() != null && !appointments.isActiveRoomInBranch(r.roomId(), r.branchId()))
+      throw new IllegalArgumentException("This treatment room is not available in this branch");
   }
 
   private boolean isAllowedTransition(String from, String to) {
