@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useSession } from "@/lib/auth/use-session";
@@ -39,6 +39,21 @@ function LoadFailure({ message, onRetry }: { message: string; onRetry: () => voi
   );
 }
 
+/**
+ * How often coming back to the tab may re-read the server. Focus and
+ * visibilitychange both fire on a single tab switch, and staff switch tabs all
+ * day; re-reading every patient, visit and transaction each time grows with the
+ * clinic's history. The profile is cheap and guards the menus, so it is re-read
+ * more often than the operational lists.
+ */
+const PROFILE_REVALIDATE_MS = 60_000;
+const OPERATIONAL_REVALIDATE_MS = 5 * 60_000;
+
+/** The parts of the profile that decide which branches' data this tab may hold. */
+function accessKey(user: { role: string; branchIds?: string[] } | null | undefined) {
+  return user ? `${user.role}:${[...(user.branchIds ?? [])].sort().join(",")}` : "";
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const hasHydrated = useClinicStore((s) => s.hasHydrated);
   const dataLoaded = useClinicStore((s) => s.dataLoaded);
@@ -50,6 +65,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user, isAuthenticated } = useSession();
   const pathname = usePathname();
   const router = useRouter();
+  const lastProfileRead = useRef(0);
+  const lastOperationalRead = useRef(0);
 
   useEffect(() => {
     if (hasHydrated && !isAuthenticated) {
@@ -75,17 +92,35 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Load large operational collections after the shell is usable. The login
   // request should not wait for every patient, visit and transaction row.
   useEffect(() => {
-    if (dataLoaded && isAuthenticated) void refreshOperational();
+    if (dataLoaded && isAuthenticated) {
+      lastProfileRead.current = Date.now();
+      lastOperationalRead.current = Date.now();
+      void refreshOperational();
+    }
   }, [dataLoaded, isAuthenticated, refreshOperational]);
 
   // Permissions can be changed by an administrator in another tab. Re-read
   // the profile when this tab becomes active so menus and route guards do not
-  // continue using stale access for the rest of the session.
+  // continue using stale access for the rest of the session — at most once a
+  // minute. The operational lists follow every five minutes, or at once when
+  // the account's branches changed or they never finished loading.
   useEffect(() => {
     const revalidate = () => {
-      if (document.visibilityState === "visible" && isAuthenticated && dataLoaded) {
-        void refresh().then(() => refreshOperational());
-      }
+      if (document.visibilityState !== "visible" || !isAuthenticated || !dataLoaded) return;
+      const now = Date.now();
+      if (now - lastProfileRead.current < PROFILE_REVALIDATE_MS) return;
+      lastProfileRead.current = now;
+      const accessBefore = accessKey(useClinicStore.getState().session.user);
+      void refresh().then(() => {
+        const state = useClinicStore.getState();
+        const due =
+          now - lastOperationalRead.current >= OPERATIONAL_REVALIDATE_MS ||
+          !state.operationalLoaded ||
+          accessKey(state.session.user) !== accessBefore;
+        if (!due) return;
+        lastOperationalRead.current = now;
+        return refreshOperational();
+      });
     };
     window.addEventListener("focus", revalidate);
     document.addEventListener("visibilitychange", revalidate);

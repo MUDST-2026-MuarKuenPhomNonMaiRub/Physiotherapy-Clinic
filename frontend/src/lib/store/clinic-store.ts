@@ -304,10 +304,12 @@ export const useClinicStore = create<ClinicState>()(
         const { session } = get();
         if (!session.user) return;
         invalidateOperationalRefresh();
+        // operationalLoaded is left as it is: a refresh re-reads the reference
+        // data and the profile, and keeps the patients, courses, visits and
+        // transactions already on screen until refreshOperational replaces them.
         set((s) => {
           s.loading = true;
           s.loadError = null;
-          s.operationalLoaded = false;
         });
         try {
           // The saved token may be older than the account behind it, so the
@@ -327,7 +329,6 @@ export const useClinicStore = create<ClinicState>()(
           set((s) => {
             Object.assign(s, snapshot);
             s.dataLoaded = true;
-            s.operationalLoaded = false;
             s.loading = false;
 
             const active = snapshot.branches.filter((b) => b.status === "ACTIVE");
