@@ -1080,6 +1080,8 @@ export const thaiTranslations: Record<string, string> = {
   "Appointment not found": "ไม่พบนัดหมาย",
   "Transaction not found": "ไม่พบรายการชำระเงิน",
   "Course not found": "ไม่พบคอร์ส",
+  "Drag to move or to another physiotherapist, drag the bottom edge to change the end time": "ลากเพื่อย้ายเวลาหรือย้ายไปนักกายภาพคนอื่น ลากขอบล่างเพื่อปรับเวลาสิ้นสุด",
+  "Drag the bottom edge to change the end time": "ลากขอบล่างเพื่อปรับเวลาสิ้นสุด",
   "It may have been removed, or it belongs to a branch you cannot see.": "อาจถูกลบไปแล้ว หรืออยู่ในสาขาที่คุณไม่มีสิทธิ์เข้าถึง",
   "Service not found": "ไม่พบบริการ",
   "Branch not found": "ไม่พบสาขา",
@@ -1107,6 +1109,14 @@ export interface TranslationPattern {
 
 /** Dynamic UI phrases that contain record counts, dates, names, or amounts. */
 export const thaiPatterns: TranslationPattern[] = [
+  {
+    pattern: /^Appointment moved to (.+), (\d{2}:\d{2}–\d{2}:\d{2})$/,
+    replace: (_all, physio, slot) => `ย้ายนัดไปให้ ${physio} เวลา ${slot} แล้ว`,
+  },
+  {
+    pattern: /^Appointment moved to (\d{2}:\d{2}–\d{2}:\d{2})$/,
+    replace: (_all, slot) => `เปลี่ยนเวลานัดเป็น ${slot} แล้ว`,
+  },
   {
     pattern: /^Showing (\d+)–(\d+) of (\d+)$/,
     replace: (_all, from, to, total) => `แสดง ${from}–${to} จาก ${total}`,

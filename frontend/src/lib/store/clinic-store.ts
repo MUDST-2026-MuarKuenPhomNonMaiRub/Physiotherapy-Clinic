@@ -193,6 +193,17 @@ interface ClinicState {
   completeService: (id: string, usePatientCourseId?: string) => Promise<void>;
   cancelAppointment: (id: string, reason: string) => Promise<void>;
   markNoShow: (id: string) => Promise<void>;
+  /**
+   * Moves or resizes a booking in place (the calendar's drag), handing it to
+   * `physioId` when given; the slot is re-checked by the server.
+   */
+  changeAppointmentTime: (
+    id: string,
+    date: string,
+    startTime: string,
+    endTime: string,
+    physioId?: string
+  ) => Promise<void>;
   rescheduleAppointment: (
     id: string,
     date: string,
@@ -848,6 +859,14 @@ export const useClinicStore = create<ClinicState>()(
 
       markNoShow: async (id) => {
         const appointment = await api.transitionAppointment(id, "noshow");
+        invalidateOperationalRefresh();
+        set((s) => {
+          upsert(s.appointments, appointment);
+        });
+      },
+
+      changeAppointmentTime: async (id, date, startTime, endTime, physioId) => {
+        const appointment = await api.changeAppointmentTime(id, date, startTime, endTime, physioId);
         invalidateOperationalRefresh();
         set((s) => {
           upsert(s.appointments, appointment);

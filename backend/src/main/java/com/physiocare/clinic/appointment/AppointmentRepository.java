@@ -90,6 +90,18 @@ public class AppointmentRepository {
     return db.queryForMap("SELECT status,branch_id FROM appointments WHERE id=? FOR UPDATE", id);
   }
 
+  public void updateSlot(
+      long id, java.time.OffsetDateTime startsAt, java.time.OffsetDateTime endsAt, long providerStaffId) {
+    db.update(
+        "UPDATE appointments SET starts_at=?,ends_at=?,provider_staff_id=?,updated_at=now() WHERE id=?",
+        startsAt, endsAt, providerStaffId, id);
+  }
+
+  public String staffName(long staffId) {
+    return db.queryForList("SELECT name FROM staff WHERE id=?", String.class, staffId)
+        .stream().findFirst().orElse("#" + staffId);
+  }
+
   public void updateStatus(long id, String status, String reason, Long actorId) {
     db.update(
         "UPDATE appointments SET status=?,updated_at=now(),"

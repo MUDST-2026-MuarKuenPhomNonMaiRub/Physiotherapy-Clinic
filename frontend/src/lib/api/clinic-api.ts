@@ -774,6 +774,26 @@ export const transitionAppointment = (
     },
   }).then(toAppointment);
 
+/**
+ * The same booking on a new slot — the calendar's drag to move or resize, and
+ * to hand it to another physiotherapist when `physioId` is given.
+ */
+export const changeAppointmentTime = (
+  id: string,
+  date: string,
+  startTime: string,
+  endTime: string,
+  physioId?: string
+) =>
+  apiRequest<Row>(`/api/v1/appointments/${id}/time`, {
+    method: "PATCH",
+    body: {
+      startsAt: toInstant(date, startTime),
+      endsAt: toInstant(date, endTime),
+      providerStaffId: physioId ? Number(physioId) : null,
+    },
+  }).then(toAppointment);
+
 export const rescheduleAppointment = (
   id: string,
   date: string,

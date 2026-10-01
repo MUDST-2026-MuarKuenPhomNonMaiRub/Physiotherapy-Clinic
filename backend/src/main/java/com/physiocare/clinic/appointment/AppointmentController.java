@@ -36,6 +36,18 @@ public class AppointmentController {
       @NotNull OffsetDateTime startsAt, @NotNull OffsetDateTime endsAt, String reason) {}
 
   /**
+   * A new slot for the same booking — the calendar's drag to move or resize.
+   * {@code providerStaffId} is set when the block was dragged into another
+   * physiotherapist's column; absent keeps the current one.
+   */
+  public record TimeChangeRequest(
+      @NotNull OffsetDateTime startsAt, @NotNull OffsetDateTime endsAt, Long providerStaffId) {
+    public TimeChangeRequest(OffsetDateTime startsAt, OffsetDateTime endsAt) {
+      this(startsAt, endsAt, null);
+    }
+  }
+
+  /**
    * Body of a status change. {@code usePatientCourseId} is read only by
    * {@code complete}: the course the visit is to be charged against. Absent
    * means the visit is paid per visit at checkout — nothing is ever deducted
@@ -85,6 +97,13 @@ public class AppointmentController {
   public Map<String, Object> reschedule(
       @PathVariable long id, @Valid @RequestBody RescheduleRequest r, Authentication authentication) {
     return service.reschedule(id, r, authentication);
+  }
+
+  @PatchMapping("/{id}/time")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'appointment.edit')")
+  public Map<String, Object> changeTime(
+      @PathVariable long id, @Valid @RequestBody TimeChangeRequest r, Authentication authentication) {
+    return service.changeTime(id, r, authentication);
   }
 
   @PostMapping("/{id}/{action}")
