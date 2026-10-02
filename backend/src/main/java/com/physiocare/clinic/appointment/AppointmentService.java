@@ -165,7 +165,8 @@ public class AppointmentService {
       changes.add("Physiotherapist changed from " + appointments.staffName(fromProvider)
           + " to " + appointments.staffName(toProvider));
     if (!changes.isEmpty())
-      appointments.addEvent(id, status, status, String.join("; ", changes), currentUser.id(auth));
+      appointments.addEvent(id, status, status, String.join("; ", changes), currentUser.id(auth),
+          timeChangeMetadata(fromProvider, toProvider, oldStart, oldEnd));
     // A handover moves the Google event from one therapist's calendar to the other's.
     if (handedOver) calendarSync.providerChanged(id, fromProvider);
     else calendarSync.appointmentChanged(id);
@@ -257,6 +258,15 @@ public class AppointmentService {
 
   private String nextAppointmentNo() {
     return String.format("AP-%s-%05d", java.time.Year.now().getValue(), appointments.nextAppointmentNumber());
+  }
+
+  /** Ids and ISO instants only, so the JSON needs no escaping. */
+  private static String timeChangeMetadata(
+      long fromProvider, long toProvider, OffsetDateTime oldStart, OffsetDateTime oldEnd) {
+    return "{\"kind\":\"TIME_CHANGE\",\"fromProviderId\":" + fromProvider
+        + ",\"toProviderId\":" + toProvider
+        + ",\"oldStartsAt\":\"" + oldStart.toInstant() + "\""
+        + ",\"oldEndsAt\":\"" + oldEnd.toInstant() + "\"}";
   }
 
   private OffsetDateTime toOffsetDateTime(Object value, java.time.ZoneOffset offset) {

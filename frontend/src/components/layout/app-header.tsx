@@ -1,19 +1,17 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut, Search } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { LogOut } from "lucide-react";
 import { useSession } from "@/lib/auth/use-session";
-import { useClinicStore } from "@/lib/store/clinic-store";
 import { getRoleLabel } from "@/lib/permissions";
-import { getPatientFullNameTh, today } from "@/lib/domain";
-import { daysUntil } from "@/lib/format";
 import { BranchSelector } from "@/components/layout/branch-selector";
 import { GoogleCalendarMenu } from "@/components/integrations/google-calendar-menu";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
+import { NotificationBell } from "@/components/layout/notification-bell";
+import { GlobalSearch } from "@/components/layout/global-search";
 import { LanguageToggle } from "@/components/i18n/language-toggle";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -71,112 +69,15 @@ function initials(name: string) {
   return parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : name.slice(0, 2);
 }
 
-interface Notification {
-  id: string;
-  title: string;
-  detail: string;
-  href: string;
-}
-
-/**
- * Drawn from what is actually happening at this branch today rather than a
- * fixed list — an empty bell means there is genuinely nothing waiting.
- */
-function useNotifications(branchId: string | null, canVoid: boolean): Notification[] {
-  const appointments = useClinicStore((s) => s.appointments);
-  const patients = useClinicStore((s) => s.patients);
-  const transactions = useClinicStore((s) => s.transactions);
-  const patientCourses = useClinicStore((s) => s.patientCourses);
-
-  return useMemo(() => {
-    if (!branchId) return [];
-    const currentDate = today();
-    const nameOf = (patientId: string) => {
-      const patient = patients.find((p) => p.id === patientId);
-      return patient ? getPatientFullNameTh(patient) : "A patient";
-    };
-    const items: Notification[] = [];
-
-    for (const appointment of appointments.filter(
-      (a) => a.branchId === branchId && a.date === currentDate && a.status === "ARRIVED"
-    )) {
-      items.push({
-        id: `arrived-${appointment.id}`,
-        title: "Patient arrived",
-        detail: `${nameOf(appointment.patientId)} is waiting — booked ${appointment.startTime}`,
-        href: `/appointments/${appointment.id}`,
-      });
-    }
-
-    const waitingCheckout = appointments.filter(
-      (a) =>
-        a.branchId === branchId &&
-        a.date === currentDate &&
-        a.status === "COMPLETED" &&
-        !a.checkedOut
-    );
-    if (waitingCheckout.length > 0) {
-      items.push({
-        id: "checkout-queue",
-        title: "Visits waiting for checkout",
-        detail: `${waitingCheckout.length} completed visit${
-          waitingCheckout.length === 1 ? "" : "s"
-        } still to be billed`,
-        href: "/checkout",
-      });
-    }
-
-    const expiringSoon = patientCourses.filter((course) => {
-      if (course.branchId !== branchId || course.status !== "ACTIVE") return false;
-      const days = daysUntil(course.expiryDate);
-      return days >= 0 && days <= 30;
-    });
-    if (expiringSoon.length > 0) {
-      items.push({
-        id: "expiring-courses",
-        title: "Courses expiring soon",
-        detail: `${expiringSoon.length} active course${
-          expiringSoon.length === 1 ? "" : "s"
-        } expire within 30 days`,
-        href: "/reports/course-balance",
-      });
-    }
-
-    if (canVoid) {
-      for (const voided of transactions
-        .filter((t) => t.branchId === branchId && t.status === "VOID")
-        .slice(0, 2)) {
-        items.push({
-          id: `void-${voided.id}`,
-          title: "Transaction voided",
-          detail: `${voided.transactionNo} — ${voided.voidInfo?.reason ?? "no reason recorded"}`,
-          href: `/transactions/${voided.id}`,
-        });
-      }
-    }
-
-    return items.slice(0, 6);
-  }, [appointments, patients, transactions, patientCourses, branchId, canVoid]);
-}
-
 export function AppHeader() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, logout, can, activeBranchId } = useSession();
-  const [query, setQuery] = useState("");
-  const notifications = useNotifications(activeBranchId, can("transaction.void"));
+  const { user, logout } = useSession();
 
   if (!user) return null;
   const segments = pathname.split("/").filter(Boolean);
 
-
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (query.trim()) router.push(`/patients?q=${encodeURIComponent(query.trim())}`);
-  };
-
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:gap-3 sm:px-4 lg:px-6">
+    <header className="flex h-16 shrink-0 lg:h-[72px] items-center gap-2 border-b border-border bg-card px-3 sm:gap-3 sm:px-4 lg:px-6">
       <MobileSidebar />
       <div className="min-w-0 flex-1">
         {/* The full trail needs room; a phone gets the current screen only. */}
@@ -212,56 +113,12 @@ export function AppHeader() {
         </Breadcrumb>
       </div>
 
-      {can("patient.view") && (
-        <form onSubmit={submitSearch} className="hidden w-56 shrink-0 items-center xl:flex 2xl:w-64">
-          <div className="relative w-full">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search HN, name, phone..."
-              className="h-9 pl-8 text-sm"
-            />
-          </div>
-        </form>
-      )}
+      <GlobalSearch />
 
       <BranchSelector />
       <LanguageToggle />
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Notifications"
-          >
-            <Bell className="h-4.5 w-4.5" />
-            {notifications.length > 0 && (
-              <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
-            )}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-2rem))]">
-          <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {notifications.length === 0 ? (
-            <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-              Nothing needs your attention right now.
-            </p>
-          ) : (
-            notifications.map((n) => (
-              <DropdownMenuItem
-                key={n.id}
-                onClick={() => router.push(n.href)}
-                className="flex flex-col items-start gap-0.5 whitespace-normal py-2"
-              >
-                <p className="text-sm font-medium">{n.title}</p>
-                <p className="text-xs text-muted-foreground">{n.detail}</p>
-              </DropdownMenuItem>
-            ))
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <NotificationBell />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

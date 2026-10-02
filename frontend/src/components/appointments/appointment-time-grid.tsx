@@ -7,18 +7,26 @@ import { appointmentStatusMeta } from "@/components/appointments/appointment-sta
 import { cn } from "@/lib/utils";
 import type { Appointment, Patient, ResourceRoom, Service, Staff } from "@/types";
 
+/**
+ * The clinic day the grid always shows, and the furthest a drag can take a
+ * block. A booking outside it (an early-morning slot entered from the booking
+ * form) widens the grid for that day rather than being clipped.
+ */
 const START_HOUR = 8;
 const END_HOUR = 19;
 const PX_PER_MIN = 1.4;
 const HOUR_HEIGHT = 60 * PX_PER_MIN;
-const TOTAL_HEIGHT = (END_HOUR - START_HOUR) * HOUR_HEIGHT;
 const HEADER_HEIGHT = 48;
 const RULER_WIDTH = 56;
-/** The 08:00 label is centred on its gridline, so the track needs room above it. */
+/** The first hour label is centred on its gridline, so the track needs room above it. */
 const TRACK_INSET_TOP = 14;
 const TRACK_INSET_BOTTOM = 24;
-
-const hours = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i);
+/** Columns widen so that side-by-side blocks keep a readable width. */
+const MIN_COLUMN_WIDTH = 212;
+const MIN_LANE_WIDTH = 120;
+/** Room kept clear at either side of a column, and between side-by-side blocks. */
+const BLOCK_INSET = 6;
+const LANE_GAP = 2;
 
 function toMinutes(time: string): number {
   const [h, m] = time.split(":").map(Number);
@@ -52,6 +60,42 @@ interface Drag {
   start: number;
   end: number;
   moved: boolean;
+}
+
+interface Lane {
+  lane: number;
+  lanes: number;
+}
+
+/**
+ * Places blocks whose times overlap side by side, as Google Calendar does.
+ * Overlapping bookings form a cluster; each takes the leftmost lane that is
+ * free at its start, and every block in the cluster shares its lane count.
+ * Released bookings (cancelled, rescheduled) still take a lane, so a booking
+ * that replaced one is never drawn underneath it.
+ */
+function layoutLanes(blocks: { id: string; start: number; end: number }[]): Map<string, Lane> {
+  const sorted = [...blocks].sort((a, b) => a.start - b.start || b.end - a.end);
+  const result = new Map<string, Lane>();
+  let cluster: string[] = [];
+  let laneEnds: number[] = [];
+  let clusterEnd = -Infinity;
+  const close = () => {
+    for (const id of cluster) result.set(id, { lane: result.get(id)!.lane, lanes: laneEnds.length });
+    cluster = [];
+    laneEnds = [];
+  };
+  for (const block of sorted) {
+    if (block.start >= clusterEnd) close();
+    let lane = laneEnds.findIndex((end) => end <= block.start);
+    if (lane === -1) lane = laneEnds.push(block.end) - 1;
+    else laneEnds[lane] = block.end;
+    result.set(block.id, { lane, lanes: 0 });
+    cluster.push(block.id);
+    clusterEnd = Math.max(clusterEnd, block.end);
+  }
+  close();
+  return result;
 }
 
 /** How close to an edge of the grid, in px, the pointer must come to scroll it. */
@@ -94,12 +138,16 @@ function follow(
   const dy = y + scrollTop - drag.originY;
   if (!drag.moved && Math.abs(dy) < DRAG_THRESHOLD_PX) return null;
   const delta = Math.round(dy / PX_PER_MIN / SNAP_MINUTES) * SNAP_MINUTES;
+  // A drag stays inside the clinic day, except that a block already outside
+  // it can be nudged without first being pulled back in.
+  const earliest = Math.min(START_HOUR * 60, drag.fromStart);
+  const latest = Math.max(END_HOUR * 60, drag.fromEnd);
   if (drag.mode === "resize") {
-    const end = Math.min(Math.max(drag.fromEnd + delta, drag.fromStart + SNAP_MINUTES), END_HOUR * 60);
+    const end = Math.min(Math.max(drag.fromEnd + delta, drag.fromStart + SNAP_MINUTES), latest);
     return { ...drag, end, moved: true };
   }
   const length = drag.fromEnd - drag.fromStart;
-  const start = Math.min(Math.max(drag.fromStart + delta, START_HOUR * 60), END_HOUR * 60 - length);
+  const start = Math.min(Math.max(drag.fromStart + delta, earliest), latest - length);
   let targetPhysioId = drag.targetPhysioId;
   for (const [physioId, column] of columns) {
     const rect = column.getBoundingClientRect();
@@ -132,10 +180,6 @@ function serverSnapshot(): null {
   return null;
 }
 
-function offsetFor(minutes: number): number | null {
-  const offset = (minutes - START_HOUR * 60) * PX_PER_MIN;
-  return offset >= 0 && offset <= TOTAL_HEIGHT ? offset : null;
-}
 
 export function AppointmentTimeGrid({
   physios,
@@ -288,6 +332,23 @@ export function AppointmentTimeGrid({
     minutes = clock.getHours() * 60 + clock.getMinutes();
   }
 
+  // The day's first and last hour: the clinic day, widened to take in any
+  // booking that starts before it or runs past it.
+  const firstHour = Math.max(
+    0,
+    Math.min(START_HOUR, ...appointments.map((a) => Math.floor(toMinutes(a.startTime) / 60)))
+  );
+  const lastHour = Math.min(
+    24,
+    Math.max(END_HOUR, ...appointments.map((a) => Math.ceil(toMinutes(a.endTime) / 60)))
+  );
+  const hours = Array.from({ length: lastHour - firstHour + 1 }, (_, i) => firstHour + i);
+  const totalHeight = (lastHour - firstHour) * HOUR_HEIGHT;
+  const offsetFor = (at: number): number | null => {
+    const offset = (at - firstHour * 60) * PX_PER_MIN;
+    return offset >= 0 && offset <= totalHeight ? offset : null;
+  };
+
   const nowOffset = minutes === null ? null : offsetFor(minutes);
   const nowLabel =
     minutes === null
@@ -310,9 +371,9 @@ export function AppointmentTimeGrid({
     /* The app shell's content wrapper is not height-bounded, so `flex-1` alone
        would let the grid grow and hand scrolling back to the page — which would
        scroll the physiotherapist names out of view. Capping against the viewport
-       (app header + page padding + page header + toolbar ≈ 19rem) keeps the
+       (app header + page padding + page header + toolbar ≈ 19.5rem) keeps the
        scroll inside the grid so the column headers stay pinned. */
-    <div className="relative flex min-h-[26rem] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs max-h-[calc(100dvh-19rem)]">
+    <div className="relative flex min-h-[26rem] flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xs max-h-[calc(100dvh-19.5rem)]">
       {appointments.length === 0 && (
         <div
           className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center px-6 text-center"
@@ -343,7 +404,7 @@ export function AppointmentTimeGrid({
             />
             <div
               className="relative"
-              style={{ height: TOTAL_HEIGHT, marginTop: TRACK_INSET_TOP, marginBottom: TRACK_INSET_BOTTOM }}
+              style={{ height: totalHeight, marginTop: TRACK_INSET_TOP, marginBottom: TRACK_INSET_BOTTOM }}
             >
               {hours.map((h, i) => (
                 <span
@@ -379,10 +440,23 @@ export function AppointmentTimeGrid({
                   : a.physiotherapistId;
             const shown = appointments.filter((a) => columnOf(a) === phy.id);
             const dropTarget = !!drag?.moved && drag.targetPhysioId === phy.id && drag.physioId !== phy.id;
+            // The block under the pointer floats full width over the others,
+            // which keep their places until it is dropped.
+            const lanes = layoutLanes(
+              shown
+                .filter((a) => !(drag?.id === a.id && drag.moved))
+                .map((a) =>
+                  pending?.id === a.id
+                    ? { id: a.id, start: pending.start, end: pending.end }
+                    : { id: a.id, start: toMinutes(a.startTime), end: toMinutes(a.endTime) }
+                )
+            );
+            const laneCount = Math.max(1, ...[...lanes.values()].map((l) => l.lanes));
             return (
               <div
                 key={phy.id}
-                className="min-w-[212px] flex-1 border-r border-border last:border-r-0"
+                className="flex-1 border-r border-border last:border-r-0"
+                style={{ minWidth: Math.max(MIN_COLUMN_WIDTH, laneCount * MIN_LANE_WIDTH + 2 * BLOCK_INSET) }}
               >
                 <div
                   className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-3"
@@ -401,7 +475,7 @@ export function AppointmentTimeGrid({
                     else columns.current.delete(phy.id);
                   }}
                   className={cn("relative transition-colors", dropTarget && "bg-primary/5")}
-                  style={{ height: TOTAL_HEIGHT, marginTop: TRACK_INSET_TOP, marginBottom: TRACK_INSET_BOTTOM }}
+                  style={{ height: totalHeight, marginTop: TRACK_INSET_TOP, marginBottom: TRACK_INSET_BOTTOM }}
                 >
                   {hours.map((h, i) => (
                     <div key={h}>
@@ -409,7 +483,7 @@ export function AppointmentTimeGrid({
                         className="absolute inset-x-0 border-t border-border"
                         style={{ top: i * HOUR_HEIGHT }}
                       />
-                      {h < END_HOUR && (
+                      {h < lastHour && (
                         <div
                           className="absolute inset-x-0 border-t border-border/40"
                           style={{ top: i * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
@@ -420,9 +494,10 @@ export function AppointmentTimeGrid({
 
                   {onCreate && date >= today && Array.from({ length: (END_HOUR - START_HOUR) * 2 }, (_, slot) => {
                     const time = `${String(START_HOUR + Math.floor(slot / 2)).padStart(2, "0")}:${slot % 2 ? "30" : "00"}`;
+                    const slotTop = (START_HOUR - firstHour) * HOUR_HEIGHT + (slot * HOUR_HEIGHT) / 2;
                     const occupied = items.some((item) => !["CANCELLED", "RESCHEDULED", "NO_SHOW"].includes(item.status) && toMinutes(item.startTime) < toMinutes(time) + 30 && toMinutes(item.endTime) > toMinutes(time));
                     if (occupied) return null;
-                    return <button key={time} type="button" aria-label={`Add appointment ${phy.name} ${time}`} onClick={() => onCreate(phy.id, time)} className="group absolute inset-x-1 rounded-md text-left hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-ring" style={{ top: slot * HOUR_HEIGHT / 2, height: HOUR_HEIGHT / 2 }}><span className="px-3 text-xs text-primary opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">+ {time}</span></button>;
+                    return <button key={time} type="button" aria-label={`Add appointment ${phy.name} ${time}`} onClick={() => onCreate(phy.id, time)} className="group absolute inset-x-1 rounded-md text-left hover:bg-primary/5 focus-visible:bg-primary/10 focus-visible:outline-ring" style={{ top: slotTop, height: HOUR_HEIGHT / 2 }}><span className="px-3 text-xs text-primary opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">+ {time}</span></button>;
                   })}
 
                   {nowOffset !== null && (
@@ -442,7 +517,11 @@ export function AppointmentTimeGrid({
                     const canMove = editable && a.status === "CONFIRMED";
                     const canResize = editable && ["CONFIRMED", "ARRIVED", "IN_SERVICE"].includes(a.status);
                     const timeLabel = `${toTime(start)}–${toTime(end)}`;
-                    const top = (start - START_HOUR * 60) * PX_PER_MIN;
+                    const top = (start - firstHour * 60) * PX_PER_MIN;
+                    const { lane, lanes: laneTotal } = lanes.get(a.id) ?? { lane: 0, lanes: 1 };
+                    const span = `(100% - ${2 * BLOCK_INSET}px)`;
+                    const left = `calc(${BLOCK_INSET}px + ${span} * ${lane} / ${laneTotal})`;
+                    const width = `calc(${span} / ${laneTotal} - ${laneTotal > 1 ? LANE_GAP : 0}px)`;
                     // Leave a small visual gutter between back-to-back bookings
                     // so their borders and text never appear to merge.
                     const height = Math.max((end - start) * PX_PER_MIN - 2, 34);
@@ -482,7 +561,7 @@ export function AppointmentTimeGrid({
                             : canResize ? "Drag the bottom edge to change the end time" : undefined
                         }
                         className={cn(
-                          "group absolute inset-x-1.5 flex flex-col justify-start gap-0.5 overflow-hidden rounded-lg border py-1.5 pl-2.5 pr-2 text-left transition-colors",
+                          "group absolute flex flex-col justify-start gap-0.5 overflow-hidden rounded-lg border py-1.5 pl-2.5 pr-2 text-left transition-colors",
                           "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                           a.status === "CANCELLED" && "opacity-70",
                           canMove && "cursor-grab",
@@ -491,7 +570,7 @@ export function AppointmentTimeGrid({
                           saving && "cursor-wait opacity-60",
                           meta.block
                         )}
-                        style={{ top, height }}
+                        style={{ top, height, left, width }}
                       >
                         <span
                           className={cn("absolute inset-y-0 left-0 w-1 rounded-l-lg", meta.rail)}

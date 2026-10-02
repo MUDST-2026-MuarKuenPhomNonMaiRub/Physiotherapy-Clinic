@@ -81,6 +81,17 @@ public class AppointmentRepository {
         + " VALUES(?,?,?,?,?)", appointmentId, from, to, reason, actorId);
   }
 
+  /**
+   * A history line that also carries what changed in structured form — for a
+   * drag, the therapist it moved from and to and the slot it left — so the
+   * notification bell can tell a handover from a retime without parsing text.
+   */
+  public void addEvent(
+      long appointmentId, String from, String to, String reason, long actorId, String metadataJson) {
+    db.update("INSERT INTO appointment_events(appointment_id,from_status,to_status,reason,occurred_by,metadata)"
+        + " VALUES(?,?,?,?,?,?::jsonb)", appointmentId, from, to, reason, actorId, metadataJson);
+  }
+
   public void addInitialEvent(long appointmentId, long actorId) {
     db.update("INSERT INTO appointment_events(appointment_id,to_status,occurred_by) VALUES(?,'CONFIRMED',?)",
         appointmentId, actorId);

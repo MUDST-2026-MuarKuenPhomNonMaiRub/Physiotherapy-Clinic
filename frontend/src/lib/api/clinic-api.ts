@@ -1086,3 +1086,31 @@ export async function loadSnapshot(
     commissionRules,
   };
 }
+
+/** One line in the header bell; which fields are set depends on `type`. */
+export interface ClinicNotification {
+  key: string;
+  type: string;
+  occurredAt: string;
+  href: string;
+  read: boolean;
+  appointmentNo?: string;
+  patientName?: string;
+  actorName?: string;
+  staffName?: string;
+  startsAt?: string;
+  endsAt?: string;
+  oldStartsAt?: string;
+  oldEndsAt?: string;
+  minutes?: number;
+  count?: number;
+  label?: string;
+  amount?: number;
+  reason?: string;
+}
+
+export const listNotifications = () =>
+  apiRequest<{ items: ClinicNotification[]; unread: number }>("/api/v1/notifications");
+
+export const markNotificationsRead = (keys: string[]) =>
+  apiRequest<void>("/api/v1/notifications/read", { method: "POST", body: { keys } });

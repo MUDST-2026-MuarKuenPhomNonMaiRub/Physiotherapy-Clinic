@@ -89,6 +89,14 @@ export const thaiTranslations: Record<string, string> = {
   "None": "ไม่มี",
   "All": "ทั้งหมด",
   "All Branches": "ทุกสาขา",
+  "Switch branch": "เปลี่ยนสาขา",
+  "Searching…": "กำลังค้นหา…",
+  "Appointments": "นัดหมาย",
+  "Receipts": "ใบเสร็จ",
+  "Search patient, AP or receipt no.": "ค้นหาผู้ป่วย เลขนัด หรือเลขใบเสร็จ",
+  "Search patients, appointments, receipts and courses": "ค้นหาผู้ป่วย นัดหมาย ใบเสร็จ และคอร์ส",
+  "Nothing found. Try an HN, a phone number, or an AP or receipt number.": "ไม่พบรายการ ลองค้นด้วย HN เบอร์โทร เลขนัด หรือเลขใบเสร็จ",
+  "1 booking today": "วันนี้ 1 นัด",
   "Select Branch": "เลือกสาขา",
   "Branch": "สาขา",
   "Status": "สถานะ",
@@ -1109,6 +1117,22 @@ export interface TranslationPattern {
 
 /** Dynamic UI phrases that contain record counts, dates, names, or amounts. */
 export const thaiPatterns: TranslationPattern[] = [
+  {
+    pattern: /^(.+) · (\d+) sessions left$/,
+    replace: (_all, rest, n) => `${rest} · เหลือ ${n} ครั้ง`,
+  },
+  {
+    pattern: /^(\d+) sessions left$/,
+    replace: (_all, n) => `เหลือ ${n} ครั้ง`,
+  },
+  {
+    pattern: /^Now working at (.+)$/,
+    replace: (_all, branch) => `ตอนนี้ทำงานที่ ${branch}`,
+  },
+  {
+    pattern: /^(\d+) bookings today$/,
+    replace: (_all, count) => `วันนี้ ${count} นัด`,
+  },
   {
     pattern: /^Appointment moved to (.+), (\d{2}:\d{2}–\d{2}:\d{2})$/,
     replace: (_all, physio, slot) => `ย้ายนัดไปให้ ${physio} เวลา ${slot} แล้ว`,
