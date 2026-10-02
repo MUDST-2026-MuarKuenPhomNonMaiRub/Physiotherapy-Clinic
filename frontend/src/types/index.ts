@@ -202,6 +202,8 @@ export type AppointmentStatus =
 
 export interface Appointment {
   id: string;
+  /** The booking number staff quote, e.g. "AP-2026-00221". */
+  appointmentNo?: string;
   patientId: string;
   date: string; // YYYY-MM-DD
   startTime: string; // HH:mm

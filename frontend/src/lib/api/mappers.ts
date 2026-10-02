@@ -282,6 +282,7 @@ export function toAppointment(row: Row): Appointment {
   const end = new Date(str(row.ends_at));
   return {
     id: id(row.id),
+    appointmentNo: row.appointment_no == null ? undefined : str(row.appointment_no),
     patientId: id(row.patient_id),
     date: localDate(start),
     startTime: localTime(start),
