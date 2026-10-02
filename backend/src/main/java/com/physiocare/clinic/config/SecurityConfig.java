@@ -1,6 +1,6 @@
 package com.physiocare.clinic.config;
 
-import com.physiocare.clinic.auth.JwtAuthenticationFilter;
+import com.physiocare.clinic.security.JwtAuthenticationFilter;
 import org.springframework.context.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;

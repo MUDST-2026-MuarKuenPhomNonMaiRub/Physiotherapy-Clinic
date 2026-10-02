@@ -1,0 +1,166 @@
+package com.physiocare.clinic.service;
+
+import com.physiocare.clinic.dto.checkout.CourseTransferDtos.TransferRequest;
+import com.physiocare.clinic.repository.CheckoutRepository;
+import com.physiocare.clinic.security.BranchAccessService;
+import com.physiocare.clinic.security.CurrentUser;
+import jakarta.validation.Valid;
+import java.util.List;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+
+/**
+ * Moves remaining sessions from one patient's course to another. Both sides get
+ * a ledger entry sharing one transfer group, so the report can show who gave
+ * what to whom, when, and who keyed it in.
+ */
+@Service
+public class CourseTransferService {
+  private final JdbcTemplate db;
+  private final CheckoutRepository repository;
+  private final BranchAccessService branches;
+  private final CurrentUser currentUser;
+  private final AuditService audit;
+
+  public CourseTransferService(
+      JdbcTemplate db,
+      CheckoutRepository repository,
+      BranchAccessService branches,
+      CurrentUser currentUser,
+      AuditService audit) {
+    this.db = db;
+    this.repository = repository;
+    this.branches = branches;
+    this.currentUser = currentUser;
+    this.audit = audit;
+  }
+
+  @GetMapping
+  public List<Map<String, Object>> list(@RequestParam(required = false) Long branchId,
+      Authentication authentication) {
+    branches.requireFilter(authentication, branchId);
+    return db.queryForList(
+        "SELECT t.id,t.transfer_no,t.patient_course_id,t.to_patient_course_id,t.from_patient_id,"
+            + "t.to_patient_id,t.quantity,t.reason,t.created_at,t.created_by,pc.branch_id,"
+            + "pc.case_owner_employee_id AS course_owner_employee_id,pc.case_owner_name_snapshot,"
+            + "fp.hn AS from_patient_hn,trim(concat_ws(' ',fp.prefix,fp.first_name_th,fp.last_name_th))"
+            + " AS from_patient_name,tp.hn AS to_patient_hn,"
+            + "trim(concat_ws(' ',tp.prefix,tp.first_name_th,tp.last_name_th)) AS to_patient_name"
+            + " FROM course_transfers t JOIN patient_courses pc ON pc.id=t.patient_course_id"
+            + " JOIN patients fp ON fp.id=t.from_patient_id JOIN patients tp ON tp.id=t.to_patient_id"
+            + " WHERE (?::bigint IS NULL"
+            + " OR pc.branch_id=?) ORDER BY t.id DESC",
+        branchId, branchId);
+  }
+
+  @PostMapping
+  @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'course.transfer')")
+  @Transactional
+  public Map<String, Object> transfer(
+      @Valid @RequestBody TransferRequest r, Authentication authentication) {
+    Map<String, Object> source = repository.lockPatientCourse(r.patientCourseId());
+    CourseUsageService.requireSpendable(source, java.time.LocalDate.now(), "transferred");
+    long fromPatientId = ((Number) source.get("patient_id")).longValue();
+    if (fromPatientId == r.toPatientId())
+      throw new IllegalArgumentException("A course cannot be transferred to its own owner");
+
+    Long branchId = source.get("branch_id") == null ? null : ((Number) source.get("branch_id")).longValue();
+    if (branchId == null) throw new IllegalArgumentException("This course has no branch");
+    branches.requireAccess(authentication, branchId);
+    branches.requirePatientExists(r.toPatientId());
+
+    // The course totals still count sessions already given away (a transfer
+    // stays inside the course), so the owner's own balance is the limit.
+    Integer ownerRemaining = db.queryForObject(
+        "SELECT allocated_visits-used_visits FROM course_member_balances WHERE patient_course_id=?"
+            + " AND patient_id=?",
+        Integer.class, r.patientCourseId(), fromPatientId);
+    if (ownerRemaining == null || ownerRemaining < r.sessions())
+      throw new IllegalArgumentException("Not enough sessions remaining to transfer");
+
+    String actor = currentUser.displayName(authentication);
+    Long actorUserId = currentUser.id(authentication);
+    String transferGroupId = repository.nextNumber("TRF", "course_transfers", "transfer_no");
+
+    db.update(
+        "UPDATE patient_courses SET transfer_out_visits=transfer_out_visits+? WHERE id=?",
+        r.sessions(), r.patientCourseId());
+    // Keep the member balance in sync with the aggregate course counters. The
+    // checkout usage flow consumes this per-patient row, including for a
+    // transferred course, so changing only transfer_out_visits would leave
+    // the source able to spend sessions that were already transferred.
+    db.update(
+        "UPDATE course_member_balances SET allocated_visits=allocated_visits-?,updated_at=now()"
+            + " WHERE patient_course_id=? AND patient_id=?",
+        r.sessions(), r.patientCourseId(), fromPatientId);
+    long transferOutLedgerId = repository.addLedgerEntry(
+        r.patientCourseId(), "TRANSFER_OUT", -r.sessions(),
+        CheckoutService.remaining(repository.patientCourse(r.patientCourseId())), branchId, null,
+        actor, actorUserId, transferGroupId, null);
+    db.update("UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=?",
+        r.toPatientId(), transferOutLedgerId);
+    repository.refreshCourseStatus(r.patientCourseId());
+
+    // Keep the entitlement on the locked source course. This preserves its
+    // commission scheme/rate/pool and prevents a transfer from becoming a sale.
+    long targetId = r.patientCourseId();
+    db.update(
+        "INSERT INTO shared_course_members(patient_course_id,patient_id,role) VALUES(?,?, 'MEMBER') "
+            + "ON CONFLICT (patient_course_id,patient_id) DO NOTHING",
+        targetId, r.toPatientId());
+    db.update(
+        "UPDATE patient_courses SET transfer_in_visits=transfer_in_visits+? WHERE id=?",
+        r.sessions(), targetId);
+    db.update(
+        "INSERT INTO course_member_balances(patient_course_id,patient_id,allocated_visits,used_visits)"
+            + " VALUES(?,?,?,0) ON CONFLICT(patient_course_id,patient_id) DO UPDATE SET"
+            + " allocated_visits=course_member_balances.allocated_visits+EXCLUDED.allocated_visits,"
+            + " updated_at=now()",
+        targetId, r.toPatientId(), r.sessions());
+    long transferInLedgerId = repository.addLedgerEntry(
+        targetId, "TRANSFER_IN", r.sessions(),
+        CheckoutService.remaining(repository.patientCourse(targetId)), branchId, null, actor,
+        actorUserId, transferGroupId, null);
+    db.update("UPDATE course_ledger_entries SET counterparty_patient_id=? WHERE id=?",
+        fromPatientId, transferInLedgerId);
+    repository.refreshCourseStatus(targetId);
+
+    long transferId =
+        db.queryForObject(
+        "INSERT INTO course_transfers(transfer_no,patient_course_id,to_patient_course_id,"
+            + "from_patient_id,to_patient_id,quantity,reason,created_by,from_branch_id,to_branch_id)"
+            + " VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id",
+            Long.class,
+            transferGroupId, r.patientCourseId(), targetId, fromPatientId, r.toPatientId(),
+            r.sessions(), r.reason(), actorUserId, branchId, branchId);
+
+    Map<String, Object> transferAudit = new java.util.LinkedHashMap<>();
+    transferAudit.put("courseId", r.patientCourseId());
+    transferAudit.put("courseOwnerEmployeeId", source.get("case_owner_employee_id"));
+    transferAudit.put("fromPatientId", fromPatientId);
+    transferAudit.put("transferredByUserId", actorUserId);
+    transferAudit.put("toPatientId", r.toPatientId());
+    transferAudit.put("sessions", r.sessions());
+    audit.record(
+        actorUserId,
+        branchId,
+        "COURSE_TRANSFERRED",
+        "course_transfers",
+        String.valueOf(transferId),
+        null,
+        transferAudit,
+        r.reason());
+
+    return db.queryForMap(
+        "SELECT id,transfer_no,patient_course_id,to_patient_course_id,from_patient_id,"
+            + "to_patient_id,quantity,reason,created_at FROM course_transfers WHERE id=?",
+        transferId);
+  }
+}

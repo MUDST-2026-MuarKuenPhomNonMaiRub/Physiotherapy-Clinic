@@ -1,18 +1,19 @@
 package com.physiocare.clinic;
 
+import com.physiocare.clinic.service.BranchService;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.physiocare.clinic.appointment.AppointmentController;
-import com.physiocare.clinic.auth.AuthController;
-import com.physiocare.clinic.commission.CommissionClosingController;
-import com.physiocare.clinic.commission.CommissionCourseActionsController;
-import com.physiocare.clinic.branch.BranchService;
-import com.physiocare.clinic.catalog.CatalogController;
-import com.physiocare.clinic.catalog.CatalogConfigurationController;
-import com.physiocare.clinic.integration.google.controller.GoogleCalendarController;
-import com.physiocare.clinic.patient.PatientController;
-import com.physiocare.clinic.room.RoomService;
+import com.physiocare.clinic.controller.AppointmentController;
+import com.physiocare.clinic.controller.AuthController;
+import com.physiocare.clinic.controller.CommissionClosingController;
+import com.physiocare.clinic.controller.CommissionCourseActionsController;
+import com.physiocare.clinic.controller.CatalogController;
+import com.physiocare.clinic.controller.CatalogConfigurationController;
+import com.physiocare.clinic.controller.GoogleCalendarController;
+import com.physiocare.clinic.controller.PatientController;
+import com.physiocare.clinic.service.RoomService;
 import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.prepost.PreAuthorize;

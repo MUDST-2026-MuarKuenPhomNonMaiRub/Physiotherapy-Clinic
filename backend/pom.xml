@@ -29,11 +29,11 @@
                 <configuration>
                     <excludes>
                         <exclude>**/*IntegrationTest.java</exclude>
-                        <exclude>**/commission/CommissionFlowTest.java</exclude>
-                        <exclude>**/commission/LatestCommissionRequirementsTest.java</exclude>
-                        <exclude>**/commission/CourseBalanceReportTest.java</exclude>
-                        <exclude>**/checkout/LegacyTransferReconciliationServiceTest.java</exclude>
-                        <exclude>**/integration/google/service/GoogleCalendarSyncTest.java</exclude>
+                        <exclude>**/service/CommissionFlowTest.java</exclude>
+                        <exclude>**/service/LatestCommissionRequirementsTest.java</exclude>
+                        <exclude>**/service/CourseBalanceReportTest.java</exclude>
+                        <exclude>**/service/LegacyTransferReconciliationServiceTest.java</exclude>
+                        <exclude>**/service/GoogleCalendarSyncTest.java</exclude>
                     </excludes>
                 </configuration>
             </plugin>
