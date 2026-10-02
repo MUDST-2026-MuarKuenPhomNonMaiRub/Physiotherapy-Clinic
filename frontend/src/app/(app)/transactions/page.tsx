@@ -7,6 +7,7 @@ import { Printer, Receipt, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
+import { useBranchFilter } from "@/lib/auth/use-branch-filter";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { getPatientFullNameTh, localDate } from "@/lib/domain";
 import { usePatientSearch } from "@/lib/hooks/use-patient-search";
@@ -61,7 +62,7 @@ export default function TransactionsPage() {
   const paymentMethods = useClinicStore((s) => s.paymentMethods);
 
   const [query, setQuery] = useState("");
-  const [branchFilter, setBranchFilter] = useState(activeBranchId ?? "ALL");
+  const [branchFilter, setBranchFilter] = useBranchFilter();
   const [typeFilter, setTypeFilter] = useState<TransactionType | "ALL">("ALL");
   const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<TransactionStatus | "ALL">("ALL");

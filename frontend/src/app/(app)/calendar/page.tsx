@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
+import { useBranchFilter } from "@/lib/auth/use-branch-filter";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { addDays, today } from "@/lib/domain";
 import { PageHeader } from "@/components/shared/page-header";
@@ -39,7 +40,7 @@ function formatDayHeading(dateStr: string): string {
 
 export default function CalendarPage() {
   const router = useRouter();
-  const { user, activeBranchId, can } = useSession();
+  const { user, can } = useSession();
   const { isAccessible } = useBranchScope();
   const appointments = useClinicStore((s) => s.appointments);
   const patients = useClinicStore((s) => s.patients);
@@ -49,7 +50,7 @@ export default function CalendarPage() {
   const resources = useClinicStore((s) => s.resources);
 
   const [date, setDate] = useState(today());
-  const [branchFilter, setBranchFilter] = useState(activeBranchId ?? "ALL");
+  const [branchFilter, setBranchFilter] = useBranchFilter();
   // A physiotherapist lands on their own column; an admin sees the whole floor.
   const [physioFilter, setPhysioFilter] = useState(
     user?.role === "PHYSIOTHERAPIST" && user.staffId ? user.staffId : "ALL"

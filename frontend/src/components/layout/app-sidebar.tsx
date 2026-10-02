@@ -8,7 +8,7 @@ import { ClinicLogo } from "@/components/layout/clinic-logo";
 
 export function ClinicBrand() {
   return (
-    <div className="flex h-[72px] items-center gap-3 border-b border-sidebar-border px-5">
+    <div className="flex h-[72px] shrink-0 items-center gap-3 border-b border-sidebar-border px-5">
       <ClinicLogo className="h-9 w-9 shrink-0 text-white" />
       <div className="leading-none">
         <p className="font-heading text-[15px] font-bold tracking-[0.14em] text-white">

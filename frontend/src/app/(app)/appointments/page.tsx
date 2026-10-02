@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, List, Plus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
+import { useBranchFilter } from "@/lib/auth/use-branch-filter";
 import { useBranchScope } from "@/lib/auth/use-branch-scope";
 import { getPatientFullNameTh } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
@@ -43,7 +44,7 @@ const statusOptions: { value: AppointmentStatus | "ALL"; label: string }[] = [
 function AppointmentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { activeBranchId, can } = useSession();
+  const { can } = useSession();
   const { isAccessible } = useBranchScope();
   const appointments = useClinicStore((s) => s.appointments);
   const patients = useClinicStore((s) => s.patients);
@@ -54,7 +55,7 @@ function AppointmentsPageContent() {
 
   const [view, setView] = useState<"list" | "calendar">(searchParams.get("view") === "list" ? "list" : "calendar");
   const [dateFilter, setDateFilter] = useState(view === "calendar" ? today() : "");
-  const [branchFilter, setBranchFilter] = useState(activeBranchId ?? "ALL");
+  const [branchFilter, setBranchFilter] = useBranchFilter();
   const [physioFilter, setPhysioFilter] = useState("ALL");
   const [serviceFilter, setServiceFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<AppointmentStatus | "ALL">("ALL");
