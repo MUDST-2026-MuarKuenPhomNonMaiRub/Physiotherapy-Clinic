@@ -1,8 +1,6 @@
-# 🏥 Physiotherapy Clinic ERP
+# PhysioCare Clinic
 
-ระบบบริหารจัดการคลินิกกายภาพบำบัดแบบ End-to-End (MUDST 2026 Project)
-
----
+Starter monorepo based on the Clinic Figma design.
 
 ## 📚 เอกสารประกอบโปรเจกต์ (Requirements & Documentation)
 
@@ -12,10 +10,201 @@
 
 ---
 
-## 📁 โครงสร้างโปรเจกต์ (Project Structure)
 
-```text
-Physiotherapy-Clinic/
-├── docs/            # เอกสารประกอบโปรเจกต์, Requirements, Flowcharts
-├── frontend/        # โค้ดฝั่งระบบหน้าบ้าน (UX/UI)
-└── backend/         # โค้ดฝั่งระบบหลังบ้าน (API, Database, Logic)
+## Run with Docker
+
+Three commands from a clean clone:
+
+```bash
+git clone -b dev3 https://github.com/MUDST-2026-MuarKuenPhomNonMaiRub/Physiotherapy-Clinic.git
+cd Physiotherapy-Clinic
+```
+
+```bash
+bash setup-local.sh
+```
+
+```bash
+docker compose up -d --build
+```
+
+`setup-local.sh` writes a private `.env` with a freshly generated JWT secret and
+admin password, and **prints that password once** — copy it before moving on. It
+does not start anything, so the build stays a separate, visible step. Running it
+again leaves your own settings alone and only fills in values still holding the
+template placeholders. Never commit `.env`.
+
+The first build takes five to ten minutes. Flyway then creates every table and
+the starting catalogue when the API container comes up, so the clinic screens
+have services, courses, rooms and payment methods to work with.
+
+For a shared team database, put the same cloud PostgreSQL JDBC connection URL
+in `DATABASE_URL_DOCKER`, username in `DATABASE_USERNAME_DOCKER`, and password
+in `DATABASE_PASSWORD_DOCKER` in every person's private `.env` file. Keep the
+username, password and URL private. The Flyway migrations run against that
+shared database when the backend starts, so all team members use the same users
+and staff accounts.
+
+Frontend: http://localhost:3000 · API: http://localhost:8080
+
+### Demo data
+
+To fill every screen on a fresh local database (about three months of visits,
+receipts, courses and commission closings, plus today's schedule and the next
+two weeks of bookings):
+
+```bash
+python3 database/seed/seed-demo.py
+```
+
+It goes through the API, so balances and commission are the app's own figures.
+It refuses to run once patients, appointments, receipts or staff exist. The
+demo therapists sign in as `ploy`, `fah`, `tee`, `mint` or `beam` `.demo@example.com`
+with the password it stores in `.env` as `DEMO_STAFF_PASSWORD`. Never run it
+against a shared or production database.
+
+Open the app at `http://localhost:3000`, not `127.0.0.1:3000`. The sign-in
+session is an HttpOnly, SameSite=Strict cookie issued by the API at
+`localhost:8080`, and the browser only sends it between pages of the same site.
+Page script never sees the token (it is not in `localStorage`), so a cross-site
+scripting bug cannot carry a session off. Signing out asks the API to expire the
+cookie. Locally `APP_COOKIE_SECURE=false` lets it travel over plain http; the
+production compose file always sets it back to `true`.
+
+To stop the application without deleting data:
+
+```bash
+docker compose down
+```
+
+### If the backend won't start with "Migration checksum mismatch" or "Detected applied migration not resolved locally"
+
+A commit rewrote `V6` and removed `V7`, `V14`, `V15` after they had already been
+applied on some databases (this repo's own local Postgres included). Flyway
+refuses to start against any database that already ran the old versions,
+because it can no longer prove the new files describe the same history.
+
+- **Local Docker Postgres, no data you need to keep:** reset it —
+  `docker compose down -v` then `docker compose up -d --build`. Flyway
+  replays the full migration set from scratch on the empty volume.
+- **The shared cloud database** (`DATABASE_URL_DOCKER` in `.env`), or any
+  local database with data worth keeping: do **not** reset it. Reconcile
+  Flyway's bookkeeping instead, with the official Flyway CLI's `repair`
+  command — it only rewrites `flyway_schema_history` rows to match the
+  current migration files; it never touches table data or re-runs SQL:
+
+  ```bash
+  docker run --rm \
+    -v "$(pwd)/backend/src/main/resources/db/migration:/flyway/sql" \
+    flyway/flyway:11 \
+    -url="<the DATABASE_URL_DOCKER value, as a jdbc:postgresql:// URL>" \
+    -user="<DATABASE_USERNAME_DOCKER>" -password="<DATABASE_PASSWORD_DOCKER>" \
+    repair
+  ```
+
+  Run this once per database that already has data (ask in the team chat
+  before running it against the shared one, so it isn't repaired twice at
+  once). Afterwards `docker compose up -d --build` starts normally.
+
+**Rule for everyone:** once a migration file is on `dev3`, never edit it
+again — add a new `V<next>__*.sql` instead. (Commit `9dd42e3` edited `V5` and
+`V20` after they had shipped; those files were restored and the change moved
+to `V23`, so a database that ran the original `V5`/`V20` starts cleanly. A
+database that ran the *edited* `V5`/`V20` — one first created between that
+commit and `V23` — needs the `repair` command above once.)
+
+Avoid this in future: once a migration has shipped to the shared database,
+treat its file as frozen — add a new migration to change course instead of
+editing or deleting one that already ran.
+
+## Developing with hot reload
+
+Docker rebuilds the whole image on every change, so day-to-day work runs the
+two apps on the host against the containerised database. Three terminals:
+
+```bash
+docker compose up -d postgres
+```
+
+```bash
+bash backend/run-local.sh
+```
+
+```bash
+cd frontend && npm install && npm run dev
+```
+
+`run-local.sh` loads the project's `.env` before starting Spring. It uses
+`DATABASE_URL_LOCAL` when set, otherwise builds a host URL from `POSTGRES_PORT`
+(and `POSTGRES_DB`), matching Compose. Maven does not read `.env` on its own —
+running `./mvnw spring-boot:run` directly fails with `Could not resolve
+placeholder 'APP_JWT_SECRET'`.
+
+## Google Calendar (optional)
+
+Each physiotherapist can have their appointments pushed into their own Google
+Calendar. It is one-way: the clinic system stays the source of truth, nothing is
+read back from Google, and an event edited in Google is overwritten by the next
+push. Events carry the patient's nickname (or HN), the service, room and branch,
+and a link back into the system — never the full name or phone number.
+
+Setup, once per deployment:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create a project,
+   enable the **Google Calendar API**, and configure the OAuth consent screen
+   (choose *Internal* if the clinic uses Google Workspace — then no verification
+   is needed and tokens do not expire after seven days). With *External* (plain
+   Gmail accounts) the app starts in *Testing*: only the Gmail addresses listed
+   under **Audience → Test users** can connect, and Google expires their access
+   after seven days. For real use press **Publish app** on the same screen;
+   people then see a one-time "unverified app" warning until Google verifies it.
+2. Create an **OAuth client ID** of type *Web application* whose authorised
+   redirect URI is the API's `/api/v1/integrations/google/callback` (for local
+   work: `http://localhost:8080/api/v1/integrations/google/callback`).
+3. Put the client id and secret in `.env` as `GOOGLE_CLIENT_ID`,
+   `GOOGLE_CLIENT_SECRET`, plus `GOOGLE_REDIRECT_URI` and `APP_FRONTEND_URL`
+   (see `.env.example`), then restart the backend.
+
+Each physiotherapist then opens the account menu (top right) and chooses
+**Connect Google Calendar**; their upcoming appointments are added straight
+away, and every later booking, reschedule, cancellation and completion follows.
+Disconnecting (from the same menu, or by an administrator from Staff & Access)
+removes every clinic event from that calendar; deactivating or archiving a
+staff member does the same automatically.
+
+Pushes run after the booking is saved, with retries, so a Google outage never
+stops the counter. An appointment's sync state and a **Retry** button are shown
+on its detail screen. **Google Calendar settings** in the account menu opens
+`/google-calendar`: the person's own link, what is shared with Google, and for
+an administrator every connected staff member. If a push keeps failing because
+access expired, **Reconnect** there fixes it.
+
+The backend lives in `integration/google`, split by layer: `controller` (HTTP
+only), `service` (rules and the push worker), `repository` (all SQL), `client`
+(the Google endpoints), `model` and `config`. The PostgreSQL-backed test is
+`GoogleCalendarSyncTest`, run by `bash backend/run-commission-tests.sh`.
+
+## Backend tests
+
+From `backend/`, the standard command runs unit and request-validation tests
+without requiring PostgreSQL:
+
+```bash
+./mvnw test
+```
+
+The commission tests use real disposable PostgreSQL and are intentionally
+excluded from the default Maven run. Run them through the safe setup script,
+which starts and removes its own database container:
+
+```bash
+bash run-commission-tests.sh
+```
+
+Docker must be running. Set `IT_DB_PORT` if port `15433` is already occupied.
+Do not point these tests at the application's normal database.
+
+## Structure
+
+- `frontend/`: Next.js, React and TypeScript clinic ERP UI.
+- `backend/`: Spring Boot 3 REST API with PostgreSQL, Flyway, Spring Security and JWT authentication.

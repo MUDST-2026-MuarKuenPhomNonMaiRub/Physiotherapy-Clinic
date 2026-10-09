@@ -1,0 +1,886 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Check, KeyRound, Minus, Pencil, Plus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { useClinicStore } from "@/lib/store/clinic-store";
+import { useSession } from "@/lib/auth/use-session";
+import { fieldRules, fieldInput } from "@/lib/domain";
+import { allRoles, roleDescriptions, roleLabels, roleStyles, rolePermissions } from "@/lib/permissions";
+import { formatDateTime } from "@/lib/format";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { AppUser, Permission, Role, Staff, StaffPosition, GoogleCalendarConnection } from "@/types";
+import { toast } from "sonner";
+import * as api from "@/lib/api/clinic-api";
+
+const positions: StaffPosition[] = ["Physiotherapist", "Clinic Manager", "Assistant Therapist", "Salesperson"];
+
+/** Mirrors the policy the API enforces, so the form can say so before it posts. */
+const PASSWORD_RULE = "At least 12 characters with an upper case, a lower case, a number and a symbol.";
+
+function isStrongPassword(value: string): boolean {
+  return (
+    value.length >= 12 &&
+    /[a-z]/.test(value) &&
+    /[A-Z]/.test(value) &&
+    /\d/.test(value) &&
+    /[^A-Za-z\d]/.test(value)
+  );
+}
+const avatarColors = ["bg-[#1A4A2E]", "bg-[#2D6B45]", "bg-[#24BEE2]", "bg-[#586050]", "bg-[#F3AB3B]"];
+
+/** Position is what the person does on the floor; role is what the software lets them do. */
+const suggestedRoleForPosition: Record<StaffPosition, Role> = {
+  "Clinic Manager": "ADMIN",
+  Physiotherapist: "PHYSIOTHERAPIST",
+  "Assistant Therapist": "PHYSIOTHERAPIST",
+  Salesperson: "PHYSIOTHERAPIST",
+};
+
+const permissionGroups: { label: string; keys: { key: Permission; label: string }[] }[] = [
+  {
+    label: "Patients",
+    keys: [
+      { key: "patient.view", label: "View patient records" },
+      { key: "patient.create", label: "Register new patient" },
+      { key: "patient.edit", label: "Edit patient details" },
+    ],
+  },
+  {
+    label: "Calendar & Appointments",
+    keys: [
+      { key: "appointment.view", label: "View calendar & appointments" },
+      { key: "appointment.create", label: "Book appointment" },
+      { key: "appointment.edit", label: "Update status / treatment note" },
+      { key: "appointment.cancel", label: "Cancel or reschedule" },
+    ],
+  },
+  {
+    label: "Courses",
+    keys: [
+      { key: "course.view", label: "View course balances" },
+      { key: "course.use", label: "Deduct a session" },
+      { key: "course.transfer", label: "Transfer sessions between patients" },
+      { key: "course.share", label: "Share a course with another patient" },
+    ],
+  },
+  {
+    label: "Finance",
+    keys: [
+      { key: "checkout.create", label: "Take payment (checkout)" },
+      { key: "transaction.view", label: "View transactions" },
+      { key: "transaction.void", label: "Void a transaction" },
+    ],
+  },
+  {
+    label: "Reports",
+    keys: [
+      { key: "report.view", label: "Open reports" },
+      { key: "report.view.all", label: "See clinic-wide figures (all staff, all branches)" },
+      { key: "commission.view.own", label: "See own commission" },
+      { key: "commission.view.all", label: "See everyone's commission" },
+      { key: "commission.close", label: "Close the monthly commission period" },
+      { key: "commission.adjust", label: "Refund unused sessions / adjust course commission" },
+    ],
+  },
+  {
+    label: "Administration",
+    keys: [{ key: "settings.manage", label: "Manage clinic settings" }],
+  },
+];
+
+function initials(nameEn: string): string {
+  const parts = nameEn.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
+}
+
+interface FormState {
+  name: string;
+  nameEn: string;
+  position: StaffPosition;
+  phone: string;
+  email: string;
+  branchIds: string[];
+  hasAccount: boolean;
+  username: string;
+  password: string;
+  role: Role;
+  terminationDate: string;
+  commissionAfterTerminationPolicy: "FORFEIT_AFTER_TERMINATION" | "CONTINUE_UNTIL_COURSE_END";
+}
+
+const emptyForm: FormState = {
+  name: "",
+  nameEn: "",
+  position: "Physiotherapist",
+  phone: "",
+  email: "",
+  branchIds: [],
+  hasAccount: true,
+  username: "",
+  password: "",
+  role: "PHYSIOTHERAPIST",
+  terminationDate: "",
+  commissionAfterTerminationPolicy: "FORFEIT_AFTER_TERMINATION",
+};
+
+export default function StaffAccessPage() {
+  const staff = useClinicStore((s) => s.staff);
+  const users = useClinicStore((s) => s.users);
+  const branches = useClinicStore((s) => s.branches);
+  const addStaff = useClinicStore((s) => s.addStaff);
+  const updateStaff = useClinicStore((s) => s.updateStaff);
+  const toggleStaffStatus = useClinicStore((s) => s.toggleStaffStatus);
+  const deleteStaff = useClinicStore((s) => s.deleteStaff);
+  const createStaffAccount = useClinicStore((s) => s.createStaffAccount);
+  const updateUser = useClinicStore((s) => s.updateUser);
+  const toggleUserStatus = useClinicStore((s) => s.toggleUserStatus);
+  const { can } = useSession();
+
+  const [tab, setTab] = useState("people");
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Staff | null>(null);
+  const [form, setForm] = useState<FormState>(emptyForm);
+  const [query, setQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<Role | "ALL" | "NO_ACCOUNT">("ALL");
+  const [saving, setSaving] = useState(false);
+  const [roleDialog, setRoleDialog] = useState(false);
+  const [roleCode, setRoleCode] = useState("");
+  const [editingRoleId, setEditingRoleId] = useState<number | null>(null);
+  const [roleName, setRoleName] = useState("");
+  const [rolePermissionsDraft, setRolePermissionsDraft] = useState<string[]>([]);
+  const [configuredPermissions, setConfiguredPermissions] = useState<api.ConfiguredPermission[]>([]);
+  const [configuredRoles, setConfiguredRoles] = useState<api.ConfiguredRole[]>([]);
+  const [roleSaving, setRoleSaving] = useState(false);
+
+  useEffect(() => {
+    if (!roleDialog) return;
+    void api.listConfiguredPermissions().then(setConfiguredPermissions).catch(() => toast.error("Unable to load permissions"));
+  }, [roleDialog]);
+
+  useEffect(() => {
+    void api.listConfiguredRoles().then(setConfiguredRoles).catch(() => toast.error("Unable to load roles"));
+  }, []);
+
+  // Who has linked their own Google Calendar. Only the person can connect
+  // one (it is their Google login); an administrator can cut it here.
+  const [googleConnections, setGoogleConnections] = useState<Record<string, GoogleCalendarConnection>>({});
+  const loadGoogleConnections = () =>
+    api.listGoogleCalendarConnections()
+      .then((rows) => setGoogleConnections(Object.fromEntries(rows.map((r) => [r.staffId, r]))))
+      .catch(() => setGoogleConnections({}));
+  useEffect(() => {
+    void loadGoogleConnections();
+  }, []);
+  async function disconnectGoogle(s: Staff) {
+    if (!window.confirm(`Disconnect ${s.name}'s Google Calendar? Every clinic appointment placed there will be removed.`)) return;
+    try {
+      await api.disconnectGoogleCalendar(s.id);
+      toast.success("Google Calendar disconnected");
+      await loadGoogleConnections();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to disconnect");
+    }
+  }
+
+  async function createRole() {
+    if (!roleCode.trim() || !roleName.trim() || roleSaving) return;
+    setRoleSaving(true);
+    try {
+      if (editingRoleId == null) await api.createConfiguredRole({ code: roleCode, name: roleName, permissionCodes: rolePermissionsDraft });
+      else await api.updateConfiguredRole(editingRoleId, { name: roleName, permissionCodes: rolePermissionsDraft });
+      setConfiguredRoles(await api.listConfiguredRoles());
+      toast.success(editingRoleId == null ? "Role created" : "Role updated");
+      setRoleDialog(false); setRoleCode(""); setRoleName(""); setRolePermissionsDraft([]); setEditingRoleId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create role");
+    } finally {
+      setRoleSaving(false);
+    }
+  }
+
+  const visibleStaff = staff;
+
+  const accountByStaffId = useMemo(() => {
+    const map = new Map<string, AppUser>();
+    users.forEach((u) => {
+      if (u.staffId) map.set(u.staffId, u);
+    });
+    return map;
+  }, [users]);
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return visibleStaff
+      .filter((s) => !s.deletedAt)
+      .map((s) => ({ staff: s, account: accountByStaffId.get(s.id) ?? null }))
+      .filter(({ staff: s, account }) => {
+        if (!q) return true;
+        return (
+          s.name.toLowerCase().includes(q) ||
+          s.nameEn.toLowerCase().includes(q) ||
+          s.email.toLowerCase().includes(q) ||
+          (account?.username.toLowerCase().includes(q) ?? false)
+        );
+      })
+      .filter(({ account }) => {
+        if (roleFilter === "ALL") return true;
+        if (roleFilter === "NO_ACCOUNT") return !account;
+        return account?.role === roleFilter;
+      });
+  }, [visibleStaff, accountByStaffId, query, roleFilter]);
+
+  const counts = useMemo(() => {
+    const withAccount = visibleStaff.filter((s) => accountByStaffId.has(s.id));
+    return {
+      total: visibleStaff.filter((s) => !s.deletedAt).length,
+      admins: withAccount.filter((s) => !s.deletedAt && accountByStaffId.get(s.id)!.role === "ADMIN").length,
+      physios: withAccount.filter((s) => !s.deletedAt && accountByStaffId.get(s.id)!.role === "PHYSIOTHERAPIST").length,
+      noAccount: visibleStaff.filter((s) => !s.deletedAt).length - withAccount.filter((s) => !s.deletedAt).length,
+    };
+  }, [visibleStaff, accountByStaffId]);
+
+  function openCreate() {
+    setEditing(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+
+  function openEdit(s: Staff) {
+    const account = accountByStaffId.get(s.id) ?? null;
+    setEditing(s);
+    setForm({
+      name: s.name,
+      nameEn: s.nameEn,
+      position: s.position,
+      phone: s.phone,
+      email: s.email,
+      branchIds: s.branchIds,
+      // A deactivated login shows as "no access" so it can be switched back on.
+      hasAccount: !!account && account.status === "ACTIVE",
+      username: account?.username ?? "",
+      password: "",
+      role: account?.role ?? suggestedRoleForPosition[s.position],
+      terminationDate: s.terminationDate ?? "",
+      commissionAfterTerminationPolicy: s.commissionAfterTerminationPolicy === "CONTINUE_UNTIL_COURSE_END"
+        ? "CONTINUE_UNTIL_COURSE_END"
+        : "FORFEIT_AFTER_TERMINATION",
+    });
+    setOpen(true);
+  }
+
+  function toggleBranch(id: string) {
+    setForm((f) => ({
+      ...f,
+      branchIds: f.branchIds.includes(id) ? f.branchIds.filter((b) => b !== id) : [...f.branchIds, id],
+    }));
+  }
+
+  const existingAccount = editing ? accountByStaffId.get(editing.id) ?? null : null;
+  const passwordRequired = form.hasAccount && !existingAccount;
+  const passwordValid = !passwordRequired || isStrongPassword(form.password);
+  const phoneError = fieldRules.optionalPhone(form.phone);
+  const canSave =
+    form.name.trim().length > 0 &&
+    form.branchIds.length > 0 &&
+    !phoneError &&
+    (!form.hasAccount || (form.email.trim().length > 0 && passwordValid));
+
+  async function save() {
+    if (!canSave || saving) return;
+    const profile = {
+      name: form.name.trim(),
+      nameEn: form.nameEn.trim(),
+      position: form.position,
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      branchIds: form.branchIds,
+      terminationDate: form.terminationDate || undefined,
+      commissionAfterTerminationPolicy: form.commissionAfterTerminationPolicy,
+    };
+
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateStaff(editing.id, profile);
+        const account = accountByStaffId.get(editing.id) ?? null;
+        if (account) {
+          if (form.hasAccount) {
+            if (account.role !== form.role) await updateUser(account.id, { role: form.role });
+            // Access that was taken away earlier is handed back by re-enabling
+            // the same login rather than creating a second one.
+            if (account.status !== "ACTIVE") await toggleUserStatus(account.id);
+          } else if (account.status === "ACTIVE") {
+            // Access is revoked by deactivating the login, never by dropping
+            // the record — transactions and commission still point at this
+            // person.
+            await toggleUserStatus(account.id);
+          }
+        } else if (form.hasAccount) {
+          await createStaffAccount(editing.id, {
+            email: profile.email,
+            role: form.role,
+            password: form.password,
+          });
+        }
+        toast.success(`${profile.name} updated`);
+      } else {
+        await addStaff(
+          {
+            ...profile,
+            status: "ACTIVE",
+            avatarColor: avatarColors[staff.length % avatarColors.length],
+          },
+          form.hasAccount ? { role: form.role, password: form.password } : null
+        );
+        toast.success(`${profile.name} added`);
+      }
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save this person");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removePerson(person: Staff) {
+    if (!window.confirm(`Archive ${person.name}? It will be hidden but kept in the database.`)) return;
+    try {
+      await deleteStaff(person.id);
+      toast.success(`${person.name} archived`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to archive this person");
+    }
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Staff & Access"
+        description="One record per person — their clinic profile and the login that goes with it"
+        actions={
+          tab === "people" && can("settings.manage") ? (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => setTab("roles")}>
+                <ShieldCheck className="h-4 w-4" /> Manage Roles & Permissions
+              </Button>
+              <Button onClick={openCreate}>
+                <UserPlus className="h-4 w-4" /> Add Person
+              </Button>
+            </div>
+          ) : can("settings.manage") ? (
+            <Button onClick={() => setRoleDialog(true)} disabled={roleSaving}><Plus className="h-4 w-4" /> {roleSaving ? "Saving..." : "New Role"}</Button>
+          ) : undefined
+        }
+      />
+
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <SummaryTile label="People" value={counts.total} />
+        <SummaryTile label="Admins" value={counts.admins} tone="primary" />
+        <SummaryTile label="Physiotherapists" value={counts.physios} tone="info" />
+        <SummaryTile label="No login yet" value={counts.noAccount} tone="muted" />
+      </div>
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="people">People</TabsTrigger>
+          <TabsTrigger value="roles">Roles & Permissions</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="people" className="mt-4">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="relative w-full max-w-xs">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search name, email or username…"
+                className="h-9 pl-8"
+              />
+            </div>
+            <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as typeof roleFilter)}>
+              <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All access levels</SelectItem>
+                {allRoles.map((r) => ({ code: r, name: roleLabels[r] })).map((r) => (
+                    <SelectItem key={r.code} value={r.code}>{r.name}</SelectItem>
+                  ))}
+                <SelectItem value="NO_ACCOUNT">No login account</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="ml-auto text-sm text-muted-foreground">{rows.length} of {visibleStaff.length} people</p>
+          </div>
+
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={ShieldCheck}
+              title="No one matches this filter"
+              action={<Button variant="outline" onClick={() => { setQuery(""); setRoleFilter("ALL"); }}>Clear filters</Button>}
+            />
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Person</TableHead>
+                      <TableHead>Position</TableHead>
+                      <TableHead>Access Level</TableHead>
+                      <TableHead>Login</TableHead>
+                      <TableHead>Branches</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Last Login</TableHead>
+                      <TableHead>Google Calendar</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map(({ staff: s, account }) => (
+                      <TableRow key={s.id} className="[&>td]:py-3">
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${s.avatarColor}`}>
+                              {initials(s.nameEn || s.name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-foreground">{s.name}</p>
+                              <p className="truncate text-xs text-muted-foreground">{s.email || s.nameEn}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-normal">{s.position}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {account && account.status === "ACTIVE" ? (
+                            <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${roleStyles[account.role] ?? "border-border bg-muted text-muted-foreground"}`}>
+                              {configuredRoles.find((r) => r.code === account.role || (r.code === "PHYSIO" && account.role === "PHYSIOTHERAPIST"))?.name ?? roleLabels[account.role] ?? account.role.replaceAll("_", " ")}
+                            </span>
+                          ) : account ? (
+                            <span className="text-xs text-muted-foreground">Access revoked</span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No access</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {account ? (
+                            <span className="inline-flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
+                              <KeyRound className="h-3 w-3" /> {account.username}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {s.branchIds.map((bid) => (
+                              <Badge key={bid} variant="secondary" className="font-normal">
+                                {branches.find((b) => b.id === bid)?.code}
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell><StatusBadge status={s.status} /></TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {account?.lastLogin ? formatDateTime(account.lastLogin) : "—"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {googleConnections[s.id] ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className={googleConnections[s.id].lastError ? "text-destructive" : "text-success"}>
+                                {googleConnections[s.id].lastError ? "Sync failing" : "Connected"}
+                              </span>
+                              <span className="text-muted-foreground">{googleConnections[s.id].googleEmail ?? ""}</span>
+                              <button type="button" onClick={() => void disconnectGoogle(s)} className="w-fit text-left text-muted-foreground underline hover:text-destructive">
+                                Disconnect
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {can("settings.manage") && (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)} aria-label={`Edit ${s.name}`}>
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => void removePerson(s)} aria-label={`Archive ${s.name}`}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                                <Switch
+                                  checked={s.status === "ACTIVE"}
+                                  aria-label={`${s.status === "ACTIVE" ? "Deactivate" : "Activate"} ${s.name}`}
+                                  onCheckedChange={() => void toggleStaffStatus(s.id)}
+                                />
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="roles" className="mt-4">
+          <div className="mb-4 grid gap-3 md:grid-cols-2">
+            {allRoles.map((r) => (
+              <div key={r} className="rounded-xl border border-border bg-card p-4 shadow-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${roleStyles[r]}`}>
+                    {roleLabels[r]}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {r === "ADMIN" ? counts.admins : counts.physios}{" "}
+                    {(r === "ADMIN" ? counts.admins : counts.physios) === 1 ? "person" : "people"}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{roleDescriptions[r]}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-48">Area</TableHead>
+                    <TableHead>Capability</TableHead>
+                    {allRoles.map((r) => (
+                      <TableHead key={r} className="w-40 text-center">
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${roleStyles[r]}`}>
+                          {roleLabels[r]}
+                        </span>
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {permissionGroups.map((group, gi) =>
+                    group.keys.map((k, i) => (
+                      <TableRow key={k.key} className={gi % 2 === 1 ? "bg-muted/40" : undefined}>
+                        {i === 0 && (
+                          <TableCell rowSpan={group.keys.length} className="align-top font-medium text-foreground">
+                            {group.label}
+                          </TableCell>
+                        )}
+                        <TableCell className="whitespace-normal text-muted-foreground">{k.label}</TableCell>
+                        {allRoles.map((r) => (
+                          <TableCell key={r} className="text-center">
+                            {rolePermissions[r].includes(k.key) ? (
+                              <span className="mx-auto flex h-5 w-5 items-center justify-center rounded-full bg-success/15 text-success">
+                                <Check className="h-3 w-3" strokeWidth={3} />
+                                <span className="sr-only">Allowed</span>
+                              </span>
+                            ) : (
+                              <span className="mx-auto flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground/60">
+                                <Minus className="h-3 w-3" strokeWidth={3} />
+                                <span className="sr-only">Not allowed</span>
+                              </span>
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Select a role to edit its permissions. Built-in roles cannot be removed. Assign a person to a level on the People tab.
+          </p>
+          <div className="mt-5 rounded-xl border border-border bg-card p-4">
+            <p className="mb-3 text-sm font-semibold">Configured roles</p>
+            <div className="space-y-2">
+              {configuredRoles.map((configured) => (
+                <div key={configured.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+                  <div><p className="text-sm font-medium">{configured.name}</p><p className="text-xs text-muted-foreground">{configured.code} · {configured.permissions?.length ?? 0} permissions</p></div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => { setEditingRoleId(configured.id); setRoleCode(configured.code); setRoleName(configured.name); setRolePermissionsDraft(configured.permissions ?? []); setRoleDialog(true); }}>Edit</Button>
+                    {!['ADMIN', 'PHYSIO'].includes(configured.code) && <Button size="sm" variant="outline" className="text-destructive" onClick={() => void (async () => { try { await api.deleteConfiguredRole(configured.id); setConfiguredRoles(await api.listConfiguredRoles()); toast.success('Role deleted'); } catch (error) { toast.error(error instanceof Error ? error.message : 'Unable to delete role'); } })()}>Delete</Button>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editing ? `Edit ${editing.name}` : "Add Person"}</DialogTitle>
+            <DialogDescription>
+              A person&apos;s clinic profile and their system access are set together.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            <section className="space-y-4">
+              <SectionLabel>Staff profile</SectionLabel>
+              <p className="text-xs text-muted-foreground">
+                Active staff assigned to a branch can be selected as the salesperson when checking out a service or course.
+                Their course sales will appear automatically in Staff Sales.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Name (TH)" required>
+                  <Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+                </Field>
+                <Field label="Name (EN)">
+                  <Input value={form.nameEn} onChange={(e) => setForm((f) => ({ ...f, nameEn: e.target.value }))} />
+                </Field>
+              </div>
+              <Field label="Position">
+                <Select
+                  value={form.position}
+                  onValueChange={(v) =>
+                    setForm((f) => {
+                      const position = v as StaffPosition;
+                      // Only pre-fill the access level while creating; on an existing
+                      // person their assigned level is deliberate, so leave it alone.
+                      return editing
+                        ? { ...f, position }
+                        : {
+                            ...f,
+                            position,
+                            role: suggestedRoleForPosition[position],
+                            hasAccount: position === "Salesperson" ? false : f.hasAccount,
+                          };
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {positions.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Phone">
+                  <Input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: fieldInput.phone(e.target.value) }))}
+                  />
+                  {phoneError && <p className="text-xs text-destructive">{phoneError}</p>}
+                </Field>
+                <Field label="Email">
+                  <Input type="email" autoComplete="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
+                </Field>
+              </div>
+              <Field label="Branches" required hint="Where this person works, and what their login can see.">
+                <div className="flex flex-wrap gap-x-5 gap-y-2.5 rounded-xl border border-border p-3">
+                  {branches.map((b) => (
+                    <label key={b.id} className="flex cursor-pointer items-center gap-2 text-sm">
+                      <Checkbox checked={form.branchIds.includes(b.id)} onCheckedChange={() => toggleBranch(b.id)} />
+                      {b.name}
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            </section>
+
+            <section className="space-y-4 rounded-xl border border-border bg-muted/40 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <SectionLabel>System access</SectionLabel>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {form.hasAccount
+                      ? "This person can sign in to the clinic system."
+                      : "No login — the person still appears on appointments, sales and commission."}
+                  </p>
+                </div>
+                <Switch
+                  checked={form.hasAccount}
+                  aria-label="Give this person a login"
+                  disabled={!editing}
+                  onCheckedChange={(v) => setForm((f) => ({ ...f, hasAccount: v }))}
+                />
+              </div>
+
+              {form.hasAccount && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Sign-in email" required>
+                    {/* The login is the email above — there is no separate username. */}
+                    <Input value={form.email} readOnly tabIndex={-1} className="bg-muted/60 text-muted-foreground" />
+                    <p className="mt-1 text-xs text-muted-foreground">Signs in with the email entered above.</p>
+                  </Field>
+                  {passwordRequired && (
+                    <Field label="Password" required>
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder="Physio@Name!Pin"
+                        value={form.password}
+                        onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                      />
+                      <p
+                        className={`mt-1 text-xs ${
+                          form.password && !passwordValid ? "text-destructive" : "text-muted-foreground"
+                        }`}
+                      >
+                        {PASSWORD_RULE}
+                      </p>
+                    </Field>
+                  )}
+                  <Field label="Access level">
+                    <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {allRoles.map((r) => ({ code: r, name: roleLabels[r] })).map((r) => (
+                            <SelectItem key={r.code} value={r.code}>{r.name}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <p className="sm:col-span-2 text-xs leading-relaxed text-muted-foreground">
+                    {roleDescriptions[form.role] ?? "Custom access level configured by an administrator."}
+                  </p>
+                </div>
+              )}
+            </section>
+
+            {editing && (
+              <section className="space-y-4 rounded-xl border border-border bg-muted/40 p-4">
+                <div>
+                  <SectionLabel>Commission after termination</SectionLabel>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Requirement 21: choose whether outstanding course commission is forfeited or continues until the course ends.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Termination date">
+                    <Input type="date" value={form.terminationDate} onChange={(e) => setForm((f) => ({ ...f, terminationDate: e.target.value }))} />
+                  </Field>
+                  <Field label="Policy">
+                    <Select value={form.commissionAfterTerminationPolicy} onValueChange={(v) => setForm((f) => ({ ...f, commissionAfterTerminationPolicy: v as FormState["commissionAfterTerminationPolicy"] }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FORFEIT_AFTER_TERMINATION">Forfeit after termination</SelectItem>
+                        <SelectItem value="CONTINUE_UNTIL_COURSE_END">Continue until course ends</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </div>
+              </section>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button disabled={!canSave || saving} onClick={() => void save()}>
+              {saving ? "Saving…" : editing ? "Save Changes" : <><Plus className="h-4 w-4" /> Add Person</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={roleDialog} onOpenChange={setRoleDialog}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader><DialogTitle>{editingRoleId == null ? "New Role" : "Edit Role"}</DialogTitle><DialogDescription>Choose exactly which sidebar capabilities this role can use.</DialogDescription></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Role code" required><Input placeholder="FINANCE" value={roleCode} onChange={(e) => setRoleCode(e.target.value.toUpperCase())} maxLength={30} /></Field>
+              <Field label="Display name" required><Input placeholder="Finance" value={roleName} onChange={(e) => setRoleName(e.target.value)} maxLength={100} /></Field>
+            </div>
+            <div className="rounded-xl border border-border p-3">
+              <p className="mb-3 text-sm font-medium">Permissions</p>
+              <div className="space-y-4">
+                {permissionGroups.map((group) => {
+                  const items = group.keys
+                    .map((key) => configuredPermissions.find((permission) => permission.code === key.key))
+                    .filter((permission): permission is api.ConfiguredPermission => Boolean(permission));
+                  if (items.length === 0) return null;
+                  return <div key={group.label}><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{group.label}</p><div className="grid gap-2 sm:grid-cols-2">{items.map((p) => <label key={p.code} className="flex items-center gap-2 text-sm"><Checkbox checked={rolePermissionsDraft.includes(p.code)} onCheckedChange={(v) => setRolePermissionsDraft((current) => v ? [...current, p.code] : current.filter((x) => x !== p.code))} />{p.name}</label>)}</div></div>;
+                })}
+              </div>
+            </div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => { setRoleDialog(false); setEditingRoleId(null); }}>Cancel</Button><Button disabled={!roleCode.trim() || !roleName.trim() || roleSaving} onClick={() => void createRole()}>{editingRoleId == null ? "Create Role" : "Save Changes"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function SummaryTile({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: number;
+  tone?: "default" | "primary" | "info" | "muted";
+}) {
+  const valueTone =
+    tone === "primary" ? "text-primary" : tone === "info" ? "text-[#1A9DBF]" : tone === "muted" ? "text-muted-foreground" : "text-foreground";
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`mt-1 font-heading text-2xl font-semibold ${valueTone}`}>{value}</p>
+    </div>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground">{children}</p>
+  );
+}
+
+function Field({
+  label,
+  required,
+  hint,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>
+        {label}
+        {required && <span className="ml-0.5 text-destructive">*</span>}
+      </Label>
+      {children}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}

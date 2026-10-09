@@ -1,0 +1,1151 @@
+"use client";
+
+import { Suspense, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  CalendarPlus,
+  CheckCircle2,
+  Clock,
+  Minus,
+  Plus,
+  Printer,
+  RotateCcw,
+  Search,
+  ShoppingCart,
+  Tag,
+  Ticket,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useClinicStore } from "@/lib/store/clinic-store";
+import { useSession } from "@/lib/auth/use-session";
+import { getPatientFullNameTh } from "@/lib/domain";
+import { formatCurrency, formatCurrencySigned, formatDate } from "@/lib/format";
+import { remainingSessions, today } from "@/lib/domain";
+import { usePatientSearch } from "@/lib/hooks/use-patient-search";
+import { PageHeader } from "@/components/shared/page-header";
+import { PageLoading } from "@/components/shared/page-loading";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { Service, Transaction } from "@/types";
+import { ServicePicker } from "@/components/shared/service-picker";
+
+type Mode = "SINGLE" | "COURSE";
+type CourseSubMode = "USE_EXISTING" | "PURCHASE";
+
+/**
+ * A counter-side change to the bill. Discounts may be entered as a percentage
+ * of the subtotal; extra charges are always a flat amount.
+ */
+interface Adjustment {
+  id: number;
+  kind: "DISCOUNT" | "SURCHARGE";
+  label: string;
+  value: number;
+  isPercent: boolean;
+}
+
+interface CommissionSplitForm {
+  id: number;
+  employeeId: string;
+  salesCreditAmount: string;
+  visits: string;
+}
+
+const DEFAULT_LABEL: Record<Adjustment["kind"], string> = {
+  DISCOUNT: "Discount",
+  SURCHARGE: "Extra charge",
+};
+
+function CheckoutContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { user, activeBranchId, can } = useSession();
+  const patients = useClinicStore((s) => s.patients);
+  const operationalLoaded = useClinicStore((s) => s.operationalLoaded);
+  const branches = useClinicStore((s) => s.branches);
+  const staff = useClinicStore((s) => s.staff);
+  const services = useClinicStore((s) => s.services);
+  const courseTemplates = useClinicStore((s) => s.courseTemplates);
+  const patientCourses = useClinicStore((s) => s.patientCourses);
+  const paymentMethods = useClinicStore((s) => s.paymentMethods);
+  const appointments = useClinicStore((s) => s.appointments);
+  const refreshStaff = useClinicStore((s) => s.refreshStaff);
+  const createTransaction = useClinicStore((s) => s.createTransaction);
+
+  useEffect(() => {
+    void refreshStaff();
+  }, [refreshStaff]);
+
+  const preselectPatientId = searchParams.get("patientId");
+  const [appointmentId, setAppointmentId] = useState(
+    () => searchParams.get("appointmentId") ?? undefined
+  );
+  const linkedAppointment = appointments.find((a) => a.id === appointmentId);
+
+  const [patientId, setPatientId] = useState(preselectPatientId ?? "");
+  const [patientQuery, setPatientQuery] = useState("");
+  // Always follow the branch selected in the app header so a checkout opened
+  // before switching branches is still recorded against the current branch.
+  const branchId = activeBranchId ?? branches[0]?.id ?? "";
+  const [mode, setMode] = useState<Mode>(linkedAppointment?.usedPatientCourseId ? "COURSE" : "SINGLE");
+  const [serviceId, setServiceId] = useState(
+    linkedAppointment && !linkedAppointment.usedPatientCourseId ? linkedAppointment.serviceId : ""
+  );
+  const [subMode, setSubMode] = useState<CourseSubMode>("USE_EXISTING");
+  const [useCourseId, setUseCourseId] = useState(linkedAppointment?.usedPatientCourseId ?? "");
+  const [useQty, setUseQty] = useState(1);
+  const [purchaseTemplateId, setPurchaseTemplateId] = useState("");
+  const [useToday, setUseToday] = useState(false);
+  const [treatingStaffId, setTreatingStaffId] = useState(linkedAppointment?.physiotherapistId ?? "");
+  const [salespersonId, setSalespersonId] = useState(user?.staffId ?? "");
+  const [commissionSplits, setCommissionSplits] = useState<CommissionSplitForm[]>([
+    { id: 1, employeeId: user?.staffId ?? "", salesCreditAmount: "", visits: "" },
+  ]);
+  const [commissionSplitSeq, setCommissionSplitSeq] = useState(2);
+  const [paymentMethodId, setPaymentMethodId] = useState("");
+  // Kept as the typed string so the box can be cleared; "" is "not entered yet"
+  // rather than zero.
+  const [cashReceivedInput, setCashReceivedInput] = useState("");
+  const [result, setResult] = useState<Transaction | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  // Empty string = "use the catalogue price"; a typed value overrides it.
+  const [priceOverride, setPriceOverride] = useState("");
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [adjustmentSeq, setAdjustmentSeq] = useState(1);
+
+  const patient = patients.find((p) => p.id === patientId);
+  const { items: patientMatches, loading: patientSearchLoading } = usePatientSearch(patientQuery, branchId);
+  const readyForCheckout = useMemo(
+    () =>
+      appointments
+        .filter((a) => a.date === today() && a.status === "COMPLETED" && !a.checkedOut && a.branchId === branchId)
+        .sort((a, b) => a.startTime.localeCompare(b.startTime))
+        .map((a) => ({ appointment: a, patient: patients.find((p) => p.id === a.patientId) }))
+        .filter((x): x is { appointment: typeof x.appointment; patient: NonNullable<typeof x.patient> } => !!x.patient),
+    [appointments, patients, branchId]
+  );
+
+  const activeCourses = useMemo(
+    () => patientCourses.filter((pc) => pc.patientId === patientId && pc.status === "ACTIVE"),
+    [patientCourses, patientId]
+  );
+  const enabledPayments = paymentMethods.filter((p) => p.enabled);
+  const branchPhysios = staff.filter(
+    (s) =>
+      s.position === "Physiotherapist" &&
+      s.status === "ACTIVE" &&
+      s.branchIds.map(String).includes(String(branchId))
+  );
+  // Anyone on shift can ring up a sale — the clinic has no dedicated front desk.
+  const branchSales = staff.filter(
+    (s) => s.status === "ACTIVE" && s.branchIds.map(String).includes(String(branchId))
+  );
+
+  const selectedService: Service | undefined = services.find((s) => s.id === serviceId);
+  // Only resolve a course from the active list for the currently selected
+  // patient. This prevents a stale course id surviving a patient switch.
+  const selectedUseCourse = activeCourses.find((pc) => pc.id === useCourseId);
+  const selectedUseCourseTemplate = selectedUseCourse ? courseTemplates.find((c) => c.id === selectedUseCourse.courseId) : undefined;
+  const selectedPurchaseTemplate = courseTemplates.find((c) => c.id === purchaseTemplateId);
+
+  // The line being charged for, if any — course-usage checkouts bill nothing.
+  const baseItem =
+    mode === "SINGLE"
+      ? selectedService
+        ? { label: selectedService.name, listPrice: selectedService.price }
+        : null
+      : subMode === "PURCHASE" && selectedPurchaseTemplate
+      ? {
+          label: `${selectedPurchaseTemplate.name} (${selectedPurchaseTemplate.sessions} sessions)`,
+          listPrice: selectedPurchaseTemplate.price,
+        }
+      : null;
+
+  const parsedOverride = priceOverride.trim() === "" ? null : Math.max(0, Math.round(Number(priceOverride)));
+  const overrideIsValid = parsedOverride !== null && Number.isFinite(parsedOverride);
+  const basePrice = baseItem ? (overrideIsValid ? parsedOverride! : baseItem.listPrice) : 0;
+  const priceWasOverridden = !!baseItem && overrideIsValid && parsedOverride !== baseItem.listPrice;
+  const subtotal = basePrice;
+
+  // Percentage discounts resolve against the subtotal, so they follow a price
+  // override automatically.
+  const resolvedAdjustments = adjustments
+    .map((a) => {
+      const magnitude = a.isPercent ? Math.round((subtotal * a.value) / 100) : Math.round(a.value);
+      const amount = a.kind === "DISCOUNT" ? -magnitude : magnitude;
+      const plainLabel = a.label.trim() || DEFAULT_LABEL[a.kind];
+      return {
+        ...a,
+        // A course discount is recorded with the course context so the
+        // receipt and transaction history show exactly what was reduced.
+        resolvedLabel:
+          mode === "COURSE" && subMode === "PURCHASE" && a.kind === "DISCOUNT"
+            ? `Course discount: ${plainLabel}`
+            : plainLabel,
+        amount: Number.isFinite(amount) ? amount : 0,
+      };
+    })
+    .filter((a) => a.amount !== 0);
+
+  const adjustmentTotal = resolvedAdjustments.reduce((sum, a) => sum + a.amount, 0);
+  const courseDiscountTotal = resolvedAdjustments
+    .filter((a) => a.kind === "DISCOUNT")
+    .reduce((sum, a) => sum + a.amount, 0);
+  const courseNetPrice = Math.max(0, basePrice + courseDiscountTotal);
+  const total = Math.max(0, subtotal + adjustmentTotal);
+  // Discounting past free is almost always a typo — block confirm rather than
+  // silently clamping the patient's bill to zero.
+  const overDiscounted = subtotal + adjustmentTotal < 0;
+
+  function addAdjustment(kind: Adjustment["kind"]) {
+    setAdjustments((list) => [...list, { id: adjustmentSeq, kind, label: "", value: 0, isPercent: false }]);
+    setAdjustmentSeq((n) => n + 1);
+  }
+  function updateAdjustment(id: number, patch: Partial<Adjustment>) {
+    setAdjustments((list) => list.map((a) => (a.id === id ? { ...a, ...patch } : a)));
+  }
+  function removeAdjustment(id: number) {
+    setAdjustments((list) => list.filter((a) => a.id !== id));
+  }
+
+  const needsTreatingStaff =
+    mode === "SINGLE" || (mode === "COURSE" && (subMode === "USE_EXISTING" ? !!useCourseId : useToday));
+  const needsSalesperson = mode === "COURSE" && subMode === "PURCHASE";
+  const requiredSplitVisits = selectedPurchaseTemplate
+    ? selectedPurchaseTemplate.sessions + selectedPurchaseTemplate.bonusSessions
+    : 0;
+  const splitCreditTotal = commissionSplits.reduce(
+    (sum, split) => sum + (Number(split.salesCreditAmount) || 0),
+    0
+  );
+  const splitVisitTotal = commissionSplits.reduce(
+    (sum, split) => sum + (Number(split.visits) || 0),
+    0
+  );
+  const duplicateSplitOwner = new Set(commissionSplits.map((split) => split.employeeId)).size !== commissionSplits.length;
+  const splitProblem =
+    needsSalesperson && selectedPurchaseTemplate
+      ? commissionSplits.some(
+          (split) =>
+            !split.employeeId ||
+            !Number.isFinite(Number(split.salesCreditAmount)) ||
+            Number(split.salesCreditAmount) <= 0 ||
+            !Number.isInteger(Number(split.visits)) ||
+            Number(split.visits) <= 0
+        )
+        ? "Choose a physiotherapist and enter a positive amount and visit count for every split."
+        : duplicateSplitOwner
+          ? "Each physiotherapist can appear only once."
+          : Math.abs(splitCreditTotal - selectedPurchaseTemplate.price) > 0.001
+            ? `Sales credit must total the full course price (${formatCurrency(selectedPurchaseTemplate.price)}).`
+            : splitVisitTotal !== requiredSplitVisits
+              ? `Visits must total all paid and bonus visits (${requiredSplitVisits}).`
+              : null
+      : null;
+
+  // Cash is the one method where the sum handed over differs from the sum
+  // billed, so it is the only one that asks for a figure and owes change back.
+  const isCashPayment =
+    paymentMethods.find((p) => p.id === paymentMethodId)?.code === "CASH";
+  const cashReceived = cashReceivedInput === "" ? null : Number(cashReceivedInput);
+  const cashIsShort =
+    isCashPayment &&
+    total > 0 &&
+    (cashReceived === null || !Number.isFinite(cashReceived) || cashReceived < total);
+  const changeDue =
+    isCashPayment && cashReceived !== null && Number.isFinite(cashReceived) && cashReceived >= total
+      ? cashReceived - total
+      : null;
+
+  const canConfirm =
+    !!patientId &&
+    enabledPayments.some((method) => method.id === paymentMethodId) &&
+    (mode === "SINGLE"
+      ? !!serviceId
+      : subMode === "USE_EXISTING"
+      ? !!useCourseId && useQty > 0 && useQty <= (selectedUseCourse ? remainingSessions(selectedUseCourse) : 0)
+      : !!purchaseTemplateId) &&
+    (!needsTreatingStaff || !!treatingStaffId) &&
+    (!needsSalesperson || !!salespersonId) &&
+    !splitProblem &&
+    !overDiscounted &&
+    !cashIsShort;
+
+  // Spending a session costs nothing, so that flow is not "payment"; an empty
+  // bill before anything is chosen still reads as one.
+  const confirmLabel =
+    mode === "COURSE" && subMode === "USE_EXISTING" && total === 0
+      ? "Complete Course Usage"
+      : "Confirm Payment";
+
+  function selectPatient(nextPatientId: string) {
+    setPatientId(nextPatientId);
+    setUseCourseId("");
+    setUseQty(1);
+    setAppointmentId(undefined);
+    setPatientQuery("");
+  }
+
+  function selectPurchaseCourse(courseId: string) {
+    const course = courseTemplates.find((item) => item.id === courseId);
+    setPurchaseTemplateId(courseId);
+    setPriceOverride("");
+    if (!course) return;
+    setCommissionSplits([
+      {
+        id: 1,
+        employeeId: branchPhysios.some((physio) => physio.id === salespersonId)
+          ? salespersonId
+          : branchPhysios.some((physio) => physio.id === treatingStaffId)
+            ? treatingStaffId
+            : "",
+        salesCreditAmount: String(course.price),
+        visits: String(course.sessions + course.bonusSessions),
+      },
+    ]);
+    setCommissionSplitSeq(2);
+  }
+
+  function changeSalesperson(employeeId: string) {
+    setSalespersonId(employeeId);
+    setCommissionSplits((current) =>
+      current.length === 1 && branchPhysios.some((physio) => physio.id === employeeId)
+        && (!current[0].employeeId || current[0].employeeId === salespersonId)
+        ? [{ ...current[0], employeeId }]
+        : current
+    );
+  }
+
+  function updateCommissionSplit(id: number, patch: Partial<CommissionSplitForm>) {
+    setCommissionSplits((current) =>
+      current.map((split) => (split.id === id ? { ...split, ...patch } : split))
+    );
+  }
+
+  function addCommissionSplit() {
+    setCommissionSplits((current) => [
+      ...current,
+      { id: commissionSplitSeq, employeeId: "", salesCreditAmount: "", visits: "" },
+    ]);
+    setCommissionSplitSeq((value) => value + 1);
+  }
+
+  async function handleConfirm() {
+    if (!canConfirm || !user || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      // The backend always charges the catalog price and never accepts a
+      // supplied price that differs from it — a manual price entered here is
+      // carried instead as an explicit adjustment, so it still lands on the
+      // receipt as an itemized line rather than a silently overwritten price.
+      const overrideAdjustment =
+        priceWasOverridden && baseItem
+          ? [{ label: "Price override", amount: basePrice - baseItem.listPrice }]
+          : [];
+      const txn = await createTransaction({
+        patientId,
+        branchId,
+        appointmentId,
+        serviceId: mode === "SINGLE" ? serviceId : undefined,
+        purchaseCourseTemplateId: mode === "COURSE" && subMode === "PURCHASE" ? purchaseTemplateId : undefined,
+        useCoursePatientCourseId: mode === "COURSE" && subMode === "USE_EXISTING" ? useCourseId : undefined,
+        useSessionsCount: mode === "COURSE" && subMode === "USE_EXISTING" ? useQty : undefined,
+        useNewlyPurchasedSession: mode === "COURSE" && subMode === "PURCHASE" ? useToday : undefined,
+        treatingStaffId: needsTreatingStaff ? treatingStaffId : undefined,
+        salespersonId: needsSalesperson ? salespersonId : undefined,
+        commissionSplits: needsSalesperson
+          ? commissionSplits.map((split) => ({
+              employeeId: split.employeeId,
+              salesCreditAmount: Number(split.salesCreditAmount),
+              visits: Number(split.visits),
+            }))
+          : undefined,
+        paymentMethodId,
+        cashReceived: isCashPayment && cashReceived !== null ? cashReceived : undefined,
+        adjustments: [
+          ...overrideAdjustment,
+          ...resolvedAdjustments.map((a) => ({ label: a.resolvedLabel, amount: a.amount })),
+        ],
+      });
+      setResult(txn);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to take this payment";
+      setSubmitError(message);
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (result) {
+    const pm = paymentMethods.find((p) => p.id === result.paymentMethodId);
+    const treatingStaff = staff.find((s) => s.id === result.treatingStaffId);
+    const salesperson = staff.find((s) => s.id === result.salespersonId);
+    const resultAdjustments = result.items.filter((i) => i.kind === "DISCOUNT" || i.kind === "SURCHARGE");
+    const resultCourseItem = mode === "COURSE" && subMode === "PURCHASE"
+      ? result.items.find((i) => i.kind === "BASE")
+      : undefined;
+    const resultCourseDiscounts = resultAdjustments.filter((i) => i.kind === "DISCOUNT");
+    const resultCourseDiscountTotal = resultCourseDiscounts.reduce((sum, item) => sum + item.amount, 0);
+    return (
+      <div className="mx-auto flex max-w-lg flex-1 flex-col items-center justify-center py-10 text-center">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-success/10">
+          <CheckCircle2 className="h-7 w-7 text-success" />
+        </div>
+        <p className="text-lg font-semibold text-foreground">Payment Successful</p>
+        <p className="mt-1 text-sm text-muted-foreground">Transaction {result.transactionNo} has been recorded.</p>
+
+        <div className="mt-5 w-full space-y-2.5 rounded-xl border border-border bg-card p-5 text-left text-sm">
+          <SummaryRow label="Transaction No." value={result.transactionNo} mono />
+          <SummaryRow label="Patient" value={patient ? getPatientFullNameTh(patient) : "-"} />
+          {resultAdjustments.length > 0 && (
+            <>
+              <SummaryRow label="Subtotal" value={formatCurrency(result.subtotal)} />
+              {resultAdjustments.map((a, i) => (
+                <SummaryRow key={i} label={a.description} value={formatCurrencySigned(a.amount)} />
+              ))}
+            </>
+          )}
+          {resultCourseItem && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Course Price Link</p>
+              <SummaryRow label="Course price before discount" value={formatCurrency(resultCourseItem.amount)} />
+              {resultCourseDiscounts.length > 0 && (
+                <SummaryRow label="Discount linked to this course" value={formatCurrencySigned(resultCourseDiscountTotal)} />
+              )}
+              <SummaryRow label="Course price after discount" value={formatCurrency(Math.max(0, resultCourseItem.amount + resultCourseDiscountTotal))} bold />
+              <p className="text-xs text-muted-foreground">ค่าคอร์สหลังลดนี้ถูกใช้เป็นฐานสร้าง Course และ Commission Pool</p>
+            </>
+          )}
+          <SummaryRow label="Amount Paid" value={formatCurrency(result.total)} bold />
+          <SummaryRow label="Payment Method" value={pm?.name ?? "-"} />
+          {result.cashReceived !== undefined && (
+            <>
+              <SummaryRow label="Cash Received" value={formatCurrency(result.cashReceived)} mono />
+              <SummaryRow label="Change" value={formatCurrency(result.changeGiven ?? 0)} mono />
+            </>
+          )}
+          {treatingStaff && <SummaryRow label="Treating Staff" value={treatingStaff.name} />}
+          {salesperson && <SummaryRow label="Salesperson" value={salesperson.name} />}
+          {result.courseImpact.length > 0 && (
+            <>
+              <Separator className="my-2" />
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Course Impact</p>
+              {result.courseImpact.map((c, i) => (
+                <SummaryRow key={i} label={c.label} value={`${c.quantity > 0 ? "+" : ""}${c.quantity}`} />
+              ))}
+            </>
+          )}
+        </div>
+
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          {can("transaction.view") && (
+            <Button asChild>
+              <Link href={`/transactions/${result.id}/receipt`}>
+                <Printer className="h-4 w-4" /> พิมพ์ใบเสร็จ
+              </Link>
+            </Button>
+          )}
+          <Button asChild variant="outline">
+            <Link href={`/transactions/${result.id}`}>View Transaction</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/appointments/new?patientId=${patientId}`}>
+              <CalendarPlus className="h-4 w-4" /> Book Next Appointment
+            </Link>
+          </Button>
+          <Button onClick={() => router.push(`/patients/${patientId}`)}>Finish</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // A checkout opened with a patient in the URL depends on the deferred
+  // operational load. Do not briefly render the patient-picker state while
+  // that request is still in flight: it makes deep links and browser E2E
+  // flows race the data load and can hide the course controls.
+  if (preselectPatientId && !patient && !operationalLoaded) {
+    return <PageLoading />;
+  }
+
+  return (
+    <>
+      <PageHeader title="Checkout" description="Bill services, courses and record payment" />
+
+      {!patient ? (
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader><CardTitle className="text-base">Select Patient</CardTitle></CardHeader>
+            <CardContent>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={patientQuery} onChange={(e) => setPatientQuery(e.target.value)} placeholder="Search HN, name or phone..." className="pl-9" autoFocus />
+              </div>
+              {patientSearchLoading && <p className="mt-2 text-xs text-muted-foreground">Searching patients…</p>}
+              {patientMatches.length > 0 && (
+                <div className="mt-2 overflow-hidden rounded-lg border border-border">
+                  {patientMatches.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => selectPatient(p.id)}
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-muted"
+                    >
+                      <span className="font-medium">{getPatientFullNameTh(p)}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{p.hn}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {!patientQuery && (
+                <div className="mt-6">
+                  <p className="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" /> Ready for Checkout Today
+                  </p>
+                  {readyForCheckout.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                      No completed visits waiting for checkout yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {readyForCheckout.map(({ appointment: a, patient: p }) => {
+                        const svc = services.find((s) => s.id === a.serviceId);
+                        return (
+                          <button
+                            key={a.id}
+                            onClick={() => {
+                              selectPatient(p.id);
+                              setAppointmentId(a.id);
+                              setTreatingStaffId(a.physiotherapistId);
+                              // Completing the visit already spent a course
+                              // session, so the receipt settles that session
+                              // rather than charging the visit again.
+                              if (a.usedPatientCourseId) {
+                                setMode("COURSE");
+                                setSubMode("USE_EXISTING");
+                                setUseCourseId(a.usedPatientCourseId);
+                                setUseQty(1);
+                                setServiceId("");
+                              } else {
+                                setMode("SINGLE");
+                                setServiceId(a.serviceId);
+                              }
+                            }}
+                            className="flex w-full items-center justify-between rounded-lg border border-border bg-card px-3.5 py-2.5 text-left transition-colors hover:border-primary/30 hover:bg-primary/5"
+                          >
+                            <div>
+                              <p className="text-sm font-medium text-foreground">{getPatientFullNameTh(p)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {svc?.name} · {a.startTime}–{a.endTime}
+                                {a.usedPatientCourseId && " · course session used"}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-xs font-medium text-success">Completed</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="rounded-xl border border-border bg-card p-5">
+            <p className="mb-4 text-sm font-semibold text-foreground">How Checkout Works</p>
+            <div className="space-y-4">
+              {[
+                { n: 1, label: "Select Patient", desc: "Search or pick from today's completed visits" },
+                { n: 2, label: "Choose Service or Course", desc: "Single visit, existing course, or new package" },
+                { n: 3, label: "Confirm Payment", desc: "Record the payment method to finish" },
+              ].map((step) => (
+                <div key={step.n} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {step.n}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{step.label}</p>
+                    <p className="text-xs text-muted-foreground">{step.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-3">
+          <div className="space-y-5 lg:col-span-2">
+            <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+              <div>
+                <p className="text-sm font-semibold text-foreground">{getPatientFullNameTh(patient)}</p>
+                <p className="font-mono text-xs text-muted-foreground">{patient.hn} · {branches.find((b) => b.id === branchId)?.name}</p>
+                {linkedAppointment && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Linked visit: {formatDate(linkedAppointment.date)} {linkedAppointment.startTime}
+                    {linkedAppointment.usedPatientCourseId && " · 1 course session already used at completion"}
+                  </p>
+                )}
+              </div>
+              {!preselectPatientId && (
+                <Button variant="ghost" size="icon" onClick={() => { selectPatient(""); setAppointmentId(undefined); }}><X className="h-4 w-4" /></Button>
+              )}
+            </div>
+
+            <div className="flex gap-2 rounded-lg border border-border bg-muted/40 p-1">
+              <button
+                onClick={() => { setMode("SINGLE"); setPriceOverride(""); }}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${mode === "SINGLE" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"}`}
+              >
+                Assessment / Single Visit
+              </button>
+              <button
+                onClick={() => { setMode("COURSE"); setPriceOverride(""); }}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${mode === "COURSE" ? "bg-card text-foreground shadow-xs" : "text-muted-foreground"}`}
+              >
+                Course / Package
+              </button>
+            </div>
+
+            {mode === "SINGLE" ? (
+              <Card>
+                <CardHeader><CardTitle className="text-base">Select Service</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <ServicePicker
+                    services={services.filter((s) => s.status === "ACTIVE")}
+                    value={serviceId}
+                    onValueChange={(id) => { setServiceId(id); setPriceOverride(""); }}
+                    placeholder="Type to search service..."
+                  />
+                  {selectedService && (
+                    <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                      <span>{selectedService.name} · {selectedService.duration} min</span>
+                      <span className="font-semibold text-primary">{formatCurrency(selectedService.price)}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setSubMode("USE_EXISTING"); setPriceOverride(""); }}
+                    disabled={activeCourses.length === 0}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${subMode === "USE_EXISTING" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                  >
+                    Use Existing Course
+                  </button>
+                  <button
+                    onClick={() => { setSubMode("PURCHASE"); setPriceOverride(""); }}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${subMode === "PURCHASE" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                  >
+                    Purchase New Course
+                  </button>
+                </div>
+
+                {subMode === "USE_EXISTING" ? (
+                  activeCourses.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                      This patient has no active course. Switch to &quot;Purchase New Course&quot; instead.
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {activeCourses.map((pc) => {
+                        const tpl = courseTemplates.find((c) => c.id === pc.courseId);
+                        const rem = remainingSessions(pc);
+                        const selected = useCourseId === pc.id;
+                        return (
+                          <div
+                            key={pc.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => { setUseCourseId(pc.id); setUseQty(1); }}
+                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setUseCourseId(pc.id); setUseQty(1); } }}
+                            className={`block w-full cursor-pointer rounded-xl border px-4 py-3 text-left transition-colors ${selected ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted/40"}`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-semibold text-foreground">{tpl?.name}</p>
+                              <Ticket className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Purchased {pc.purchased} · Used {pc.used} · Expires {formatDate(pc.expiryDate)}
+                            </p>
+                            <p className="mt-1 text-sm font-medium text-foreground">{rem} sessions remaining</p>
+                            {selected && (
+                              <div className="mt-3 flex items-center gap-3 rounded-lg bg-muted/50 px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                                <span className="text-xs font-medium text-muted-foreground">Use sessions:</span>
+                                <div className="flex items-center gap-2">
+                                  <Button type="button" size="icon" variant="outline" className="h-6 w-6" onClick={() => setUseQty((q) => Math.max(1, q - 1))}>
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="w-4 text-center text-sm font-semibold">{useQty}</span>
+                                  <Button type="button" size="icon" variant="outline" className="h-6 w-6" onClick={() => setUseQty((q) => Math.min(rem, q + 1))}>
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                                <span className="text-xs text-muted-foreground">→ {rem - useQty} remaining after</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                ) : (
+                  <Card>
+                    <CardHeader><CardTitle className="text-base">Purchase New Course</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {courseTemplates.filter((c) => c.status === "ACTIVE").map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => selectPurchaseCourse(c.id)}
+                            className={`rounded-lg border px-3.5 py-3 text-left transition-colors ${purchaseTemplateId === c.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50"}`}
+                          >
+                            <p className="text-sm font-medium text-foreground">{c.name}</p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {c.sessions} Sessions {c.bonusSessions > 0 && `+ ${c.bonusSessions} Bonus`} · Expires in {c.expiryDays} days
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-primary">{formatCurrency(c.price)}</p>
+                          </button>
+                        ))}
+                      </div>
+                      {selectedPurchaseTemplate && (
+                        <label className="flex items-center gap-2.5 rounded-lg bg-muted/50 px-3.5 py-3 text-sm">
+                          <Checkbox checked={useToday} onCheckedChange={(v) => setUseToday(!!v)} />
+                          Use 1 session from this course today
+                        </label>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">{mode === "COURSE" && subMode === "PURCHASE" ? "Course Price Adjustment" : "Price Adjustment"}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && (
+                  <p className="rounded-lg bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                    ส่วนลดจะบันทึกเป็นภาระของคลินิก ส่วน Tier, sales credit และ Commission Pool ยังคำนวณจากราคาเต็ม
+                  </p>
+                )}
+                {baseItem ? (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="base-price">Charged price</Label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                          ฿
+                        </span>
+                        <Input
+                          id="base-price"
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={priceOverride}
+                          placeholder={String(baseItem.listPrice)}
+                          onChange={(e) => setPriceOverride(e.target.value)}
+                          className="h-9 w-36 pl-6"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {baseItem.label} · list {formatCurrency(baseItem.listPrice)}
+                      </p>
+                      {priceWasOverridden && (
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setPriceOverride("")}>
+                          <RotateCcw className="h-3.5 w-3.5" /> Reset
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {mode === "COURSE" && subMode === "USE_EXISTING"
+                      ? "Using an existing course costs nothing — add an extra charge below if anything else was sold today."
+                      : "Select a service or course first to set its price."}
+                  </p>
+                )}
+
+                {adjustments.length > 0 && (
+                  <div className="space-y-2">
+                    {adjustments.map((a) => (
+                      <div key={a.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border p-2">
+                        <span
+                          className={`shrink-0 rounded-md px-2 py-1 text-xs font-semibold ${
+                            a.kind === "DISCOUNT"
+                              ? "bg-success/10 text-success"
+                              : "bg-warning/15 text-[#8A5A00]"
+                          }`}
+                        >
+                          {a.kind === "DISCOUNT" ? "Discount" : "Charge"}
+                        </span>
+                        <Input
+                          value={a.label}
+                          placeholder={DEFAULT_LABEL[a.kind]}
+                          onChange={(e) => updateAdjustment(a.id, { label: e.target.value })}
+                          className="h-8 min-w-32 flex-1"
+                          aria-label="Reason"
+                        />
+                        {a.kind === "DISCOUNT" && (
+                          <div className="flex shrink-0 items-center rounded-lg border border-border p-0.5">
+                            {[
+                              { on: false, text: "฿" },
+                              { on: true, text: "%" },
+                            ].map((opt) => (
+                              <button
+                                key={opt.text}
+                                type="button"
+                                onClick={() => updateAdjustment(a.id, { isPercent: opt.on })}
+                                className={`cursor-pointer rounded-md px-2 py-0.5 text-xs font-medium transition-colors ${
+                                  a.isPercent === opt.on
+                                    ? "bg-primary text-primary-foreground"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                              >
+                                {opt.text}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <Input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={a.value === 0 ? "" : a.value}
+                          placeholder="0"
+                          onChange={(e) =>
+                            updateAdjustment(a.id, { value: Math.max(0, Number(e.target.value) || 0) })
+                          }
+                          className="h-8 w-24 shrink-0"
+                          aria-label={a.kind === "DISCOUNT" ? "Discount amount" : "Charge amount"}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          onClick={() => removeAdjustment(a.id)}
+                          aria-label="Remove adjustment"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => addAdjustment("DISCOUNT")}>
+                    <Tag className="h-3.5 w-3.5" /> Add Discount
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => addAdjustment("SURCHARGE")}>
+                    <Plus className="h-3.5 w-3.5" /> Add Extra Charge
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader><CardTitle className="text-base">Staff</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {needsTreatingStaff && (
+                  <div className={`space-y-1.5${needsSalesperson ? "" : " sm:col-span-2"}`}>
+                    <Label>Treating Staff <span className="text-destructive">*</span></Label>
+                    {needsSalesperson && (
+                      <p className="text-xs text-muted-foreground">
+                        Physiotherapist providing today&apos;s treatment.
+                      </p>
+                    )}
+                    <Select value={treatingStaffId} onValueChange={setTreatingStaffId}>
+                      <SelectTrigger className="w-full"><SelectValue placeholder="Select physiotherapist" /></SelectTrigger>
+                      <SelectContent>
+                        {branchPhysios.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {needsSalesperson && (
+                  <div className={`space-y-1.5${needsTreatingStaff ? "" : " sm:col-span-2"}`}>
+                    <Label>Salesperson <span className="text-destructive">*</span></Label>
+                    <p className="text-xs text-muted-foreground">Required only when purchasing a course package.</p>
+                    <Select value={salespersonId} onValueChange={changeSalesperson}>
+                      <SelectTrigger aria-label="Salesperson" className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
+                      <SelectContent>
+                        {branchSales.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {needsSalesperson && (
+                  <div className="space-y-3 sm:col-span-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <Label>Case Owners</Label>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Add one or more physiotherapists. Split the full-price sales credit and all paid + bonus visits between them; each Case Owner gets their own monthly tier and visit pool.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={addCommissionSplit}
+                        disabled={commissionSplits.length >= branchPhysios.length}
+                      >
+                        <Plus className="h-3.5 w-3.5" /> Add Case Owner
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {commissionSplits.map((split, index) => (
+                        <div key={split.id} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[1fr_150px_110px_auto]">
+                          <Select
+                            value={split.employeeId}
+                            onValueChange={(value) => updateCommissionSplit(split.id, { employeeId: value })}
+                          >
+                            <SelectTrigger aria-label={`Case Owner ${index + 1}`} className="w-full"><SelectValue placeholder={`Owner ${index + 1}`} /></SelectTrigger>
+                            <SelectContent>
+                              {branchPhysios.map((physio) => (
+                                <SelectItem key={physio.id} value={physio.id}>{physio.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="number"
+                            min={0.01}
+                            step="0.01"
+                            aria-label={`Sales credit for owner ${index + 1}`}
+                            placeholder="Amount (THB)"
+                            value={split.salesCreditAmount}
+                            onChange={(event) => updateCommissionSplit(split.id, { salesCreditAmount: event.target.value })}
+                          />
+                          <Input
+                            type="number"
+                            min={1}
+                            step={1}
+                            aria-label={`Visits for owner ${index + 1}`}
+                            placeholder="Visits"
+                            value={split.visits}
+                            onChange={(event) => updateCommissionSplit(split.id, { visits: event.target.value })}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            disabled={commissionSplits.length === 1}
+                            onClick={() => setCommissionSplits((current) => current.filter((item) => item.id !== split.id))}
+                            aria-label={`Remove owner ${index + 1}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap justify-between gap-2 text-xs">
+                      <span className={splitCreditTotal === (selectedPurchaseTemplate?.price ?? 0) ? "text-success" : "text-muted-foreground"}>
+                        Sales credit: {formatCurrency(splitCreditTotal)} / {formatCurrency(selectedPurchaseTemplate?.price ?? 0)}
+                      </span>
+                      <span className={splitVisitTotal === requiredSplitVisits ? "text-success" : "text-muted-foreground"}>
+                        Visits: {splitVisitTotal} / {requiredSplitVisits}
+                      </span>
+                    </div>
+                    {splitProblem && <p className="text-xs text-destructive">{splitProblem}</p>}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="lg:col-span-1">
+            <div className="space-y-4 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-20">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                <ShoppingCart className="h-4 w-4" /> Order Summary
+              </h3>
+
+              <div className="space-y-2 text-sm">
+                {baseItem && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">{baseItem.label}</span>
+                    <span className="shrink-0 text-right">
+                      {priceWasOverridden && (
+                        <span className="mr-1.5 text-xs text-muted-foreground line-through">
+                          {formatCurrency(baseItem.listPrice)}
+                        </span>
+                      )}
+                      {formatCurrency(basePrice)}
+                    </span>
+                  </div>
+                )}
+                {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && (
+                  <>
+                    {selectedPurchaseTemplate.bonusSessions > 0 && (
+                      <div className="flex justify-between text-success"><span>+ {selectedPurchaseTemplate.bonusSessions} Bonus Sessions</span><span>฿0</span></div>
+                    )}
+                    {useToday && (
+                      <div className="flex justify-between text-muted-foreground"><span>Session Usage Today</span><span>-1 session</span></div>
+                    )}
+                  </>
+                )}
+                {mode === "COURSE" && subMode === "USE_EXISTING" && selectedUseCourse && (
+                  <div className="flex justify-between"><span className="text-muted-foreground">{selectedUseCourseTemplate?.name} — Session Usage ×{useQty}</span><span>฿0</span></div>
+                )}
+                {!baseItem && !(mode === "COURSE" && (useCourseId || purchaseTemplateId)) && (
+                  <p className="text-xs text-muted-foreground">Select a service or course to see the summary.</p>
+                )}
+              </div>
+
+                {resolvedAdjustments.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Subtotal</span>
+                      <span>{formatCurrency(subtotal)}</span>
+                    </div>
+                    {resolvedAdjustments.map((a) => (
+                      <div key={a.id} className="flex justify-between gap-3">
+                        <span className="truncate text-muted-foreground">
+                          {a.resolvedLabel}
+                          {a.isPercent && a.kind === "DISCOUNT" && (
+                            <span className="ml-1 text-xs">({a.value}%)</span>
+                          )}
+                        </span>
+                        <span className={`shrink-0 ${a.amount < 0 ? "text-success" : "text-[#8A5A00]"}`}>
+                          {formatCurrencySigned(a.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {mode === "COURSE" && subMode === "PURCHASE" && selectedPurchaseTemplate && courseDiscountTotal !== 0 && (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Course price after discount</span>
+                    <span className="font-semibold text-primary">{formatCurrency(courseNetPrice)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">ราคานี้จะถูกบันทึกไว้กับ Course ที่สร้างหลัง Confirm Payment</p>
+                </div>
+              )}
+
+              <Separator />
+              <div className="flex justify-between text-base font-semibold text-foreground">
+                <span>Total</span>
+                <span>{formatCurrency(total)}</span>
+              </div>
+              {overDiscounted && (
+                <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  Discounts exceed the subtotal. Reduce them before taking payment.
+                </p>
+              )}
+
+              <div className="space-y-1.5">
+                <Label>Payment Method</Label>
+                {enabledPayments.length === 0 && <p className="text-sm text-destructive">ยังไม่มีช่องทางชำระเงินที่เปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ</p>}
+                {paymentMethodId && !enabledPayments.some((method) => method.id === paymentMethodId) && <p className="text-sm text-destructive">ช่องทางเดิมถูกปิดใช้งาน กรุณาเลือกช่องทางใหม่</p>}
+                <div className="grid grid-cols-2 gap-2 [&>*:last-child:nth-child(odd)]:col-span-2">
+                  {enabledPayments.map((pm) => (
+                    <button
+                      key={pm.id}
+                      onClick={() => { setPaymentMethodId(pm.id); if (pm.code !== "CASH") setCashReceivedInput(""); }}
+                      className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${paymentMethodId === pm.id ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:bg-muted/50"}`}
+                    >
+                      {pm.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isCashPayment && total > 0 && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="cash-received">Cash Received</Label>
+                  <Input
+                    id="cash-received"
+                    type="number"
+                    min={total}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={cashReceivedInput}
+                    onChange={(e) => setCashReceivedInput(e.target.value)}
+                    placeholder={formatCurrency(total)}
+                  />
+                  {changeDue !== null ? (
+                    <div className="flex items-center justify-between rounded-lg bg-success/10 px-3 py-2 text-sm">
+                      <span className="font-medium text-muted-foreground">Change</span>
+                      <span className="font-mono text-base font-semibold text-success">
+                        {formatCurrency(changeDue)}
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {cashReceivedInput === ""
+                        ? "Enter what the patient handed over."
+                        : "That is less than the amount due."}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <Button className="w-full" size="lg" disabled={!canConfirm || submitting} onClick={() => void handleConfirm()}>
+                {submitting ? "Processing..." : confirmLabel}
+              </Button>
+              {submitError && <div className="mt-2 flex items-center justify-end gap-2 text-sm text-destructive"><span>{submitError}</span><Button type="button" variant="outline" size="sm" disabled={submitting} onClick={() => void handleConfirm()}><RotateCcw className="h-3.5 w-3.5" /> Retry</Button></div>}
+            </div>
+          </div>
+
+          {/* Below the desktop breakpoint the summary sits under a long form,
+              so the total and the confirm button also ride along the bottom. */}
+          <div className="sticky bottom-0 -mx-4 -mb-4 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-4 py-3 backdrop-blur lg:hidden">
+            <div>
+              <p className="text-xs text-muted-foreground">Total</p>
+              <p className="text-lg font-semibold text-foreground">{formatCurrency(total)}</p>
+            </div>
+            <Button
+              size="lg"
+              disabled={!canConfirm || submitting}
+              onClick={() => void handleConfirm()}
+            >
+              {submitting ? "Processing..." : confirmLabel}
+            </Button>
+          </div>
+        </div>
+      )}
+
+    </>
+  );
+}
+
+function SummaryRow({ label, value, bold, mono }: { label: string; value: string; bold?: boolean; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`${bold ? "text-base font-semibold text-foreground" : "font-medium text-foreground"} ${mono ? "font-mono" : ""}`}>{value}</span>
+    </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<PageLoading />}>
+      <CheckoutContent />
+    </Suspense>
+  );
+}

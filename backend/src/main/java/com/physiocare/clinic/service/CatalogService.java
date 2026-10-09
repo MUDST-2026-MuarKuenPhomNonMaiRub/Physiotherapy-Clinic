@@ -1,0 +1,368 @@
+package com.physiocare.clinic.service;
+
+import com.physiocare.clinic.dto.catalog.CatalogDtos.ActiveRequest;
+import com.physiocare.clinic.dto.catalog.CatalogDtos.CourseRequest;
+import com.physiocare.clinic.dto.catalog.CatalogDtos.MasterDataRequest;
+import com.physiocare.clinic.dto.catalog.CatalogDtos.ServiceRequest;
+import com.physiocare.clinic.util.InputRules;
+import jakarta.validation.Valid;
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+
+/** Back-office catalogue: what the clinic screens are allowed to sell and select. */
+@Service
+public class CatalogService {
+  private final JdbcTemplate db;
+  private final GoogleCalendarSyncService calendarSync;
+
+  public CatalogService(JdbcTemplate db, GoogleCalendarSyncService calendarSync) {
+    this.db = db;
+    this.calendarSync = calendarSync;
+  }
+
+  private static final List<String> SERVICE_TYPES = List.of("ASSESSMENT", "SINGLE_VISIT");
+
+  private void validate(ServiceRequest r) {
+    InputRules.oneOf(r.serviceType(), SERVICE_TYPES, "Service type");
+    InputRules.money(r.basePrice(), "The price");
+    InputRules.inRange(r.durationMinutes(), 1, InputRules.MAX_DURATION_MINUTES, "The duration");
+    InputRules.text(r.nameTh(), 200, "The name");
+  }
+
+  private void validate(CourseRequest r) {
+    InputRules.money(r.price(), "The price");
+    // A package is something the clinic sells, so unlike a single service it
+    // cannot be given away at nothing.
+    InputRules.require(r.price().signum() > 0, "A course price must be more than 0");
+    InputRules.inRange(r.totalSessions(), 1, InputRules.MAX_SESSIONS, "The number of sessions");
+    InputRules.inRange(r.bonusSessions(), 0, InputRules.MAX_SESSIONS, "The bonus sessions");
+    InputRules.require(r.validityDays() != null, "A course needs an expiry in days");
+    InputRules.inRange(r.validityDays(), 1, 3650, "The validity in days");
+    InputRules.text(r.nameTh(), 200, "The name");
+    InputRules.text(r.description(), 1000, "The description");
+    String mode = commissionMode(r);
+    InputRules.oneOf(mode, List.of("STANDARD_TIERED", "SPECIAL_IMMEDIATE"), "Commission mode");
+    if ("SPECIAL_IMMEDIATE".equals(mode)) {
+      InputRules.oneOf(
+          r.specialCommissionType(), List.of("FIXED", "PERCENTAGE"), "Special commission type");
+      InputRules.require(r.specialCommissionValue() != null, "A special commission value is required");
+      InputRules.money(r.specialCommissionValue(), "The special commission value");
+      if ("PERCENTAGE".equals(r.specialCommissionType()))
+        InputRules.require(
+            r.specialCommissionValue().compareTo(BigDecimal.valueOf(100)) <= 0,
+            "A special commission percentage cannot exceed 100%");
+    }
+  }
+
+  // ---------------------------------------------------------------- services
+
+  @GetMapping("/services")
+  public List<Map<String, Object>> services() {
+    return db.queryForList(
+        "SELECT id,code,name_th,name_en,service_type,duration_minutes,base_price,active FROM"
+            + " services WHERE deleted_at IS NULL ORDER BY id");
+  }
+
+  @PostMapping("/services")
+  @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> addService(@Valid @RequestBody ServiceRequest r) {
+    validate(r);
+    long id =
+        db.queryForObject(
+            "INSERT INTO"
+                + " services(code,name_th,name_en,service_type,duration_minutes,base_price,active)"
+                + " VALUES(?,?,?,?,?,?,?) RETURNING id",
+            Long.class,
+            nextCode(r.code(), "SVC", "services"),
+            r.nameTh(),
+            r.nameEn() == null ? r.nameTh() : r.nameEn(),
+            r.serviceType(),
+            r.durationMinutes(),
+            r.basePrice(),
+            r.active() == null || r.active());
+    return service(id);
+  }
+
+  @PatchMapping("/services/{id}")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> updateService(
+      @PathVariable long id, @Valid @RequestBody ServiceRequest r) {
+    validate(r);
+    int rows =
+        db.update(
+            "UPDATE services SET"
+                + " code=COALESCE(NULLIF(?,''),code),name_th=?,name_en=?,service_type=?,duration_minutes=?,base_price=?,active=COALESCE(?,active),updated_at=now()"
+                + " WHERE id=? AND deleted_at IS NULL",
+            r.code(),
+            r.nameTh(),
+            r.nameEn() == null ? r.nameTh() : r.nameEn(),
+            r.serviceType(),
+            r.durationMinutes(),
+            r.basePrice(),
+            r.active(),
+            id);
+    if (rows == 0) throw new IllegalArgumentException("Service not found");
+    // Upcoming calendar events show the service name and are coloured by its type.
+    calendarSync.detailChanged(GoogleCalendarSyncService.EventDetail.SERVICE, id);
+    return service(id);
+  }
+
+  @PatchMapping("/services/{id}/status")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> setServiceStatus(
+      @PathVariable long id, @RequestBody ActiveRequest r) {
+    int rows =
+        db.update(
+            "UPDATE services SET active=?,updated_at=now() WHERE id=? AND deleted_at IS NULL",
+            r.active(),
+            id);
+    if (rows == 0) throw new IllegalArgumentException("Service not found");
+    return service(id);
+  }
+
+  private Map<String, Object> service(long id) {
+    return db.queryForMap(
+        "SELECT id,code,name_th,name_en,service_type,duration_minutes,base_price,active FROM"
+            + " services WHERE id=?",
+        id);
+  }
+
+  // ----------------------------------------------------------------- courses
+
+  @GetMapping("/courses")
+  public List<Map<String, Object>> courses() {
+    return db.queryForList(
+        "SELECT id,code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active,"
+            + "commission_mode,special_commission_type,special_commission_value"
+            + " FROM courses WHERE deleted_at IS NULL ORDER BY id");
+  }
+
+  @PostMapping("/courses")
+  @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> addCourse(@Valid @RequestBody CourseRequest r) {
+    validate(r);
+    long id =
+        db.queryForObject(
+            "INSERT INTO"
+                + " courses(code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active,"
+                + "commission_mode,special_commission_type,special_commission_value)"
+                + " VALUES(?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id",
+            Long.class,
+            nextCode(r.code(), "CRS", "courses"),
+            r.nameTh(),
+            r.nameEn() == null ? r.nameTh() : r.nameEn(),
+            r.description() == null ? "" : r.description(),
+            r.totalSessions(),
+            r.bonusSessions(),
+            r.validityDays(),
+            r.price(),
+            r.active() == null || r.active(),
+            commissionMode(r),
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionType() : null,
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionValue() : null);
+    return course(id);
+  }
+
+  @PatchMapping("/courses/{id}")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> updateCourse(
+      @PathVariable long id, @Valid @RequestBody CourseRequest r) {
+    validate(r);
+    int rows =
+        db.update(
+            "UPDATE courses SET"
+                + " code=COALESCE(NULLIF(?,''),code),name_th=?,name_en=?,description=?,total_sessions=?,bonus_sessions=?,validity_days=?,price=?,active=COALESCE(?,active),"
+                + "commission_mode=?,special_commission_type=?,special_commission_value=?,updated_at=now()"
+                + " WHERE id=? AND deleted_at IS NULL",
+            r.code(),
+            r.nameTh(),
+            r.nameEn() == null ? r.nameTh() : r.nameEn(),
+            r.description() == null ? "" : r.description(),
+            r.totalSessions(),
+            r.bonusSessions(),
+            r.validityDays(),
+            r.price(),
+            r.active(),
+            commissionMode(r),
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionType() : null,
+            "SPECIAL_IMMEDIATE".equals(commissionMode(r)) ? r.specialCommissionValue() : null,
+            id);
+    if (rows == 0) throw new IllegalArgumentException("Course not found");
+    return course(id);
+  }
+
+  @PatchMapping("/courses/{id}/status")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> setCourseStatus(@PathVariable long id, @RequestBody ActiveRequest r) {
+    int rows =
+        db.update(
+            "UPDATE courses SET active=?,updated_at=now() WHERE id=? AND deleted_at IS NULL",
+            r.active(),
+            id);
+    if (rows == 0) throw new IllegalArgumentException("Course not found");
+    return course(id);
+  }
+
+  private Map<String, Object> course(long id) {
+    return db.queryForMap(
+        "SELECT id,code,name_th,name_en,description,total_sessions,bonus_sessions,validity_days,price,active,"
+            + "commission_mode,special_commission_type,special_commission_value"
+            + " FROM courses WHERE id=?",
+        id);
+  }
+
+  private String commissionMode(CourseRequest request) {
+    return request.commissionMode() == null || request.commissionMode().isBlank()
+        ? "STANDARD_TIERED"
+        : request.commissionMode();
+  }
+
+  // --------------------------------------------------------- payment methods
+
+  @GetMapping("/payment-methods")
+  public List<Map<String, Object>> payments() {
+    return db.queryForList(
+        "SELECT id,code,name,icon,requires_reference,requires_attachment,active,deleted_at FROM"
+            + " payment_methods WHERE code <> 'QR' ORDER BY sort_order,id");
+  }
+
+  @PatchMapping("/payment-methods/{id}/status")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> setPaymentMethodStatus(
+      @PathVariable long id, @RequestBody ActiveRequest r) {
+    int rows = db.update("UPDATE payment_methods SET active=? WHERE id=? AND code <> 'QR' AND deleted_at IS NULL", r.active(), id);
+    if (rows == 0) throw new IllegalArgumentException("Payment method not found");
+    return db.queryForMap(
+        "SELECT id,code,name,icon,requires_reference,requires_attachment,active FROM"
+            + " payment_methods WHERE id=?",
+        id);
+  }
+
+  // ------------------------------------------------------------- master data
+
+  /** Every configurable dropdown value, for the settings screen and the forms. */
+  @GetMapping("/master-data")
+  public List<Map<String, Object>> allMasterData() {
+    return db.queryForList(
+        "SELECT id,data_type,code,name_th,name_en,sort_order,active FROM master_data_values WHERE deleted_at IS NULL ORDER"
+            + " BY data_type,sort_order,id");
+  }
+
+  @GetMapping("/master-data/{type}")
+  public List<Map<String, Object>> master(@PathVariable String type) {
+    return db.queryForList(
+        "SELECT id,data_type,code,name_th,name_en,sort_order,active FROM master_data_values WHERE"
+            + " data_type=? AND deleted_at IS NULL ORDER BY sort_order,id",
+        type.toUpperCase());
+  }
+
+  @PostMapping("/master-data")
+  @ResponseStatus(HttpStatus.CREATED)
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  @Transactional
+  public Map<String, Object> addMasterData(@Valid @RequestBody MasterDataRequest r) {
+    InputRules.require(r.nameTh() != null && !r.nameTh().isBlank(), "The value is required");
+    InputRules.text(r.nameTh(), 200, "The value");
+    InputRules.require(r.dataType() != null && !r.dataType().isBlank(), "The category is required");
+    String type = r.dataType().toUpperCase(java.util.Locale.ROOT);
+    InputRules.require(!db.queryForList(
+        "SELECT code FROM master_data_categories WHERE code=? AND deleted_at IS NULL FOR SHARE", type).isEmpty(),
+        "Create the category before adding values");
+    Integer nextOrder =
+        db.queryForObject(
+            "SELECT COALESCE(max(sort_order),0)+1 FROM master_data_values WHERE data_type=?",
+            Integer.class,
+            type);
+    long id =
+        db.queryForObject(
+            "INSERT INTO master_data_values(data_type,code,name_th,name_en,sort_order,active)"
+                + " VALUES(?,?,?,?,?,?) RETURNING id",
+            Long.class,
+            type,
+            slug(r.nameTh(), type),
+            r.nameTh(),
+            r.nameEn() == null ? r.nameTh() : r.nameEn(),
+            nextOrder,
+            r.active() == null || r.active());
+    return masterDataRow(id);
+  }
+
+  @PatchMapping("/master-data/{id}")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> updateMasterData(
+      @PathVariable long id, @RequestBody MasterDataRequest r) {
+    if (r.nameTh() != null) {
+      InputRules.require(!r.nameTh().isBlank(), "The value is required");
+      InputRules.text(r.nameTh(), 200, "The value");
+    }
+    int rows =
+        db.update(
+            "UPDATE master_data_values SET name_th=COALESCE(?,name_th),"
+                + " name_en=COALESCE(?,name_en), active=COALESCE(?,active) WHERE id=? AND deleted_at IS NULL",
+            r.nameTh(),
+            r.nameEn() == null ? r.nameTh() : r.nameEn(),
+            r.active(),
+            id);
+    if (rows == 0) throw new IllegalArgumentException("Master data value not found");
+    return masterDataRow(id);
+  }
+
+  @PatchMapping("/master-data/{id}/status")
+  @PreAuthorize("@permissionGuard.hasAny(authentication, 'settings.manage')")
+  public Map<String, Object> setMasterDataStatus(
+      @PathVariable long id, @RequestBody ActiveRequest r) {
+    int rows = db.update("UPDATE master_data_values SET active=? WHERE id=? AND deleted_at IS NULL", r.active(), id);
+    if (rows == 0) throw new IllegalArgumentException("Master data value not found");
+    return masterDataRow(id);
+  }
+
+  private Map<String, Object> masterDataRow(long id) {
+    return db.queryForMap(
+        "SELECT id,data_type,code,name_th,name_en,sort_order,active FROM master_data_values WHERE"
+            + " id=?",
+        id);
+  }
+
+  // ------------------------------------------------------------------ helpers
+
+  /** Codes are a back-office convenience; generate one when the caller omits it. */
+  private String nextCode(String supplied, String prefix, String table) {
+    if (supplied != null && !supplied.isBlank()) return supplied.trim().toUpperCase();
+    Long count = db.queryForObject("SELECT count(*)+1 FROM " + table, Long.class);
+    String candidate = String.format("%s-%03d", prefix, count);
+    while (Boolean.TRUE.equals(
+        db.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM " + table + " WHERE code=?)", Boolean.class, candidate))) {
+      count++;
+      candidate = String.format("%s-%03d", prefix, count);
+    }
+    return candidate;
+  }
+
+  private String slug(String name, String type) {
+    String base =
+        name.trim().toUpperCase().replaceAll("[^A-Z0-9]+", "_").replaceAll("(^_|_$)", "");
+    if (base.isBlank()) base = "VALUE";
+    if (base.length() > 50) base = base.substring(0, 50);
+    String candidate = base;
+    int suffix = 2;
+    while (Boolean.TRUE.equals(
+        db.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM master_data_values WHERE data_type=? AND code=?)",
+            Boolean.class,
+            type,
+            candidate))) {
+      candidate = base + "_" + suffix++;
+    }
+    return candidate;
+  }
+}

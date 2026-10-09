@@ -1,0 +1,494 @@
+// Core domain types for the Clinic ERP, mirroring what the API returns.
+
+// The clinic is staff-operated and runs on two access levels only.
+export type Role = "ADMIN" | "PHYSIOTHERAPIST" | (string & {});
+
+export type Permission =
+  | "patient.view"
+  | "patient.create"
+  | "patient.edit"
+  | "appointment.view"
+  | "appointment.create"
+  | "appointment.edit"
+  | "appointment.cancel"
+  | "checkout.create"
+  | "course.view"
+  | "course.use"
+  | "course.transfer"
+  | "course.share"
+  | "transaction.view"
+  | "transaction.void"
+  | "report.view"
+  | "dashboard.view"
+  | "commission.view.own"
+  | "commission.view.all"
+  | "commission.close"
+  | "commission.adjust"
+  | "report.view.all"
+  | "settings.manage";
+
+export interface Branch {
+  id: string;
+  code: string;
+  name: string;
+  phone: string;
+  address: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export type StaffPosition =
+  | "Physiotherapist"
+  | "Clinic Manager"
+  | "Assistant Therapist"
+  | "Salesperson";
+
+export interface Staff {
+  id: string;
+  name: string; // Thai
+  nameEn: string;
+  position: StaffPosition;
+  branchIds: string[];
+  phone: string;
+  email: string;
+  status: "ACTIVE" | "INACTIVE";
+  avatarColor: string;
+  deletedAt?: string;
+  commissionEligible?: boolean;
+  terminationDate?: string;
+  /** CONTINUE_UNTIL_COURSE_END (default) keeps releasing course commission after termination; FORFEIT_AFTER_TERMINATION stops it. */
+  commissionAfterTerminationPolicy?: string;
+}
+
+export interface CommissionAuditLog {
+  id: string;
+  occurredAt: string;
+  actorUserId?: string;
+  branchId?: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  beforeData?: unknown;
+  afterData?: unknown;
+  reason?: string;
+  requestId?: string;
+}
+
+export interface AppUser {
+  id: string;
+  username: string;
+  password: string;
+  role: Role;
+  permissions?: string[];
+  staffId?: string;
+  displayName: string;
+  branchIds: string[]; // accessible branches (staff)
+  status: "ACTIVE" | "INACTIVE";
+  lastLogin?: string;
+  deletedAt?: string;
+}
+
+export type Gender = "MALE" | "FEMALE" | "OTHER";
+export type CustomerType = "THAI" | "FOREIGNER";
+
+export interface Patient {
+  id: string;
+  hn: string;
+  customerType: CustomerType;
+  titleTh: string;
+  firstNameTh: string;
+  lastNameTh: string;
+  firstNameEn: string;
+  lastNameEn: string;
+  nickname: string;
+  gender: Gender;
+  dob: string;
+  bloodGroup: string;
+  nationality: string;
+  nationalId?: string;
+  passport?: string;
+  phone: string;
+  address: string;
+  customerGroup: string;
+  referralChannel: string;
+  insuranceCompany: string;
+  registrationBranchId: string;
+  createdAt: string;
+}
+
+export type ServiceType = "ASSESSMENT" | "SINGLE_VISIT";
+
+export interface Service {
+  id: string;
+  code: string;
+  name: string;
+  type: ServiceType;
+  price: number;
+  duration: number; // minutes
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export interface CourseTemplate {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  sessions: number;
+  bonusSessions: number;
+  expiryDays: number;
+  commissionMode: "STANDARD_TIERED" | "SPECIAL_IMMEDIATE";
+  specialCommissionType?: "FIXED" | "PERCENTAGE";
+  specialCommissionValue?: number;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export type PatientCourseStatus = "ACTIVE" | "EXPIRED" | "USED_UP";
+
+/**
+ * One person's balance on a course. The buyer is the owner; anyone sessions
+ * were transferred to gets a row of their own on the same course id, so a
+ * list is keyed by id + patientId rather than id alone.
+ */
+export interface PatientCourse {
+  id: string;
+  /** Whose balance this row is. */
+  patientId: string;
+  /** The patient who bought the course. */
+  ownerPatientId: string;
+  courseId: string;
+  purchaseDate: string;
+  expiryDate: string;
+  purchased: number;
+  bonus: number;
+  used: number;
+  transferIn: number;
+  transferOut: number;
+  branchId: string;
+  status: PatientCourseStatus;
+}
+
+export type LedgerEntryType =
+  | "PURCHASE"
+  | "BONUS"
+  | "TREATMENT"
+  | "TRANSFER_OUT"
+  | "TRANSFER_IN"
+  | "VOID_REVERSAL"
+  | "REFUND_REMAINING";
+
+export interface CourseLedgerEntry {
+  id: string;
+  patientCourseId: string;
+  date: string;
+  type: LedgerEntryType;
+  quantity: number; // signed
+  balanceAfter: number;
+  branchId: string;
+  relatedTransactionId?: string;
+  relatedAppointmentId?: string;
+  transferGroupId?: string;
+  transferCounterpartyPatientId?: string;
+  performedBy: string; // staff name
+}
+
+/** One auditable transfer event, including every person the clinic needs to identify. */
+export interface CourseTransferRecord {
+  id: string;
+  transferNo: string;
+  patientCourseId: string;
+  fromPatientId: string;
+  fromPatientHn: string;
+  fromPatientName: string;
+  toPatientId: string;
+  toPatientHn: string;
+  toPatientName: string;
+  courseName: string;
+  sessions: number;
+  reason: string;
+  date: string;
+  branchId: string;
+  branchName: string;
+  courseOwnerEmployeeId: string;
+  courseOwnerName: string;
+  performedBy: string;
+}
+
+export type AppointmentStatus =
+  | "CONFIRMED"
+  | "ARRIVED"
+  | "IN_SERVICE"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "RESCHEDULED"
+  | "NO_SHOW";
+
+export interface Appointment {
+  id: string;
+  /** The booking number staff quote, e.g. "AP-2026-00221". */
+  appointmentNo?: string;
+  patientId: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string;
+  branchId: string;
+  physiotherapistId: string;
+  serviceId: string;
+  resourceId: string;
+  note?: string;
+  status: AppointmentStatus;
+  createdAt: string;
+  checkedOut?: boolean;
+  /** The course a completed visit already drew a session from, if any. */
+  usedPatientCourseId?: string;
+}
+
+export type TransactionType =
+  | "ASSESSMENT"
+  | "SINGLE_VISIT"
+  | "COURSE_PURCHASE"
+  | "COURSE_USAGE"
+  | "MIXED";
+
+export type TransactionStatus = "COMPLETED" | "VOID";
+
+/**
+ * BASE lines are the catalogue items being sold; SURCHARGE and DISCOUNT are
+ * manual adjustments made at the counter. `amount` is signed — DISCOUNT lines
+ * are negative — so the items always add up to the transaction total.
+ * Undefined `kind` means BASE (seed data predates adjustments).
+ */
+export type LineItemKind = "BASE" | "SURCHARGE" | "DISCOUNT";
+
+export interface TransactionLineItem {
+  description: string;
+  qty: number;
+  amount: number;
+  kind?: LineItemKind;
+}
+
+export interface CourseImpactEntry {
+  label: string;
+  quantity: number; // signed
+}
+
+export interface CommissionLine {
+  ruleId: string;
+  ruleName: string;
+  staffId: string;
+  type: "TREATMENT" | "SALES";
+  amount: number;
+}
+
+export interface VoidInfo {
+  voidBy: string;
+  voidAt: string;
+  reason: string;
+}
+
+export interface Transaction {
+  id: string;
+  transactionNo: string;
+  date: string; // ISO
+  patientId: string;
+  branchId: string;
+  appointmentId?: string;
+  type: TransactionType;
+  items: TransactionLineItem[];
+  subtotal: number; // BASE lines only, before adjustments
+  total: number; // what the patient actually paid
+
+  paymentMethodId: string;
+  /** Cash handed over, and the change returned. Only set on a cash receipt. */
+  cashReceived?: number;
+  changeGiven?: number;
+  treatingStaffId?: string;
+  salespersonId?: string;
+  status: TransactionStatus;
+  courseImpact: CourseImpactEntry[];
+  commission: CommissionLine[];
+  patientCourseId?: string;
+  voidInfo?: VoidInfo;
+}
+
+export type CommissionType = "PERCENTAGE" | "FIXED";
+export type CommissionAppliesTo = "TREATMENT" | "SALES" | "BOTH";
+
+export interface CommissionRule {
+  id: string;
+  name: string;
+  appliesTo: CommissionAppliesTo;
+  targetType: "SERVICE" | "COURSE" | "ALL";
+  targetId?: string;
+  commissionType: CommissionType;
+  value: number;
+  effectiveDate: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export interface CommissionLedgerRecord {
+  id: string;
+  staffId: string;
+  transactionId: string;
+  transactionNo: string;
+  date: string;
+  patientId: string;
+  branchId: string;
+  type: "COURSE_OWNER" | "COURSE_TREATING";
+  ruleId: string;
+  ruleName: string;
+  amount: number;
+  reversed: boolean;
+}
+
+// -------------------------------------------------------- course commission
+// The monthly-closing tier/pool model (LA Balance requirement). Deliberately
+// separate from CommissionRule above, which is the immediate per-receipt
+// incentive — a course's commission lives entirely here instead.
+
+export interface CommissionTier {
+  order: number;
+  min: number;
+  max: number | null;
+  rate: number; // 0.07 = 7%
+  active?: boolean;
+  effectiveFrom?: string;
+  effectiveTo?: string | null;
+}
+
+export interface CommissionScheme {
+  code: string;
+  version: number;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  tiers: CommissionTier[];
+  active?: boolean;
+}
+
+/** One physiotherapist's link to their own Google Calendar (push only). */
+export interface GoogleCalendarStatus {
+  staffId: string;
+  /** False when the server has no Google client configured — the feature is off. */
+  configured: boolean;
+  connected: boolean;
+  googleEmail: string | null;
+  connectedAt: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+  /** Events still waiting to reach Google (queued or retrying). */
+  pending: number;
+}
+
+export interface GoogleCalendarConnection {
+  staffId: string;
+  staffName: string;
+  position: string;
+  googleEmail: string | null;
+  connectedAt: string | null;
+  lastError: string | null;
+  pending: number;
+}
+
+export type CalendarSyncStatus = "PENDING" | "SYNCED" | "FAILED" | "DELETED";
+
+export interface AppointmentCalendarSync {
+  status: CalendarSyncStatus;
+  pendingAction: "UPSERT" | "DELETE";
+  attempts: number;
+  lastError: string | null;
+  updatedAt: string | null;
+}
+
+export interface ClosingPreviewRow {
+  employeeId: string;
+  employeeName: string;
+  monthlySales: number;
+  schemeId: string | null;
+  schemeVersion: number | null;
+  /** Null when no tier in the scheme covers the seller's sales — a configuration gap, not 0%. */
+  suggestedRate: number | null;
+  suggestedPool: number | null;
+  alreadyClosed: boolean;
+}
+
+export interface ClosingHistoryRow {
+  id: string;
+  closingMonth: string;
+  employeeId: string;
+  employeeName: string;
+  monthlyCourseSales: number;
+  lockedCommissionRate: number;
+  schemeId: string | null;
+  schemeVersion: number | null;
+  calculatedCommissionRate: number;
+  status: string;
+  closedAt: string | null;
+}
+
+export interface CourseCommissionReportRow {
+  staffId: string;
+  staffName: string;
+  monthlyCourseSales: number;
+  commissionGenerated: number;
+  specialImmediateCommission: number;
+  grossAllocated: number;
+  ownerNetReleased: number;
+  treatmentFeeEarned: number;
+  adjustments: number;
+  outstandingPool: number;
+  totalVariablePay: number;
+}
+
+export type TreatmentFeeType = "FIXED" | "PERCENTAGE";
+
+export interface TreatmentFeeRule {
+  id: string;
+  employeeId?: string;
+  employeeGroup?: string;
+  serviceId?: string;
+  feeType: TreatmentFeeType;
+  feeValue: number;
+  percentageBase?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  active: boolean;
+}
+
+export interface SharedCourseMember {
+  patientId: string;
+  role: "OWNER" | "SHARED_MEMBER";
+  status: string;
+  allocatedVisits: number;
+  usedVisits: number;
+}
+
+export interface PaymentMethod {
+  id: string;
+  /** Stable server code; custom methods use generated codes. CASH retains cash/change handling. */
+  code: string;
+  name: string;
+  icon: string;
+  enabled: boolean;
+  deleted?: boolean;
+}
+
+export interface ResourceRoom {
+  id: string;
+  name: string;
+  type: string;
+  branchId: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export interface MasterDataItem {
+  id: string;
+  category: string;
+  value: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export interface MasterDataCategory {
+  code: string;
+  name: string;
+  description: string;
+  builtIn: boolean;
+}

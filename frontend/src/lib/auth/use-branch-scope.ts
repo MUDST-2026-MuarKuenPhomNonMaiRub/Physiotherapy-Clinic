@@ -1,0 +1,27 @@
+"use client";
+
+import { useMemo } from "react";
+import { useSession } from "@/lib/auth/use-session";
+import { useClinicStore } from "@/lib/store/clinic-store";
+
+/**
+ * Restricts branch filter UI/data to the branches the current user is allowed to see.
+ * "ALL" in a branch filter means "all of my accessible branches", not every branch
+ * in the system — isAccessible() enforces that when a filter predicate resolves "ALL".
+ */
+export function useBranchScope() {
+  const { user } = useSession();
+  const branches = useClinicStore((s) => s.branches);
+
+  return useMemo(() => {
+    const options = user
+      ? branches.filter(
+          (branch) => branch.status === "ACTIVE" && user.branchIds.includes(branch.id)
+        )
+      : [];
+    const canSeeAll = options.length > 1;
+    const isAccessible = (branchId: string) =>
+      !user || options.some((branch) => branch.id === branchId);
+    return { options, canSeeAll, isAccessible };
+  }, [user, branches]);
+}

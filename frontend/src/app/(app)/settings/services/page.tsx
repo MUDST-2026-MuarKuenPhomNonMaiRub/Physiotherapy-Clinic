@@ -1,0 +1,470 @@
+"use client";
+
+import { useState } from "react";
+import { ClipboardList, Minus, Pencil, Plus, Search, Ticket } from "lucide-react";
+import { useClinicStore } from "@/lib/store/clinic-store";
+import { formatCurrency } from "@/lib/format";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/shared/number-input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { CourseTemplate, Service, ServiceType } from "@/types";
+import { toast } from "sonner";
+
+const emptyServiceForm = { name: "", type: "SINGLE_VISIT" as ServiceType, price: 0, duration: 60, code: "" };
+const emptyCourseForm = {
+  code: "",
+  name: "",
+  description: "",
+  price: 0,
+  sessions: 10,
+  bonusSessions: 0,
+  expiryDays: 180,
+  commissionMode: "STANDARD_TIERED" as CourseTemplate["commissionMode"],
+  specialCommissionType: "PERCENTAGE" as NonNullable<CourseTemplate["specialCommissionType"]>,
+  specialCommissionValue: 0,
+};
+
+function formatDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (hours === 0) return `${remainingMinutes} min`;
+  if (remainingMinutes === 0) return `${hours} hr`;
+  return `${hours} hr ${remainingMinutes} min`;
+}
+
+export default function ServicesSettingsPage() {
+  const services = useClinicStore((s) => s.services);
+  const courseTemplates = useClinicStore((s) => s.courseTemplates);
+  const addService = useClinicStore((s) => s.addService);
+  const updateService = useClinicStore((s) => s.updateService);
+  const toggleServiceStatus = useClinicStore((s) => s.toggleServiceStatus);
+  const addCourseTemplate = useClinicStore((s) => s.addCourseTemplate);
+  const updateCourseTemplate = useClinicStore((s) => s.updateCourseTemplate);
+  const toggleCourseTemplateStatus = useClinicStore((s) => s.toggleCourseTemplateStatus);
+
+  const [serviceOpen, setServiceOpen] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [serviceForm, setServiceForm] = useState(emptyServiceForm);
+
+  const [courseOpen, setCourseOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<CourseTemplate | null>(null);
+  const [courseForm, setCourseForm] = useState(emptyCourseForm);
+
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const matchesFilter = (item: { code: string; name: string; status: string }) => {
+    const term = query.trim().toLocaleLowerCase();
+    return (
+      (statusFilter === "ALL" || item.status === statusFilter) &&
+      (!term || `${item.code} ${item.name}`.toLocaleLowerCase().includes(term))
+    );
+  };
+  const visibleServices = services.filter(matchesFilter);
+  const visibleCourses = courseTemplates.filter(matchesFilter);
+
+  function openCreateService() { setEditingService(null); setServiceForm(emptyServiceForm); setServiceOpen(true); }
+  function openEditService(s: Service) {
+    setEditingService(s); setServiceForm({ name: s.name, type: s.type, price: s.price, duration: s.duration, code: s.code }); setServiceOpen(true);
+  }
+  const serviceProblem =
+    !serviceForm.name.trim()
+      ? "A service name is required"
+      : !Number.isFinite(serviceForm.price) || serviceForm.price <= 0
+        ? "The price must be more than 0"
+        : !Number.isInteger(serviceForm.duration) || serviceForm.duration <= 0
+          ? "The duration must be more than 0 minutes"
+        : serviceForm.code.trim() && !/^[A-Z0-9_-]+$/.test(serviceForm.code.trim())
+          ? "Item code may contain only letters, numbers, hyphens and underscores"
+          : null;
+  async function saveService() {
+    if (serviceProblem) return;
+    try {
+      if (editingService) { await updateService(editingService.id, serviceForm); toast.success("Service updated"); }
+      else { await addService({ ...serviceForm, status: "ACTIVE" }); toast.success("Service created"); }
+      setServiceOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the change");
+    }
+  }
+
+  async function toggleStatus(action: Promise<void>) {
+    try {
+      await action;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update the status");
+    }
+  }
+
+  function openCreateCourse() { setEditingCourse(null); setCourseForm(emptyCourseForm); setCourseOpen(true); }
+  function openEditCourse(c: CourseTemplate) {
+    setEditingCourse(c);
+    setCourseForm({
+      code: c.code,
+      name: c.name,
+      description: c.description,
+      price: c.price,
+      sessions: c.sessions,
+      bonusSessions: c.bonusSessions,
+      expiryDays: c.expiryDays,
+      commissionMode: c.commissionMode,
+      specialCommissionType: c.specialCommissionType ?? "PERCENTAGE",
+      specialCommissionValue: c.specialCommissionValue ?? 0,
+    });
+    setCourseOpen(true);
+  }
+  /**
+   * A package with no price, no sessions or no shelf life is not a package the
+   * clinic could sell, so the form says which one is missing rather than
+   * letting the API refuse the whole thing.
+   */
+  const courseProblem =
+    !courseForm.name.trim()
+      ? "A course name is required"
+      : courseForm.price <= 0
+        ? "The price must be more than 0"
+        : courseForm.sessions <= 0
+          ? "A course needs at least one session"
+          : courseForm.bonusSessions < 0
+            ? "Bonus sessions cannot be negative"
+            : courseForm.expiryDays <= 0
+              ? "The expiry must be at least one day"
+              : courseForm.commissionMode === "SPECIAL_IMMEDIATE" && courseForm.specialCommissionValue < 0
+                ? "Special commission cannot be negative"
+                : courseForm.commissionMode === "SPECIAL_IMMEDIATE" && courseForm.specialCommissionType === "PERCENTAGE" && courseForm.specialCommissionValue > 100
+                  ? "Special commission percentage cannot exceed 100%"
+              : courseForm.code.trim() && !/^[A-Z0-9_-]+$/.test(courseForm.code.trim())
+                ? "Item code may contain only letters, numbers, hyphens and underscores"
+                : null;
+
+  async function saveCourse() {
+    if (courseProblem) return;
+    try {
+      if (editingCourse) { await updateCourseTemplate(editingCourse.id, courseForm); toast.success("Course updated"); }
+      else { await addCourseTemplate({ ...courseForm, status: "ACTIVE" }); toast.success("Course created"); }
+      setCourseOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save the change");
+    }
+  }
+
+  return (
+    <>
+      <PageHeader title="Service" description="Configure billable services and course packages sold at checkout" />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-52 flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search code or name..." className="pl-9" />
+        </div>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+          <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All status</SelectItem>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="INACTIVE">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Tabs defaultValue="services">
+        <TabsList>
+          <TabsTrigger value="services">Treatment</TabsTrigger>
+          <TabsTrigger value="courses">Courses</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="services">
+          <div className="mb-3 flex justify-end">
+            <Button onClick={openCreateService}><Plus className="h-4 w-4" /> Add Service</Button>
+          </div>
+          {services.length === 0 ? (
+            <EmptyState icon={ClipboardList} title="No services yet" description="Add a service to make it available at checkout." action={<Button onClick={openCreateService}>Add Service</Button>} />
+          ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Service Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleServices.length === 0 && (
+                    <TableRow><TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">No matching service</TableCell></TableRow>
+                  )}
+                  {visibleServices.map((s) => (
+                    <TableRow key={s.id} className="[&>td]:py-3.5">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{s.code || "—"}</TableCell>
+                      <TableCell className="font-medium text-foreground">{s.name}</TableCell>
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+                            s.type === "ASSESSMENT"
+                              ? "border-info/20 bg-info/10 text-info"
+                              : "border-primary/20 bg-primary/10 text-primary"
+                          }`}
+                        >
+                          {s.type === "ASSESSMENT" ? "Assessment" : "Single Visit"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatDuration(s.duration)}</TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 font-mono text-sm font-semibold text-foreground">
+                          {formatCurrency(s.price)}
+                        </span>
+                      </TableCell>
+                      <TableCell><StatusBadge status={s.status} /></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditService(s)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Switch checked={s.status === "ACTIVE"} onCheckedChange={() => void toggleStatus(toggleServiceStatus(s.id))} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="courses">
+          <div className="mb-3 flex justify-end">
+            <Button onClick={openCreateCourse}><Plus className="h-4 w-4" /> Add Course</Button>
+          </div>
+          {courseTemplates.length === 0 ? (
+            <EmptyState icon={Ticket} title="No courses yet" description="Add a course package to make it available for purchase at checkout." action={<Button onClick={openCreateCourse}>Add Course</Button>} />
+          ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Course Name</TableHead>
+                    <TableHead>Price</TableHead>
+                    <TableHead>Sessions</TableHead>
+                    <TableHead>Bonus</TableHead>
+                    <TableHead>Commission</TableHead>
+                    <TableHead>Expiry (days)</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleCourses.length === 0 && (
+                    <TableRow><TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">No matching course</TableCell></TableRow>
+                  )}
+                  {visibleCourses.map((c) => (
+                    <TableRow key={c.id} className="[&>td]:py-3.5">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{c.code || "—"}</TableCell>
+                      <TableCell>
+                        <p className="font-medium text-foreground">{c.name}</p>
+                        <p className="text-xs text-muted-foreground">{c.description}</p>
+                      </TableCell>
+                      <TableCell>
+                        <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 font-mono text-sm font-semibold text-foreground">
+                          {formatCurrency(c.price)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{c.sessions}</TableCell>
+                      <TableCell className="text-muted-foreground">{c.bonusSessions > 0 ? `+${c.bonusSessions}` : "—"}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {c.commissionMode === "SPECIAL_IMMEDIATE"
+                          ? `Immediate ${c.specialCommissionType === "PERCENTAGE" ? `${c.specialCommissionValue}%` : formatCurrency(c.specialCommissionValue ?? 0)}`
+                          : "Tier / visit pool"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{c.expiryDays} days</TableCell>
+                      <TableCell><StatusBadge status={c.status} /></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditCourse(c)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Switch checked={c.status === "ACTIVE"} onCheckedChange={() => void toggleStatus(toggleCourseTemplateStatus(c.id))} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={serviceOpen} onOpenChange={setServiceOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingService ? "Edit Service" : "Add Service"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Item Code</Label>
+              <Input value={serviceForm.code} placeholder="Auto-generated if blank" onChange={(e) => setServiceForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} maxLength={40} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Service Name</Label>
+              <Input value={serviceForm.name} onChange={(e) => setServiceForm((f) => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Service Type</Label>
+              <Select value={serviceForm.type} onValueChange={(v) => setServiceForm((f) => ({ ...f, type: v as ServiceType }))}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ASSESSMENT">Assessment</SelectItem>
+                  <SelectItem value="SINGLE_VISIT">Single Visit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Price (THB)</Label>
+              <NumberInput min={0.01} step="0.01" value={serviceForm.price} onValueChange={(price) => setServiceForm((f) => ({ ...f, price }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Default duration (minutes)</Label>
+              <div className="flex gap-1">
+                <Button type="button" variant="outline" size="icon" onClick={() => setServiceForm((f) => ({ ...f, duration: Math.max(15, f.duration - 15) }))} aria-label="Reduce duration by 15 minutes"><Minus className="h-3.5 w-3.5" /></Button>
+                <NumberInput min={1} step={15} value={serviceForm.duration} onValueChange={(duration) => setServiceForm((f) => ({ ...f, duration }))} aria-label="Duration in minutes" />
+                <Button type="button" variant="outline" size="icon" onClick={() => setServiceForm((f) => ({ ...f, duration: f.duration + 15 }))} aria-label="Add duration by 15 minutes"><Plus className="h-3.5 w-3.5" /></Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Sets the default booking length. The end time can still be adjusted for each appointment.</p>
+            </div>
+          </div>
+          <DialogFooter className="items-center gap-2 sm:justify-between">
+            {serviceProblem ? <p className="text-xs text-destructive sm:mr-auto">{serviceProblem}</p> : <span className="sm:mr-auto" />}
+            <Button variant="outline" onClick={() => setServiceOpen(false)}>Cancel</Button>
+            <Button disabled={!!serviceProblem} onClick={saveService}>{editingService ? "Save Changes" : "Add Service"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={courseOpen} onOpenChange={setCourseOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingCourse ? "Edit Course" : "Add Course"}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Item Code</Label>
+              <Input value={courseForm.code} placeholder="Auto-generated if blank" onChange={(e) => setCourseForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))} maxLength={40} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Course Name</Label>
+              <Input value={courseForm.name} onChange={(e) => setCourseForm((f) => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Textarea rows={2} value={courseForm.description} onChange={(e) => setCourseForm((f) => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Price (THB)</Label>
+                <NumberInput min={1} value={courseForm.price} onValueChange={(price) => setCourseForm((f) => ({ ...f, price }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Number of Sessions</Label>
+                <NumberInput min={1} value={courseForm.sessions} onValueChange={(sessions) => setCourseForm((f) => ({ ...f, sessions }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Bonus Sessions</Label>
+                <NumberInput min={0} value={courseForm.bonusSessions} onValueChange={(bonusSessions) => setCourseForm((f) => ({ ...f, bonusSessions }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Expiry (days)</Label>
+                <NumberInput min={1} value={courseForm.expiryDays} onValueChange={(expiryDays) => setCourseForm((f) => ({ ...f, expiryDays }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Commission Method</Label>
+              <Select
+                value={courseForm.commissionMode}
+                onValueChange={(value: CourseTemplate["commissionMode"]) =>
+                  setCourseForm((form) => ({ ...form, commissionMode: value }))
+                }
+              >
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="STANDARD_TIERED">Tier pool released per visit</SelectItem>
+                  <SelectItem value="SPECIAL_IMMEDIATE">Special commission paid in full at purchase</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Special commission is paid once at checkout and does not create a visit pool or treatment-fee allocation.
+              </p>
+            </div>
+            {courseForm.commissionMode === "SPECIAL_IMMEDIATE" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Special Commission Type</Label>
+                  <Select
+                    value={courseForm.specialCommissionType}
+                    onValueChange={(value: "FIXED" | "PERCENTAGE") =>
+                      setCourseForm((form) => ({ ...form, specialCommissionType: value }))
+                    }
+                  >
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PERCENTAGE">Percentage of full price</SelectItem>
+                      <SelectItem value="FIXED">Fixed amount per sale</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>{courseForm.specialCommissionType === "PERCENTAGE" ? "Percentage" : "Amount (THB)"}</Label>
+                  <NumberInput
+                    min={0}
+                    max={courseForm.specialCommissionType === "PERCENTAGE" ? 100 : undefined}
+                    step="0.01"
+                    value={courseForm.specialCommissionValue}
+                    onValueChange={(specialCommissionValue) =>
+                      setCourseForm((form) => ({ ...form, specialCommissionValue }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="items-center gap-2 sm:justify-between">
+            {courseProblem ? (
+              <p className="text-xs text-destructive sm:mr-auto">{courseProblem}</p>
+            ) : (
+              <span className="sm:mr-auto" />
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setCourseOpen(false)}>Cancel</Button>
+              <Button disabled={!!courseProblem} onClick={saveCourse}>{editingCourse ? "Save Changes" : "Add Course"}</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

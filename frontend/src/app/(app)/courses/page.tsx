@@ -1,0 +1,212 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Search, Ticket } from "lucide-react";
+import { useClinicStore } from "@/lib/store/clinic-store";
+import { useBranchScope } from "@/lib/auth/use-branch-scope";
+import { getPatientFullNameTh } from "@/lib/domain";
+import { useSession } from "@/lib/auth/use-session";
+import { formatDate } from "@/lib/format";
+import { remainingSessions } from "@/lib/domain";
+import { PageHeader } from "@/components/shared/page-header";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
+import { TablePagination, usePageReset } from "@/components/shared/table-pagination";
+import { listPatientCoursesPage } from "@/lib/api/clinic-api";
+import { BranchFilterSelect } from "@/components/shared/branch-filter-select";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { PatientCourse, PatientCourseStatus } from "@/types";
+
+export default function CoursesPage() {
+  const router = useRouter();
+  const { isAccessible } = useBranchScope();
+  const { user, activeBranchId } = useSession();
+  const patients = useClinicStore((s) => s.patients);
+  const courseTemplates = useClinicStore((s) => s.courseTemplates);
+
+  const [query, setQuery] = useState("");
+  const [branchFilter, setBranchFilter] = useState("ALL");
+  const [courseFilter, setCourseFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState<PatientCourseStatus | "ALL">("ALL");
+  const [page, setPage] = useState(1);
+  const [serverRows, setServerRows] = useState<PatientCourse[]>([]);
+  const [totalItems, setTotalItems] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
+
+  const searchBranchId = branchFilter !== "ALL" ? branchFilter : (user?.role === "ADMIN" ? undefined : activeBranchId ?? user?.branchIds[0]);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void listPatientCoursesPage(
+        page - 1,
+        10,
+        query,
+        searchBranchId,
+        courseFilter === "ALL" ? "" : courseFilter,
+        statusFilter === "ALL" ? "" : statusFilter,
+      ).then((response) => {
+        if (cancelled) return;
+        setServerRows(response.items);
+        setTotalItems(response.totalItems);
+        setHasNext(response.hasNext);
+        setHasPrevious(response.hasPrevious);
+      }).catch(() => {
+        if (!cancelled) {
+          setServerRows([]);
+          setTotalItems(0);
+          setHasNext(false);
+          setHasPrevious(false);
+        }
+      });
+    }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [courseFilter, page, query, searchBranchId, statusFilter]);
+
+  const rows = useMemo(() => {
+    return serverRows
+      .filter((pc) => (branchFilter === "ALL" ? isAccessible(pc.branchId) : pc.branchId === branchFilter))
+      .map((pc) => ({
+        pc,
+        patient: patients.find((p) => p.id === pc.patientId),
+        template: courseTemplates.find((c) => c.id === pc.courseId),
+      }))
+      .sort((a, b) => b.pc.purchaseDate.localeCompare(a.pc.purchaseDate));
+  }, [serverRows, branchFilter, patients, courseTemplates, isAccessible]);
+
+  usePageReset(`${query}|${branchFilter}|${courseFilter}|${statusFilter}`, setPage);
+
+  const pageRows = rows;
+
+  return (
+    <>
+      <PageHeader title="Patient Courses" description="Track course balances, usage and expiry across all patients" />
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative w-full sm:w-64">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search patient or HN..." className="pl-9" />
+        </div>
+        <BranchFilterSelect value={branchFilter} onValueChange={setBranchFilter} className="w-44" />
+        <Select value={courseFilter} onValueChange={setCourseFilter}>
+          <SelectTrigger className="w-56"><SelectValue placeholder="Course" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Courses</SelectItem>
+            {courseTemplates.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as PatientCourseStatus | "ALL")}>
+          <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Statuses</SelectItem>
+            <SelectItem value="ACTIVE">Active</SelectItem>
+            <SelectItem value="EXPIRED">Expired</SelectItem>
+            <SelectItem value="USED_UP">Used Up</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="ml-auto text-sm text-muted-foreground">{totalItems} courses</p>
+      </div>
+
+      {rows.length === 0 ? (
+        <EmptyState icon={Ticket} title="No courses found" description="Try adjusting your search or filters." />
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          {/* Phone: one card per course balance. */}
+          <ul className="divide-y divide-border md:hidden">
+            {pageRows.map(({ pc, patient, template }) => {
+              const rem = remainingSessions(pc);
+              const total = pc.purchased + pc.transferIn + pc.bonus;
+              const pct = total > 0 ? Math.max(0, Math.min(100, (rem / total) * 100)) : 0;
+              const barColor = pc.status !== "ACTIVE" ? "bg-muted-foreground/40" : pct <= 20 ? "bg-destructive" : pct <= 50 ? "bg-warning" : "bg-success";
+              return (
+                <li key={`${pc.id}-${pc.patientId}`}>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/courses/${pc.id}`)}
+                    className="w-full px-4 py-3 text-left active:bg-muted/50"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{template?.name}</p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {patient ? getPatientFullNameTh(patient) : "—"}
+                          {patient && <span className="font-mono"> · {patient.hn}</span>}
+                        </p>
+                      </div>
+                      <StatusBadge status={pc.status} className="shrink-0" />
+                    </div>
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="shrink-0 text-xs text-muted-foreground">
+                        <span className="font-semibold text-foreground">{rem}</span> / {total} left · exp {formatDate(pc.expiryDate)}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Course</TableHead>
+                  <TableHead className="text-center">Purchased</TableHead>
+                  <TableHead className="text-center">Bonus</TableHead>
+                  <TableHead className="text-center">Used</TableHead>
+                  <TableHead className="text-center">Balance</TableHead>
+                  <TableHead>Expiry</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pageRows.map(({ pc, patient, template }) => {
+                  const rem = remainingSessions(pc);
+                  const purchasedTotal = pc.purchased + pc.transferIn;
+                  const total = purchasedTotal + pc.bonus;
+                  const pct = total > 0 ? Math.max(0, Math.min(100, (rem / total) * 100)) : 0;
+                  const barColor = pc.status !== "ACTIVE" ? "bg-muted-foreground/40" : pct <= 20 ? "bg-destructive" : pct <= 50 ? "bg-warning" : "bg-success";
+                  return (
+                    <TableRow key={`${pc.id}-${pc.patientId}`} className="cursor-pointer" onClick={() => router.push(`/courses/${pc.id}`)}>
+                      <TableCell>
+                        <p className="font-medium text-foreground">{patient ? getPatientFullNameTh(patient) : "—"}</p>
+                        <p className="font-mono text-xs text-muted-foreground">{patient?.hn}</p>
+                      </TableCell>
+                      <TableCell>{template?.name}</TableCell>
+                      <TableCell className="text-center">{purchasedTotal}</TableCell>
+                      <TableCell className="text-center">{pc.bonus}</TableCell>
+                      <TableCell className="text-center">{pc.used}</TableCell>
+                      <TableCell>
+                        <div className="mx-auto w-24">
+                          <p className="text-center text-sm font-semibold text-foreground">{rem} <span className="font-normal text-muted-foreground">/ {total}</span></p>
+                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{formatDate(pc.expiryDate)}</TableCell>
+                      <TableCell><StatusBadge status={pc.status} /></TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          <TablePagination page={page} pageSize={10} totalItems={totalItems} hasNext={hasNext} hasPrevious={hasPrevious} onPageChange={setPage} />
+        </div>
+      )}
+    </>
+  );
+}
