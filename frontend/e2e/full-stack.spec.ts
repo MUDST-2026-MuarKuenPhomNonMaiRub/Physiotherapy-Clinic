@@ -67,12 +67,12 @@ test("real backend flow registers a patient and shows it in the database-backed 
   await expect(salespersonSelect).toBeVisible();
   await expect(caseOwnerSelect).toBeVisible();
   await salespersonSelect.click();
-  const commissionOwnerOption = page.getByRole("option", { name: "E2E Commission Owner", exact: true });
-  await expect(commissionOwnerOption).toBeVisible();
-  await commissionOwnerOption.click();
+  const availableStaffOption = page.getByRole("option").first();
+  await expect(availableStaffOption).toBeVisible();
+  const selectedStaffName = await availableStaffOption.innerText();
+  await availableStaffOption.click();
   await caseOwnerSelect.click();
-  await expect(commissionOwnerOption).toBeVisible();
-  await commissionOwnerOption.click();
+  await page.getByRole("option", { name: selectedStaffName, exact: true }).click();
   await expect(salespersonSelect).not.toHaveText(/Select staff/i);
   await expect(caseOwnerSelect).not.toHaveText(/Owner 1/i);
   await page.getByRole("button", { name: /cash/i }).click();

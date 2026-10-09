@@ -29,6 +29,16 @@ jobs:
         # runtime dependencies while Trivy continues to scan the whole repository.
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Scan backend dependency manifests
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: backend
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
       - name: Scan repository and dependencies
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -240,3 +250,21 @@ jobs:
 
       - name: Build Docker images
         run: docker compose build --pull
+
+      - name: Scan backend image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: physiotherapy-clinic-backend:latest
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Scan frontend image for high and critical vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: physiotherapy-clinic-frontend:latest
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
