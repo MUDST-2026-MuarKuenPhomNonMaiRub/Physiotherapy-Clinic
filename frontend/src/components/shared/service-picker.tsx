@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const FAVORITES_EVENT = "clinic-service-favorites-change";
-const temporaryFavorites = new Map<string, string>();
+const favoriteServicesCache = new Map<string, string>();
 function subscribeFavorites(callback: () => void) {
   window.addEventListener("storage", callback);
   window.addEventListener(FAVORITES_EVENT, callback);
@@ -20,7 +20,7 @@ function subscribeFavorites(callback: () => void) {
   };
 }
 function readFavorites(key: string) {
-  if (temporaryFavorites.has(key)) return temporaryFavorites.get(key)!;
+  if (favoriteServicesCache.has(key)) return favoriteServicesCache.get(key)!;
   try { return window.localStorage.getItem(key) ?? "[]"; } catch { return "[]"; }
 }
 function parseFavorites(data: string): string[] {
@@ -73,10 +73,10 @@ export function ServicePicker({
     const serialized = JSON.stringify(next);
     try {
       window.localStorage.setItem(storageKey, serialized);
-      temporaryFavorites.delete(storageKey);
+      favoriteServicesCache.delete(storageKey);
       setStorageWarning(false);
     } catch {
-      temporaryFavorites.set(storageKey, serialized);
+      favoriteServicesCache.set(storageKey, serialized);
       setStorageWarning(true);
     }
     window.dispatchEvent(new Event(FAVORITES_EVENT));

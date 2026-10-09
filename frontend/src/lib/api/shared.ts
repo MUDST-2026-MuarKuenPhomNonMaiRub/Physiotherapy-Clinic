@@ -1,0 +1,7 @@
+export type Row = Record<string, unknown>;
+export interface PageResponse<T> { items: T[]; page: number; size: number; totalItems: number; totalPages: number; hasNext: boolean; hasPrevious: boolean; }
+export type PageResult<T> = PageResponse<T>;
+export type BranchScope = string[] | null;
+export async function readAllPages<T>(read: (page: number, size: number) => Promise<PageResponse<T>>): Promise<T[]> { const size = 100; const first = await read(0, size); if (!first.hasNext) return first.items; const rest = await Promise.all(Array.from({ length: first.totalPages - 1 }, (_, index) => read(index + 1, size))); return [first, ...rest].flatMap((response) => response.items); }
+export const query = (params: Record<string, string | number | null | undefined>) => { const search = new URLSearchParams(); for (const [key, value] of Object.entries(params)) { if (value !== null && value !== undefined && value !== "") search.set(key, String(value)); } const serialised = search.toString(); return serialised ? `?${serialised}` : ""; };
+export async function forBranches<T>(scope: BranchScope, read: (branchId?: string) => Promise<T[]>, keyOf: (item: T) => string): Promise<T[]> { if (scope === null) return read(); const merged = new Map<string, T>(); for (const rows of await Promise.all(scope.map((branchId) => read(branchId)))) for (const row of rows) merged.set(keyOf(row), row); return [...merged.values()]; }
