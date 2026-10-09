@@ -1,0 +1,6 @@
+# Spring Framework 6.2.19 is the latest compatible line for Spring Boot 3.5.16.
+# These findings require Spring Framework 7.0.9, which would be a major upgrade
+# and is not compatible with the application's Jackson 2 API without migration.
+# Re-evaluate when a Spring Boot 3.5-compatible fixed release is published.
+CVE-2026-47884
+CVE-2026-47890
