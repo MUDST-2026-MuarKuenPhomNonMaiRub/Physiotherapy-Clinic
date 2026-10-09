@@ -27,7 +27,28 @@ public class CustomUserDetailsService implements UserDetailsService {
         users
             .findByEmailIgnoreCaseAndDeletedAtIsNull(email)
             .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
+    return toDetails(user);
+  }
 
+  /**
+   * Loads the account behind a session cookie, refusing a session that was
+   * issued before the password last changed. JWT times are whole seconds, so
+   * the change time is compared at the same precision.
+   */
+  public UserDetails loadForSession(String email, java.time.Instant issuedAt) {
+    AppUser user =
+        users
+            .findByEmailIgnoreCaseAndDeletedAtIsNull(email)
+            .orElseThrow(() -> new UsernameNotFoundException("Invalid credentials"));
+    java.time.OffsetDateTime changedAt = user.getPasswordChangedAt();
+    if (changedAt != null
+        && issuedAt.isBefore(changedAt.toInstant().truncatedTo(java.time.temporal.ChronoUnit.SECONDS))) {
+      throw new UsernameNotFoundException("Session predates the last password change");
+    }
+    return toDetails(user);
+  }
+
+  private UserDetails toDetails(AppUser user) {
     return User.withUsername(user.getEmail())
         .password(user.getPasswordHash())
         .disabled(!user.isActive())

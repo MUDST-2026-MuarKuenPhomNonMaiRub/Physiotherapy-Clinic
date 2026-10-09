@@ -45,6 +45,32 @@ export async function login(email: string, password: string): Promise<LoginResul
   };
 }
 
+/** The API answers the same way whether or not the address has an account. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiRequest<void>("/api/v1/auth/password-reset/request", {
+    method: "POST",
+    body: { email },
+    anonymous: true,
+  });
+}
+
+export async function isPasswordResetTokenValid(token: string): Promise<boolean> {
+  const result = await apiRequest<{ valid: boolean }>("/api/v1/auth/password-reset/validate", {
+    method: "POST",
+    body: { token },
+    anonymous: true,
+  });
+  return result.valid;
+}
+
+export async function confirmPasswordReset(token: string, password: string): Promise<void> {
+  await apiRequest<void>("/api/v1/auth/password-reset/confirm", {
+    method: "POST",
+    body: { token, password },
+    anonymous: true,
+  });
+}
+
 /**
  * The API names the therapist role PHYSIO; the app has always called it
  * PHYSIOTHERAPIST, and the menus and landing route are keyed by that name.

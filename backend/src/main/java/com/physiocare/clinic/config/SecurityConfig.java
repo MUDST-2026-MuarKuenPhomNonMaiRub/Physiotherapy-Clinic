@@ -59,6 +59,7 @@ public class SecurityConfig {
                     .requestMatchers(
                         "/api/v1/auth/login",
                         "/api/v1/auth/logout",
+                        "/api/v1/auth/password-reset/**",
                         "/actuator/health",
                         "/api/v1/integrations/google/callback")
                     .permitAll()

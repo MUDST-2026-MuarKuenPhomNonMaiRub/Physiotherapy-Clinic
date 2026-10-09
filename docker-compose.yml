@@ -27,11 +27,26 @@ services:
       # Local development is plain http, so the session cookie cannot be Secure.
       # Production (docker-compose.production.yml) keeps the secure default.
       APP_COOKIE_SECURE: ${APP_COOKIE_SECURE:-false}
+      # Development email goes to the local Mailpit inbox (http://localhost:8025)
+      # unless .env points SMTP_HOST at a real server.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "8025:8025"
+      # SMTP, for a backend run on the host with backend/run-local.sh.
+      - "1025:1025"
 
   frontend:
     build:

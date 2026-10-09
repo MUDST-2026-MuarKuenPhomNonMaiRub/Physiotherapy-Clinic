@@ -46,6 +46,12 @@ public class JwtService {
     return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getSubject();
   }
 
+  public java.time.Instant issuedAt(String token) {
+    Date issued =
+        Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getIssuedAt();
+    return issued == null ? java.time.Instant.EPOCH : issued.toInstant();
+  }
+
   public boolean isValid(String token) {
     try {
       subject(token);

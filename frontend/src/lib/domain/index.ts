@@ -45,6 +45,18 @@ export function localDate(value: string): string {
 
 // ------------------------------------------------------------------ validation
 
+/** The account password policy the API enforces: 12+ chars with upper, lower, digit and symbol. */
+export function isStrongPassword(value: string): boolean {
+  return (
+    value.length >= 12 &&
+    value.length <= 72 &&
+    /[a-z]/.test(value) &&
+    /[A-Z]/.test(value) &&
+    /\d/.test(value) &&
+    /[^A-Za-z\d]/.test(value)
+  );
+}
+
 /**
  * The same rules the API enforces, repeated here so a form can answer straight
  * away. The server remains the one that decides — these only save a round trip.

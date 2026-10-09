@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, KeyRound, Minus, Pencil, Plus, Search, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
 import { useSession } from "@/lib/auth/use-session";
-import { fieldRules, fieldInput } from "@/lib/domain";
+import { fieldRules, fieldInput, isStrongPassword } from "@/lib/domain";
 import { allRoles, roleDescriptions, roleLabels, roleStyles, rolePermissions } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
@@ -42,15 +42,6 @@ const positions: StaffPosition[] = ["Physiotherapist", "Clinic Manager", "Assist
 /** Mirrors the policy the API enforces, so the form can say so before it posts. */
 const PASSWORD_RULE = "At least 12 characters with an upper case, a lower case, a number and a symbol.";
 
-function isStrongPassword(value: string): boolean {
-  return (
-    value.length >= 12 &&
-    /[a-z]/.test(value) &&
-    /[A-Z]/.test(value) &&
-    /\d/.test(value) &&
-    /[^A-Za-z\d]/.test(value)
-  );
-}
 const avatarColors = ["bg-[#1A4A2E]", "bg-[#2D6B45]", "bg-[#24BEE2]", "bg-[#586050]", "bg-[#F3AB3B]"];
 
 /** Position is what the person does on the floor; role is what the software lets them do. */

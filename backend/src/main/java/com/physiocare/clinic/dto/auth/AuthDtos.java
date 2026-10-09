@@ -24,6 +24,21 @@ public final class AuthDtos {
       @NotBlank String lastName,
       @NotBlank String role) {}
 
+  public record ForgotPasswordRequest(@NotBlank @Email String email) {}
+
+  public record ResetTokenRequest(@NotBlank @Size(max = 100) String token) {}
+
+  public record ResetTokenStatus(boolean valid) {}
+
+  public record ResetPasswordRequest(
+      @NotBlank @Size(max = 100) String token,
+      @NotBlank
+          @Size(min = 12, max = 72)
+          @Pattern(
+              regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z\\d]).+$",
+              message = "Password must contain upper, lower, number and special character")
+          String password) {}
+
   /** The session itself is set as an HttpOnly cookie; the body only says how long it lasts. */
   public record LoginResponse(long expiresIn) {}
 

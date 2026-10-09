@@ -29,6 +29,11 @@ public class AppUser {
   @Column(name = "deleted_at")
   private java.time.OffsetDateTime deletedAt;
 
+  // Written only by the password reset SQL, so an unrelated save of this
+  // entity can never roll it back.
+  @Column(name = "password_changed_at", insertable = false, updatable = false)
+  private java.time.OffsetDateTime passwordChangedAt;
+
   @ManyToMany(fetch = FetchType.EAGER)
   @JoinTable(
       name = "user_roles",
@@ -64,6 +69,10 @@ public class AppUser {
 
   public java.time.OffsetDateTime getDeletedAt() {
     return deletedAt;
+  }
+
+  public java.time.OffsetDateTime getPasswordChangedAt() {
+    return passwordChangedAt;
   }
 
   public Set<Role> getRoles() {
