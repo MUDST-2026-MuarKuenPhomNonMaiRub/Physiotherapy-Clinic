@@ -21,10 +21,12 @@ import {
 } from "@/components/ui/dialog";
 import type { MasterDataCategory, MasterDataItem } from "@/types";
 import { toast } from "sonner";
+import { useLanguage } from "@/components/i18n/language-provider";
 
 const categoryIcons: Record<string, LucideIcon> = { CUSTOMER_GROUP: Users, REFERRAL_CHANNEL: Share2, INSURANCE_COMPANY: ShieldCheck };
 
 export default function MasterDataSettingsPage() {
+  const { t } = useLanguage();
   const masterData = useClinicStore((s) => s.masterData);
   const addMasterDataItem = useClinicStore((s) => s.addMasterDataItem);
   const updateMasterDataItem = useClinicStore((s) => s.updateMasterDataItem);
@@ -51,13 +53,13 @@ export default function MasterDataSettingsPage() {
   const loadCategories = useCallback(async () => {
     setLoadingCategories(true); setCategoryError("");
     try { setCategories(await listMasterDataCategories()); }
-    catch (error) { setCategoryError(error instanceof Error ? error.message : "โหลดหมวดหมู่ไม่สำเร็จ"); }
+    catch (error) { setCategoryError(error instanceof Error ? error.message : "Could not load categories"); }
     finally { setLoadingCategories(false); }
   }, []);
   useEffect(() => {
     let cancelled = false;
     listMasterDataCategories().then((data) => { if (!cancelled) setCategories(data); })
-      .catch((error: unknown) => { if (!cancelled) setCategoryError(error instanceof Error ? error.message : "โหลดหมวดหมู่ไม่สำเร็จ"); })
+      .catch((error: unknown) => { if (!cancelled) setCategoryError(error instanceof Error ? error.message : "Could not load categories"); })
       .finally(() => { if (!cancelled) setLoadingCategories(false); });
     return () => { cancelled = true; };
   }, []);
@@ -74,8 +76,8 @@ export default function MasterDataSettingsPage() {
       const data = { name: categoryName.trim(), description: categoryDescription.trim() };
       const category = editingCategory ? await updateMasterDataCategory(editingCategory.code, data) : await createMasterDataCategory(data);
       setCategories((previous) => editingCategory ? previous.map((c) => c.code === category.code ? category : c) : [...previous, category]);
-      setCategoryOpen(false); toast.success("บันทึกหมวดหมู่แล้ว");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "บันทึกไม่สำเร็จ"); }
+      setCategoryOpen(false); toast.success("Category saved");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Could not save the category"); }
     finally { setSavingCategory(false); }
   }
 
@@ -107,10 +109,10 @@ export default function MasterDataSettingsPage() {
 
   return (
     <>
-      <PageHeader title="Master Data" description="จัดการหมวดหมู่และรายการข้อมูลกลาง เพิ่มหมวดใหม่ได้ตามการใช้งาน"
-        actions={<Button disabled={loadingCategories || !!categoryError} onClick={() => openCategory()}><Plus className="h-4 w-4" />เพิ่มหมวดหมู่</Button>} />
-      {loadingCategories && <p className="mb-4 text-sm text-muted-foreground">กำลังโหลดหมวดหมู่…</p>}
-      {categoryError && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4 text-sm"><p>{categoryError}</p><Button variant="outline" className="mt-2" onClick={() => void loadCategories()}>ลองอีกครั้ง</Button></div>}
+      <PageHeader title="Master Data" description="Manage shared categories and values. Add categories as the clinic grows."
+        actions={<Button disabled={loadingCategories || !!categoryError} onClick={() => openCategory()}><Plus className="h-4 w-4" />Add Category</Button>} />
+      {loadingCategories && <p className="mb-4 text-sm text-muted-foreground">Loading categories…</p>}
+      {categoryError && <div role="alert" className="mb-4 rounded-lg border border-destructive/30 p-4 text-sm"><p>{categoryError}</p><Button variant="outline" className="mt-2" onClick={() => void loadCategories()}>Try Again</Button></div>}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {categories.map((c) => {
@@ -125,18 +127,18 @@ export default function MasterDataSettingsPage() {
                     <Icon className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="break-words text-sm font-semibold text-foreground">{c.name}</h2>
-                    <p className="text-xs text-muted-foreground">{activeCount} active</p>
+                    <h2 className="break-words text-sm font-semibold text-foreground">{t(c.name)}</h2>
+                    <p className="text-xs text-muted-foreground">{t(`${activeCount} active`)}</p>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`แก้ไขหมวด ${c.name}`} onClick={() => openCategory(c)}><Pencil className="h-4 w-4" /></Button>
-                {!c.builtIn && <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive" aria-label={`ลบหมวด ${c.name}`} onClick={() => setDeleting({ kind: "category", id: c.code, name: c.name })}><Trash2 className="h-4 w-4" /></Button>}
-                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={`เพิ่มรายการใน ${c.name}`} onClick={() => openCreate(c.code)}>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={t(`Edit category ${c.name}`)} onClick={() => openCategory(c)}><Pencil className="h-4 w-4" /></Button>
+                {!c.builtIn && <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive" aria-label={t(`Delete category ${c.name}`)} onClick={() => setDeleting({ kind: "category", id: c.code, name: c.name })}><Trash2 className="h-4 w-4" /></Button>}
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label={t(`Add value to ${c.name}`)} onClick={() => openCreate(c.code)}>
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="mt-3 text-xs text-muted-foreground">{c.description}</p>
-              {!c.builtIn && <p className="mt-2 text-xs text-muted-foreground">หมวดที่สร้างเพิ่ม • ยังไม่เชื่อมกับฟอร์มอื่น</p>}
+              <p className="mt-3 text-xs text-muted-foreground">{t(c.description)}</p>
+              {!c.builtIn && <p className="mt-2 text-xs text-muted-foreground">Custom category • not connected to other forms yet</p>}
 
               <div className="mt-4 flex-1 border-t border-border pt-4">
                 {items.length === 0 ? (
@@ -171,12 +173,12 @@ export default function MasterDataSettingsPage() {
                           <Pencil className="h-2.5 w-2.5 opacity-50" />
                         </button>
                         <Switch
-                          aria-label={`เปิดใช้งาน ${m.value}`}
+                          aria-label={t(`Enable ${m.value}`)}
                           checked={m.status === "ACTIVE"}
                           onCheckedChange={() => void toggleStatus(m.id)}
                           className="scale-[0.65]"
                         />
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" aria-label={`ลบรายการ ${m.value}`} onClick={() => setDeleting({ kind: "value", id: m.id, name: m.value })}><Trash2 className="h-3 w-3" /></Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" aria-label={t(`Delete value ${m.value}`)} onClick={() => setDeleting({ kind: "value", id: m.id, name: m.value })}><Trash2 className="h-3 w-3" /></Button>
                       </div>
                     ))}
                   </div>
@@ -185,7 +187,7 @@ export default function MasterDataSettingsPage() {
             </div>
           );
         })}
-        {!loadingCategories && !categoryError && <button type="button" onClick={() => openCategory()} className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"><Plus className="h-6 w-6" />เพิ่มหมวดหมู่ใหม่</button>}
+        {!loadingCategories && !categoryError && <button type="button" onClick={() => openCategory()} className="flex min-h-48 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"><Plus className="h-6 w-6" />Add New Category</button>}
       </div>
 
       <Dialog open={open} onOpenChange={(next) => { if (!saving) setOpen(next); }}>
@@ -198,32 +200,32 @@ export default function MasterDataSettingsPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" disabled={saving} onClick={() => setOpen(false)}>Cancel</Button>
-            <Button disabled={saving || !value.trim()} onClick={save}>{saving ? "กำลังบันทึก…" : editing ? "Save Changes" : "Add"}</Button>
+            <Button disabled={saving || !value.trim()} onClick={save}>{saving ? "Saving…" : editing ? "Save Changes" : "Add"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={!!deleting} onOpenChange={(next) => { if (!next && !removing) setDeleting(null); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{deleting?.kind === "category" ? "ลบหมวดหมู่และรายการทั้งหมด?" : "ลบรายการ?"}</DialogTitle><DialogDescription>ลบ “{deleting?.name}” {deleting?.kind === "category" ? "และทุกรายการในหมวดนี้ " : ""}ออกจากตัวเลือกใหม่ ข้อมูลที่บันทึกไว้ในประวัติเดิมจะยังคงอยู่</DialogDescription></DialogHeader>
-          <DialogFooter><Button variant="outline" disabled={removing} onClick={() => setDeleting(null)}>ยกเลิก</Button><Button variant="destructive" disabled={removing} onClick={async () => {
+          <DialogHeader><DialogTitle>{deleting?.kind === "category" ? "Delete Category and All Values?" : "Delete Value?"}</DialogTitle><DialogDescription>{deleting?.kind === "category" ? t(`Remove “${deleting.name}” and every value in this category from new selections. Existing historical records remain unchanged.`) : t(`Remove “${deleting?.name ?? ""}” from new selections. Existing historical records remain unchanged.`)}</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" disabled={removing} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" disabled={removing} onClick={async () => {
             if (!deleting || removing) return;
             setRemoving(true);
             try {
               if (deleting.kind === "category") { await deleteMasterDataCategory(deleting.id); setCategories((previous) => previous.filter((c) => c.code !== deleting.id)); }
               else await deleteMasterDataItem(deleting.id);
-              setDeleting(null); toast.success("ลบแล้ว");
-            } catch (error) { toast.error(error instanceof Error ? error.message : "ลบไม่สำเร็จ"); }
+              setDeleting(null); toast.success("Deleted");
+            } catch (error) { toast.error(error instanceof Error ? error.message : "Could not delete the item"); }
             finally { setRemoving(false); }
-          }}>{removing ? "กำลังลบ…" : "ยืนยันลบ"}</Button></DialogFooter>
+          }}>{removing ? "Deleting…" : "Confirm Delete"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={categoryOpen} onOpenChange={(next) => { if (!savingCategory) setCategoryOpen(next); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editingCategory ? "แก้ไขหมวดหมู่" : "เพิ่มหมวดหมู่"}</DialogTitle><DialogDescription>หมวดใหม่จะมีการ์ดแยกสำหรับเพิ่มรายการข้อมูล โดยยังไม่เพิ่มช่องในฟอร์มอื่น</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editingCategory ? "Edit Category" : "Add Category"}</DialogTitle><DialogDescription>A new category gets its own card for values. It is not automatically added to other forms.</DialogDescription></DialogHeader>
           <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void saveCategory(); }}>
-            <div className="space-y-2"><Label htmlFor="category-name">ชื่อหมวดหมู่</Label><Input id="category-name" maxLength={120} required disabled={savingCategory} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="เช่น ประเภทสมาชิก" />{duplicateCategory && <p role="alert" className="text-xs text-destructive">มีชื่อหมวดหมู่นี้อยู่แล้ว</p>}</div>
-            <div className="space-y-2"><Label htmlFor="category-description">คำอธิบาย (ไม่บังคับ)</Label><Input id="category-description" maxLength={300} disabled={savingCategory} value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} /></div>
-            <DialogFooter><Button type="button" variant="outline" disabled={savingCategory} onClick={() => setCategoryOpen(false)}>ยกเลิก</Button><Button type="submit" disabled={savingCategory || !categoryName.trim() || duplicateCategory}>{savingCategory ? "กำลังบันทึก…" : "บันทึกหมวดหมู่"}</Button></DialogFooter>
+            <div className="space-y-2"><Label htmlFor="category-name">Category Name</Label><Input id="category-name" maxLength={120} required disabled={savingCategory} value={categoryName} onChange={(event) => setCategoryName(event.target.value)} placeholder="For example: Membership Type" />{duplicateCategory && <p role="alert" className="text-xs text-destructive">This category name already exists.</p>}</div>
+            <div className="space-y-2"><Label htmlFor="category-description">Description (optional)</Label><Input id="category-description" maxLength={300} disabled={savingCategory} value={categoryDescription} onChange={(event) => setCategoryDescription(event.target.value)} /></div>
+            <DialogFooter><Button type="button" variant="outline" disabled={savingCategory} onClick={() => setCategoryOpen(false)}>Cancel</Button><Button type="submit" disabled={savingCategory || !categoryName.trim() || duplicateCategory}>{savingCategory ? "Saving…" : "Save Category"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

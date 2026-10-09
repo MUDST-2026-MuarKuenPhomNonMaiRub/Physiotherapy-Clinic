@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeftRight, ArrowRight, Search, Ticket } from "lucide-react";
 import { useClinicStore } from "@/lib/store/clinic-store";
@@ -28,15 +28,15 @@ import {
 } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { listCourseTransfers } from "@/lib/api/clinic-api";
+import type { CourseTransferRecord } from "@/types";
 
 type Step = "closed" | "source" | "target" | "review";
 
 export default function CoursesTransferPage() {
   const { user, activeBranchId, can } = useSession();
-  const { isAccessible } = useBranchScope();
+  const { isAccessible, options: accessibleBranches } = useBranchScope();
   const patients = useClinicStore((s) => s.patients);
-  const branches = useClinicStore((s) => s.branches);
-  const courseLedger = useClinicStore((s) => s.courseLedger);
   const patientCourses = useClinicStore((s) => s.patientCourses);
   const courseTemplates = useClinicStore((s) => s.courseTemplates);
   const transferCourseSessions = useClinicStore((s) => s.transferCourseSessions);
@@ -52,37 +52,50 @@ export default function CoursesTransferPage() {
   const [targetPatientId, setTargetPatientId] = useState("");
   const [sessions, setSessions] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [transferRecords, setTransferRecords] = useState<CourseTransferRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState("");
+
+  const fetchTransfers = useCallback(async () => {
+    const branchIds = branchFilter !== "ALL"
+      ? [branchFilter]
+      : user?.role === "ADMIN"
+        ? [undefined]
+        : accessibleBranches.map((branch) => branch.id);
+    const parts = await Promise.all(branchIds.map((branchId) => listCourseTransfers(branchId)));
+    return [...new Map(parts.flat().map((record) => [record.id, record])).values()];
+  }, [branchFilter, user, accessibleBranches]);
+
+  const refreshTransfers = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      setTransferRecords(await fetchTransfers());
+    } catch (loadError) {
+      setHistoryError(loadError instanceof Error ? loadError.message : "Could not load course transfers");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [fetchTransfers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTransfers()
+      .then((records) => { if (!cancelled) setTransferRecords(records); })
+      .catch((loadError: unknown) => { if (!cancelled) setHistoryError(loadError instanceof Error ? loadError.message : "Could not load course transfers"); })
+      .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [fetchTransfers]);
 
   const history = useMemo(() => {
-    const outs = courseLedger
-      .filter((l) => l.type === "TRANSFER_OUT" && l.transferGroupId)
-      .filter((l) => (branchFilter === "ALL" ? isAccessible(l.branchId) : l.branchId === branchFilter));
     const normalizedQuery = historyQuery.trim().toLocaleLowerCase();
-    return outs
-      .map((out) => {
-        // A transfer stays inside the same course (the recipient becomes a
-        // member of it), so the recipient is the ledger's counterparty rather
-        // than the owner of some other course.
-        const fromPc = patientCourses.find((p) => p.id === out.patientCourseId);
-        const template = fromPc ? courseTemplates.find((c) => c.id === fromPc.courseId) : undefined;
-        return {
-          id: out.id,
-          date: out.date,
-          fromPatient: fromPc ? patients.find((p) => p.id === fromPc.ownerPatientId) : undefined,
-          toPatient: out.transferCounterpartyPatientId
-            ? patients.find((p) => p.id === out.transferCounterpartyPatientId)
-            : undefined,
-          course: template?.name ?? "—",
-          sessions: Math.abs(out.quantity),
-          branch: branches.find((b) => b.id === out.branchId)?.name,
-          performedBy: out.performedBy,
-        };
-      })
+    return transferRecords
+      .filter((record) => (branchFilter === "ALL" ? isAccessible(record.branchId) : record.branchId === branchFilter))
       .filter((transfer) => !dateFrom || transfer.date.slice(0, 10) >= dateFrom)
       .filter((transfer) => !dateTo || transfer.date.slice(0, 10) <= dateTo)
-      .filter((transfer) => !normalizedQuery || [transfer.fromPatient && getPatientFullNameTh(transfer.fromPatient), transfer.toPatient && getPatientFullNameTh(transfer.toPatient), transfer.course, transfer.performedBy, transfer.branch].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalizedQuery))
+      .filter((transfer) => !normalizedQuery || [transfer.transferNo, transfer.fromPatientName, transfer.fromPatientHn, transfer.toPatientName, transfer.toPatientHn, transfer.courseName, transfer.courseOwnerName, transfer.performedBy, transfer.branchName].filter(Boolean).join(" ").toLocaleLowerCase().includes(normalizedQuery))
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [courseLedger, patientCourses, courseTemplates, patients, branches, branchFilter, isAccessible, historyQuery, dateFrom, dateTo]);
+  }, [transferRecords, branchFilter, isAccessible, historyQuery, dateFrom, dateTo]);
 
   const totalSessions = history.reduce((s, r) => s + r.sessions, 0);
 
@@ -125,6 +138,7 @@ export default function CoursesTransferPage() {
       setError(result.error ?? "Transfer failed");
       return;
     }
+    await refreshTransfers();
     setStep("closed");
     toast.success(
       `Transferred ${sessions} session${sessions > 1 ? "s" : ""} to ${targetPatient ? getPatientFullNameTh(targetPatient) : "patient"}`
@@ -163,14 +177,16 @@ export default function CoursesTransferPage() {
         <StatCard label="Sessions Transferred" value={String(totalSessions)} icon={Ticket} tone="success" />
       </div>
 
-      {history.length === 0 ? (
+      {historyError && <div role="alert" className="mb-5 rounded-lg border border-destructive/30 p-4 text-sm"><p>{historyError}</p><Button variant="outline" className="mt-2" onClick={() => void refreshTransfers()}>Try Again</Button></div>}
+
+      {!historyLoading && !historyError && history.length === 0 ? (
         <EmptyState
           icon={ArrowLeftRight}
           title="No course transfers yet"
           description="Sessions moved between patients will be listed here with a full audit trail."
           action={can("course.transfer") ? <Button onClick={openWizard}>New Transfer</Button> : undefined}
         />
-      ) : (
+      ) : !historyError ? (
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
           <div className="overflow-x-auto">
             <Table>
@@ -180,25 +196,27 @@ export default function CoursesTransferPage() {
                   <TableHead>From Patient</TableHead>
                   <TableHead>To Patient</TableHead>
                   <TableHead>Course</TableHead>
+                  <TableHead>Course Owner</TableHead>
                   <TableHead className="text-center">Sessions</TableHead>
                   <TableHead>Branch</TableHead>
-                  <TableHead>Performed By</TableHead>
+                  <TableHead>Transferred By</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {history.map((r) => (
                   <TableRow key={r.id} className="[&>td]:py-3">
                     <TableCell className="text-muted-foreground">{formatDateTime(r.date)}</TableCell>
-                    <TableCell>{r.fromPatient ? getPatientFullNameTh(r.fromPatient) : "—"}</TableCell>
+                    <TableCell><p>{r.fromPatientName || "—"}</p><p className="text-xs text-muted-foreground">{r.fromPatientHn}</p></TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5">
                         <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                        {r.toPatient ? getPatientFullNameTh(r.toPatient) : "—"}
+                        <span><span className="block">{r.toPatientName || "—"}</span><span className="block text-xs text-muted-foreground">{r.toPatientHn}</span></span>
                       </span>
                     </TableCell>
-                    <TableCell>{r.course || "—"}</TableCell>
+                    <TableCell><p>{r.courseName || "—"}</p><p className="font-mono text-xs text-muted-foreground">{r.transferNo}</p></TableCell>
+                    <TableCell>{r.courseOwnerName || "—"}</TableCell>
                     <TableCell className="text-center font-medium">{r.sessions}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.branch || "—"}</TableCell>
+                    <TableCell className="text-muted-foreground">{r.branchName || "—"}</TableCell>
                     <TableCell className="text-muted-foreground">{r.performedBy || "—"}</TableCell>
                   </TableRow>
                 ))}
@@ -206,7 +224,7 @@ export default function CoursesTransferPage() {
             </Table>
           </div>
         </div>
-      )}
+      ) : null}
 
       <Dialog open={step !== "closed"} onOpenChange={(o) => !o && setStep("closed")}>
         <DialogContent className="sm:max-w-lg">

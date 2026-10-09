@@ -89,6 +89,14 @@ class LatestCommissionRequirementsTest extends AbstractCommissionIntegrationTest
     assertThat(((Number) allocation.get("case_owner_employee_id")).longValue()).isEqualTo(ownerB);
     assertThat((BigDecimal) allocation.get("gross_commission_allocation")).isEqualByComparingTo("100");
     assertThat((BigDecimal) allocation.get("treatment_fee_amount")).isEqualByComparingTo("0");
+
+    List<Map<String, Object>> ownerBDetail = queries.staffDetail(
+        ownerB, saleMonth.atDay(1), LocalDate.now(), adminAuthentication());
+    assertThat(ownerBDetail).hasSize(1);
+    assertThat((BigDecimal) ownerBDetail.get(0).get("total_course_commission_pool"))
+        .isEqualByComparingTo("500");
+    assertThat(((Number) ownerBDetail.get(0).get("case_owner_employee_id")).longValue())
+        .isEqualTo(ownerB);
   }
 
   @Test

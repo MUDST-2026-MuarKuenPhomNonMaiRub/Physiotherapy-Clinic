@@ -42,6 +42,7 @@ import type {
   CommissionScheme,
   CourseCommissionReportRow,
   CourseLedgerEntry,
+  CourseTransferRecord,
   CourseTemplate,
   GoogleCalendarConnection,
   GoogleCalendarStatus,
@@ -888,6 +889,30 @@ export const transferCourseSessions = (
       reason: reason ?? null,
     },
   });
+
+export const listCourseTransfers = (branchId?: string): Promise<CourseTransferRecord[]> =>
+  apiRequest<Row[]>(`/api/v1/course-transfers${query({ branchId })}`).then((rows) =>
+    rows.map((row) => ({
+      id: String(row.id ?? ""),
+      transferNo: String(row.transfer_no ?? ""),
+      patientCourseId: String(row.patient_course_id ?? ""),
+      fromPatientId: String(row.from_patient_id ?? ""),
+      fromPatientHn: String(row.from_patient_hn ?? ""),
+      fromPatientName: String(row.from_patient_name ?? ""),
+      toPatientId: String(row.to_patient_id ?? ""),
+      toPatientHn: String(row.to_patient_hn ?? ""),
+      toPatientName: String(row.to_patient_name ?? ""),
+      courseName: String(row.package_name_snapshot ?? ""),
+      sessions: Number(row.quantity ?? 0),
+      reason: String(row.reason ?? ""),
+      date: String(row.created_at ?? ""),
+      branchId: String(row.branch_id ?? ""),
+      branchName: String(row.branch_name ?? ""),
+      courseOwnerEmployeeId: String(row.course_owner_employee_id ?? ""),
+      courseOwnerName: String(row.case_owner_name_snapshot ?? ""),
+      performedBy: String(row.created_by_name ?? ""),
+    }))
+  );
 
 // --------------------------------------------------------------- transactions
 

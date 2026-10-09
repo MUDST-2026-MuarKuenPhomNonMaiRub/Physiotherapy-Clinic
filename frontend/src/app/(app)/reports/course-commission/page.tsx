@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PiggyBank, Wallet, HandCoins, PackageOpen, Eye } from "lucide-react";
+import { PiggyBank, Wallet, HandCoins, PackageOpen, Eye, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { getCourseCommissionReport, getCourseCommissionStaffDetail } from "@/lib/api/clinic-api";
 import { useClinicStore } from "@/lib/store/clinic-store";
@@ -45,8 +45,10 @@ export default function CourseCommissionReportPage() {
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<Record<string, unknown>[] | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailStaffId, setDetailStaffId] = useState<string | null>(null);
 
   const openDetail = async (staffId: string) => {
+    setDetailStaffId(staffId);
     setDetailLoading(true);
     try {
       setDetail(await getCourseCommissionStaffDetail(staffId, dateFrom, dateTo));
@@ -99,6 +101,19 @@ export default function CourseCommissionReportPage() {
       />
       <ReportsNav />
       {!seesEveryone && <ScopeNotice name={ownName} />}
+
+      <div className="mb-5 rounded-xl border border-primary/20 bg-primary/[0.03] p-4">
+        <p className="mb-3 text-sm font-semibold text-foreground">How course commission moves</p>
+        <div className="grid gap-2 text-xs sm:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] sm:items-center">
+          <FlowStep number="1" title="Full-price sales credit" detail="Split between case owners at purchase" />
+          <ArrowRight className="hidden h-4 w-4 text-muted-foreground sm:block" />
+          <FlowStep number="2" title="Monthly tier locked" detail="Each owner's tier is frozen at closing" />
+          <ArrowRight className="hidden h-4 w-4 text-muted-foreground sm:block" />
+          <FlowStep number="3" title="Pool per visit" detail="Pool ÷ paid and bonus visits" />
+          <ArrowRight className="hidden h-4 w-4 text-muted-foreground sm:block" />
+          <FlowStep number="4" title="Visit payout" detail="Treatment fee to substitute; remainder to owner" />
+        </div>
+      </div>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
         <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-40" />
@@ -168,23 +183,42 @@ export default function CourseCommissionReportPage() {
         </div>
       )}
 
-      <Dialog open={detail !== null} onOpenChange={(open) => !open && setDetail(null)}>
+      <Dialog open={detail !== null} onOpenChange={(open) => { if (!open) { setDetail(null); setDetailStaffId(null); } }}>
         <DialogContent className="flex !h-[calc(100vh-2rem)] !w-[calc(100vw-2rem)] !max-w-none flex-col overflow-hidden p-8">
           <DialogHeader>
-            <DialogTitle>Commission Allocation Details</DialogTitle>
+            <DialogTitle>Commission Allocation Details · {staff.find((member) => member.id === detailStaffId)?.name ?? "Staff"}</DialogTitle>
             <DialogDescription>
-              รายละเอียดการแบ่งค่าคอมมิชชั่นของคอร์ส Owner และ Treating Therapist
+              Follow each course from full-price sales credit to pool, visit allocation, treatment fee and owner net.
             </DialogDescription>
           </DialogHeader>
           {detailLoading ? (
             <p className="py-8 text-center text-muted-foreground">กำลังโหลดรายละเอียด...</p>
           ) : detail ? (
             <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
-              <Table className="min-w-[1080px] text-sm">
-                <TableHeader><TableRow><TableHead>Course</TableHead><TableHead>Sale Date</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Pool</TableHead><TableHead className="text-right">Outstanding</TableHead><TableHead className="text-right">Gross</TableHead><TableHead className="text-right">Treatment Fee</TableHead><TableHead className="text-right">Owner Net</TableHead></TableRow></TableHeader>
+              <Table className="min-w-[1580px] text-sm">
+                <TableHeader><TableRow><TableHead>Course</TableHead><TableHead>Sale Date</TableHead><TableHead>Visit Date</TableHead><TableHead>Case Owner</TableHead><TableHead>Treating PT</TableHead><TableHead className="text-right">Sales Credit</TableHead><TableHead className="text-right">Visits</TableHead><TableHead className="text-right">Pool / Visit</TableHead><TableHead className="text-right">Pool / Immediate</TableHead><TableHead className="text-right">Gross</TableHead><TableHead className="text-right">Treatment Fee</TableHead><TableHead className="text-right">Owner Net</TableHead><TableHead className="text-right">Outstanding</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {detail.map((a, index) => <TableRow key={`${String(a.id ?? index)}-${String(a.visit_date ?? "course")}`}><TableCell className="font-medium">{String(a.course_id ?? "-")}</TableCell><TableCell>{String(a.sale_date ?? "-")}</TableCell><TableCell>{String(a.commission_status ?? "-")}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.total_course_commission_pool ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.outstanding_pool ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.gross_commission_allocation ?? 0))}</TableCell><TableCell className="text-right">{formatCurrency(Number(a.treatment_fee_amount ?? 0))}</TableCell><TableCell className="text-right text-success">{formatCurrency(Number(a.owner_net_commission ?? 0))}</TableCell></TableRow>)}
-                  {detail.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground">ยังไม่มีรายละเอียด</TableCell></TableRow>}
+                  {detail.map((a, index) => {
+                    const ownerId = String(a.case_owner_employee_id ?? detailStaffId ?? "");
+                    const treatingId = String(a.treating_employee_id ?? "");
+                    const immediate = Number(a.special_immediate_commission ?? 0);
+                    return <TableRow key={`${String(a.id ?? index)}-${String(a.visit_date ?? "course")}`}>
+                      <TableCell><p className="font-medium">{String(a.package_name_snapshot ?? "-")}</p><p className="font-mono text-xs text-muted-foreground">{String(a.course_id ?? "-")}</p></TableCell>
+                      <TableCell>{String(a.sale_date ?? "-")}</TableCell>
+                      <TableCell>{String(a.visit_date ?? "-")}</TableCell>
+                      <TableCell>{staff.find((member) => member.id === ownerId)?.name ?? "-"}</TableCell>
+                      <TableCell>{treatingId ? staff.find((member) => member.id === treatingId)?.name ?? "-" : "-"}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(a.sales_credit_amount ?? 0))}</TableCell>
+                      <TableCell className="text-right">{String(a.allocated_visits ?? "-")}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(a.commission_allocation_per_visit ?? 0))}</TableCell>
+                      <TableCell className="text-right">{immediate > 0 ? `${formatCurrency(immediate)} immediate` : formatCurrency(Number(a.total_course_commission_pool ?? 0))}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(Number(a.gross_commission_allocation ?? 0))}</TableCell>
+                      <TableCell className="text-right text-info">{formatCurrency(Number(a.treatment_fee_amount ?? 0))}</TableCell>
+                      <TableCell className="text-right text-success">{formatCurrency(Number(a.owner_net_commission ?? 0))}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">{formatCurrency(Number(a.outstanding_pool ?? 0))}</TableCell>
+                    </TableRow>;
+                  })}
+                  {detail.length === 0 && <TableRow><TableCell colSpan={13} className="text-center text-muted-foreground">No commission details yet</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </div>
@@ -192,5 +226,17 @@ export default function CourseCommissionReportPage() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function FlowStep({ number, title, detail }: { number: string; title: string; detail: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-background/80 p-3">
+      <div className="flex items-center gap-2">
+        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">{number}</span>
+        <span className="font-semibold text-foreground">{title}</span>
+      </div>
+      <p className="mt-1 text-muted-foreground">{detail}</p>
+    </div>
   );
 }

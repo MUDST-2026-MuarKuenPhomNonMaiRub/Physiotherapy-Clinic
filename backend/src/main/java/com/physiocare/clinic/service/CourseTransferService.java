@@ -48,11 +48,16 @@ public class CourseTransferService {
     return db.queryForList(
         "SELECT t.id,t.transfer_no,t.patient_course_id,t.to_patient_course_id,t.from_patient_id,"
             + "t.to_patient_id,t.quantity,t.reason,t.created_at,t.created_by,pc.branch_id,"
+            + "pc.package_name_snapshot,b.name AS branch_name,"
             + "pc.case_owner_employee_id AS course_owner_employee_id,pc.case_owner_name_snapshot,"
+            + "COALESCE(NULLIF(trim(actor_staff.name),''),trim(concat_ws(' ',u.first_name,u.last_name)))"
+            + " AS created_by_name,"
             + "fp.hn AS from_patient_hn,trim(concat_ws(' ',fp.prefix,fp.first_name_th,fp.last_name_th))"
             + " AS from_patient_name,tp.hn AS to_patient_hn,"
             + "trim(concat_ws(' ',tp.prefix,tp.first_name_th,tp.last_name_th)) AS to_patient_name"
             + " FROM course_transfers t JOIN patient_courses pc ON pc.id=t.patient_course_id"
+            + " JOIN branches b ON b.id=pc.branch_id LEFT JOIN users u ON u.id=t.created_by"
+            + " LEFT JOIN staff actor_staff ON actor_staff.user_id=u.id AND actor_staff.deleted_at IS NULL"
             + " JOIN patients fp ON fp.id=t.from_patient_id JOIN patients tp ON tp.id=t.to_patient_id"
             + " WHERE (?::bigint IS NULL"
             + " OR pc.branch_id=?) ORDER BY t.id DESC",

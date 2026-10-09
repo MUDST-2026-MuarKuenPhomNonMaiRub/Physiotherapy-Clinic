@@ -191,6 +191,28 @@ export interface CourseLedgerEntry {
   performedBy: string; // staff name
 }
 
+/** One auditable transfer event, including every person the clinic needs to identify. */
+export interface CourseTransferRecord {
+  id: string;
+  transferNo: string;
+  patientCourseId: string;
+  fromPatientId: string;
+  fromPatientHn: string;
+  fromPatientName: string;
+  toPatientId: string;
+  toPatientHn: string;
+  toPatientName: string;
+  courseName: string;
+  sessions: number;
+  reason: string;
+  date: string;
+  branchId: string;
+  branchName: string;
+  courseOwnerEmployeeId: string;
+  courseOwnerName: string;
+  performedBy: string;
+}
+
 export type AppointmentStatus =
   | "CONFIRMED"
   | "ARRIVED"

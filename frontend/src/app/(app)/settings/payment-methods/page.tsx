@@ -11,17 +11,19 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { PaymentMethod } from "@/types";
 import { toast } from "sonner";
+import { useLanguage } from "@/components/i18n/language-provider";
 
 const icons = [
-  { code: "Banknote", label: "เงินสด", icon: Banknote },
-  { code: "Landmark", label: "ธนาคาร", icon: Landmark },
-  { code: "CreditCard", label: "บัตร", icon: CreditCard },
-  { code: "Wallet", label: "กระเป๋าเงิน", icon: Wallet },
-  { code: "Smartphone", label: "แอปมือถือ", icon: Smartphone },
+  { code: "Banknote", label: "Cash", icon: Banknote },
+  { code: "Landmark", label: "Bank", icon: Landmark },
+  { code: "CreditCard", label: "Card", icon: CreditCard },
+  { code: "Wallet", label: "Wallet", icon: Wallet },
+  { code: "Smartphone", label: "Mobile app", icon: Smartphone },
   { code: "QrCode", label: "QR Code", icon: QrCode },
 ];
 
 export default function PaymentMethodsSettingsPage() {
+  const { t } = useLanguage();
   const paymentMethods = useClinicStore((s) => s.paymentMethods);
   const addPaymentMethod = useClinicStore((s) => s.addPaymentMethod);
   const updatePaymentMethod = useClinicStore((s) => s.updatePaymentMethod);
@@ -50,16 +52,16 @@ export default function PaymentMethodsSettingsPage() {
       const data = { name: name.trim(), icon, enabled };
       if (editing) await updatePaymentMethod(editing.id, data);
       else await addPaymentMethod(data);
-      toast.success(enabled ? "บันทึกแล้ว สามารถเลือกช่องทางนี้ตอนชำระเงินได้" : "บันทึกแล้ว ช่องทางนี้ยังปิดใช้งานอยู่");
+      toast.success(enabled ? "Saved. This method is available at checkout." : "Saved. This method is still disabled.");
       setOpen(false);
-    } catch (error) { toast.error(error instanceof Error ? error.message : "บันทึกไม่สำเร็จ"); }
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Could not save the payment method"); }
     finally { setSaving(false); }
   }
 
   return (
     <>
-      <PageHeader title="Payment Methods" description="เพิ่มและจัดการช่องทางชำระเงิน ช่องทางที่เปิดใช้งานจะปรากฏตอนชำระเงินจริง"
-        actions={<Button onClick={() => openEditor()}><Plus className="h-4 w-4" />เพิ่มช่องทางชำระเงิน</Button>} />
+      <PageHeader title="Payment Methods" description="Add and manage payment methods. Enabled methods appear at checkout."
+        actions={<Button onClick={() => openEditor()}><Plus className="h-4 w-4" />Add Payment Method</Button>} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {paymentMethods.filter((pm) => !pm.deleted).map((pm) => {
           const Icon = icons.find((i) => i.code === pm.icon)?.icon ?? Wallet;
@@ -67,46 +69,46 @@ export default function PaymentMethodsSettingsPage() {
             <div key={pm.id} className={`flex flex-col gap-4 rounded-xl border p-5 shadow-xs ${pm.enabled ? "border-primary/20 bg-primary/[0.03]" : "border-border bg-card"}`}>
               <div className="flex items-start gap-3">
                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${pm.enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}><Icon className="h-6 w-6" /></div>
-                <div className="min-w-0 flex-1"><h2 className="break-words text-sm font-semibold">{pm.name}</h2><p className="mt-1 text-xs text-muted-foreground">{pm.enabled ? "แสดงในหน้าชำระเงิน" : "ซ่อนจากหน้าชำระเงิน"}</p></div>
-                <Button variant="ghost" size="icon" aria-label={`แก้ไข ${pm.name}`} disabled={toggling.includes(pm.id)} onClick={() => openEditor(pm)}><Pencil className="h-4 w-4" /></Button>
-                <Button variant="ghost" size="icon" className="text-destructive" aria-label={`ลบ ${pm.name}`} disabled={toggling.includes(pm.id)} onClick={() => setDeleting(pm)}><Trash2 className="h-4 w-4" /></Button>
+                <div className="min-w-0 flex-1"><h2 className="break-words text-sm font-semibold">{t(pm.name)}</h2><p className="mt-1 text-xs text-muted-foreground">{pm.enabled ? "Shown at checkout" : "Hidden from checkout"}</p></div>
+                <Button variant="ghost" size="icon" aria-label={t(`Edit ${pm.name}`)} disabled={toggling.includes(pm.id)} onClick={() => openEditor(pm)}><Pencil className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" className="text-destructive" aria-label={t(`Delete ${pm.name}`)} disabled={toggling.includes(pm.id)} onClick={() => setDeleting(pm)}><Trash2 className="h-4 w-4" /></Button>
               </div>
               <div className="flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
-                <span>{pm.code === "CASH" ? "รับเงินสดและคำนวณเงินทอน" : "บันทึกยอดชำระตามช่องทาง"}</span>
-                <Switch aria-label={`เปิดใช้งาน ${pm.name}`} checked={pm.enabled} disabled={toggling.includes(pm.id)} onCheckedChange={async () => {
+                <span>{pm.code === "CASH" ? "Accept cash and calculate change" : "Record payment through this method"}</span>
+                <Switch aria-label={t(`Enable ${pm.name}`)} checked={pm.enabled} disabled={toggling.includes(pm.id)} onCheckedChange={async () => {
                   setToggling((ids) => [...ids, pm.id]);
-                  try { await togglePaymentMethod(pm.id); toast.success(pm.enabled ? "ปิดช่องทางแล้ว" : "เปิดช่องทางแล้ว"); }
-                  catch (error) { toast.error(error instanceof Error ? error.message : "เปลี่ยนสถานะไม่สำเร็จ"); }
+                  try { await togglePaymentMethod(pm.id); toast.success(pm.enabled ? "Payment method disabled" : "Payment method enabled"); }
+                  catch (error) { toast.error(error instanceof Error ? error.message : "Could not change the status"); }
                   finally { setToggling((ids) => ids.filter((id) => id !== pm.id)); }
                 }} />
               </div>
             </div>
           );
         })}
-        <button type="button" onClick={() => openEditor()} className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"><Plus className="h-6 w-6" />เพิ่มช่องทางใหม่</button>
+        <button type="button" onClick={() => openEditor()} className="flex min-h-36 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border p-5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary"><Plus className="h-6 w-6" />Add New Method</button>
       </div>
-      <p className="mt-4 text-xs text-muted-foreground">การเพิ่มช่องทางใช้สำหรับบันทึกการรับชำระ ยังไม่เชื่อมรับเงินอัตโนมัติจากธนาคารหรือสร้าง QR สำหรับโอนเงิน</p>
+      <p className="mt-4 text-xs text-muted-foreground">Payment methods record how a payment was received. They do not collect money from a bank or generate transfer QR codes.</p>
       <Dialog open={open} onOpenChange={(next) => { if (!saving) setOpen(next); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editing ? "แก้ไขช่องทางชำระเงิน" : "เพิ่มช่องทางชำระเงิน"}</DialogTitle><DialogDescription>ตั้งชื่อและเลือกสัญลักษณ์ จากนั้นเปิดใช้งานเพื่อให้เลือกได้ในหน้าชำระเงิน</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editing ? "Edit Payment Method" : "Add Payment Method"}</DialogTitle><DialogDescription>Name the method and choose an icon. Enable it to make it available at checkout.</DialogDescription></DialogHeader>
           <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="payment-name">ชื่อช่องทาง</Label><Input id="payment-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required placeholder="เช่น โอนธนาคารกสิกร, บัตรเครดิต, Wallet" disabled={saving} />{duplicate && <p role="alert" className="text-xs text-destructive">มีชื่อช่องทางนี้อยู่แล้ว กรุณาใช้ชื่ออื่น</p>}</div>
-            <fieldset disabled={saving}><legend className="mb-2 text-sm font-medium">สัญลักษณ์</legend><div className="grid grid-cols-3 gap-2">{icons.map((item) => <button key={item.code} type="button" aria-pressed={icon === item.code} onClick={() => setIcon(item.code)} className={`flex flex-col items-center gap-1 rounded-lg border p-3 text-xs ${icon === item.code ? "border-primary bg-primary/10 text-primary" : "border-border"}`}><item.icon className="h-5 w-5" />{item.label}</button>)}</div></fieldset>
-            <div className="flex items-center justify-between"><Label htmlFor="payment-enabled">เปิดให้เลือกตอนชำระเงิน</Label><Switch id="payment-enabled" checked={enabled} onCheckedChange={setEnabled} disabled={saving} /></div>
-            <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>ยกเลิก</Button><Button type="submit" disabled={saving || !name.trim() || duplicate}>{saving ? "กำลังบันทึก…" : "บันทึก"}</Button></DialogFooter>
+            <div className="space-y-2"><Label htmlFor="payment-name">Method Name</Label><Input id="payment-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} required placeholder="For example: KBank transfer, credit card, wallet" disabled={saving} />{duplicate && <p role="alert" className="text-xs text-destructive">This payment method name already exists. Use another name.</p>}</div>
+            <fieldset disabled={saving}><legend className="mb-2 text-sm font-medium">Icon</legend><div className="grid grid-cols-3 gap-2">{icons.map((item) => <button key={item.code} type="button" aria-pressed={icon === item.code} onClick={() => setIcon(item.code)} className={`flex flex-col items-center gap-1 rounded-lg border p-3 text-xs ${icon === item.code ? "border-primary bg-primary/10 text-primary" : "border-border"}`}><item.icon className="h-5 w-5" />{item.label}</button>)}</div></fieldset>
+            <div className="flex items-center justify-between"><Label htmlFor="payment-enabled">Available at checkout</Label><Switch id="payment-enabled" checked={enabled} onCheckedChange={setEnabled} disabled={saving} /></div>
+            <DialogFooter><Button type="button" variant="outline" disabled={saving} onClick={() => setOpen(false)}>Cancel</Button><Button type="submit" disabled={saving || !name.trim() || duplicate}>{saving ? "Saving…" : "Save"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
       <Dialog open={!!deleting} onOpenChange={(next) => { if (!next && !saving) setDeleting(null); }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>ลบช่องทางชำระเงิน?</DialogTitle><DialogDescription>ลบ “{deleting?.name}” ออกจากตัวเลือกชำระเงินใหม่ รายการชำระเงินเก่ายังคงแสดงช่องทางนี้ได้</DialogDescription></DialogHeader>
-          <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setDeleting(null)}>ยกเลิก</Button><Button variant="destructive" disabled={saving} onClick={async () => {
+          <DialogHeader><DialogTitle>Delete Payment Method?</DialogTitle><DialogDescription>{t(`Remove “${deleting?.name ?? ""}” from new payments. Existing payment records will still show this method.`)}</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setDeleting(null)}>Cancel</Button><Button variant="destructive" disabled={saving} onClick={async () => {
             if (!deleting || saving) return;
             setSaving(true);
-            try { await deletePaymentMethod(deleting.id); setDeleting(null); toast.success("ลบช่องทางแล้ว"); }
-            catch (error) { toast.error(error instanceof Error ? error.message : "ลบไม่สำเร็จ"); }
+            try { await deletePaymentMethod(deleting.id); setDeleting(null); toast.success("Payment method deleted"); }
+            catch (error) { toast.error(error instanceof Error ? error.message : "Could not delete the payment method"); }
             finally { setSaving(false); }
-          }}>{saving ? "กำลังลบ…" : "ยืนยันลบ"}</Button></DialogFooter>
+          }}>{saving ? "Deleting…" : "Confirm Delete"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>

@@ -216,16 +216,32 @@ public class CommissionQueryService {
     Long allowedStaff = effectiveStaffFilter(staffId, auth);
     return db.queryForList(
         "SELECT pc.id,pc.course_id,pc.package_name_snapshot,pc.sale_date,pc.commission_status,"
-            + "pc.total_course_commission_pool,"
-            + "(pc.total_course_commission_pool-COALESCE(pc.gross_commission_allocated_total,0))"
+            + "pc.course_price,pc.net_course_sale_amount,pc.clinic_discount_amount,"
+            + "COALESCE(split.sales_credit_amount,pc.course_price) AS sales_credit_amount,"
+            + "COALESCE(split.allocated_visits,pc.commissionable_visit_count) AS allocated_visits,"
+            + "COALESCE(split.commission_allocation_per_visit,pc.commission_allocation_per_visit)"
+            + " AS commission_allocation_per_visit,"
+            + "COALESCE(split.total_commission_pool,pc.total_course_commission_pool)"
+            + " AS total_course_commission_pool,"
+            + "COALESCE(split.immediate_commission_amount,pc.special_commission_total,0)"
+            + " AS special_immediate_commission,"
+            + "(COALESCE(split.total_commission_pool,pc.total_course_commission_pool)-"
+            + "COALESCE(split.gross_commission_allocated_total,pc.gross_commission_allocated_total,0))"
             + " AS outstanding_pool,ca.visit_date,ca.gross_commission_allocation,"
             + "ca.treatment_fee_amount,ca.owner_net_commission,ca.case_owner_employee_id,"
-            + "ca.treating_employee_id FROM patient_courses pc LEFT JOIN commission_allocations ca"
+            + "ca.treating_employee_id FROM patient_courses pc"
+            + " LEFT JOIN course_commission_splits split ON split.patient_course_id=pc.id"
+            + " AND split.employee_id=?"
+            + " LEFT JOIN commission_allocations ca"
             + " ON ca.patient_course_id=pc.id AND ca.allocation_status='ALLOCATED'"
-            + " AND ca.visit_date BETWEEN ? AND ? WHERE (pc.seller_employee_id=? OR"
-            + " pc.case_owner_employee_id=?) AND pc.sale_month BETWEEN ? AND ?"
+            + " AND ca.visit_date BETWEEN ? AND ? AND ca.case_owner_employee_id=?"
+            + " WHERE (split.employee_id IS NOT NULL OR (NOT EXISTS(SELECT 1 FROM"
+            + " course_commission_splits any_split WHERE any_split.patient_course_id=pc.id)"
+            + " AND (pc.seller_employee_id=? OR pc.case_owner_employee_id=?)))"
+            + " AND pc.sale_month BETWEEN ? AND ?"
             + " ORDER BY pc.sale_date,ca.visit_date,pc.id",
-        from, to, allowedStaff, allowedStaff, from.withDayOfMonth(1), to.withDayOfMonth(1));
+        allowedStaff, from, to, allowedStaff, allowedStaff, allowedStaff,
+        from.withDayOfMonth(1), to.withDayOfMonth(1));
   }
 
   /** Clinic-wide reads belong to whoever holds commission.view.all; everyone else reads their own row. */
