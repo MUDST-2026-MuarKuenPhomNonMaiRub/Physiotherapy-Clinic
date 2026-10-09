@@ -23,9 +23,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Audit frontend dependencies
+      - name: Audit production frontend dependencies
         working-directory: frontend
-        run: npm audit --audit-level=high
+        # Build tools are not shipped in the production image. Keep the gate on
+        # runtime dependencies while Trivy continues to scan the whole repository.
+        run: npm audit --omit=dev --audit-level=high
 
       - name: Scan repository and dependencies
         uses: aquasecurity/trivy-action@v0.36.0
