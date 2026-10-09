@@ -52,6 +52,16 @@ fi
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$script_dir"
+
+# The integration runner must apply migrations explicitly because the test
+# context validates Hibernate mappings before the application's Flyway
+# lifecycle runs. This keeps the throwaway database on the real schema.
+./mvnw -B org.flywaydb:flyway-maven-plugin:11.14.1:migrate \
+  -Dflyway.url="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}" \
+  -Dflyway.user="$DB_USER" \
+  -Dflyway.password="$DB_PASSWORD" \
+  -Dflyway.locations="filesystem:${script_dir}/src/main/resources/db/migration"
+
 ./mvnw -Pintegration test \
   -Dtest="${1:-com.physiocare.clinic.service.CommissionFlowTest,com.physiocare.clinic.service.LatestCommissionRequirementsTest,com.physiocare.clinic.service.CourseBalanceReportTest,com.physiocare.clinic.service.LegacyTransferReconciliationServiceTest,com.physiocare.clinic.service.GoogleCalendarSyncTest,com.physiocare.clinic.service.CatalogConfigurationIT,com.physiocare.clinic.service.AppointmentTimeChangeIT,com.physiocare.clinic.service.NotificationServiceIT}" \
   -Dit.db.url="jdbc:postgresql://localhost:${DB_PORT}/${DB_NAME}" \
