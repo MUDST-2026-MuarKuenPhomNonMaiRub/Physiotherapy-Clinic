@@ -15,11 +15,14 @@ COPY . .
 # Turbopack can stall during production builds in the local Docker runtime;
 # Webpack is the stable production builder for this image.
 RUN npm run build -- --webpack
+RUN npm prune --omit=dev
 
 FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app ./
-RUN npm prune --omit=dev
+# npm is only needed while building. Keeping it out of the runtime image
+# avoids shipping its package manager dependency tree to production.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["node", "node_modules/next/dist/bin/next", "start"]
