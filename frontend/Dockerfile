@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 # Baked into the bundle at build time, so it has to be right here rather than
 # at run time. The default suits a laptop, where the browser reaches the API on
@@ -16,9 +16,10 @@ COPY . .
 # Webpack is the stable production builder for this image.
 RUN npm run build -- --webpack
 
-FROM node:22-alpine
+FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app ./
+RUN npm prune --omit=dev
 EXPOSE 3000
 CMD ["npm", "run", "start"]
